@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter/foundation.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../../data/models/preferences.dart';
+import '../../data/models/notification_history.dart';
 import '../../providers/providers.dart';
 import '../common/snackbar_utils.dart';
 import '../common/tmdb_attribution.dart';
@@ -192,19 +193,87 @@ class HistoryScreen extends ConsumerWidget {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       // Poster
-                      ClipRRect(
-                        borderRadius: BorderRadius.circular(4),
-                        child: SizedBox(
-                          width: 60,
-                          height: 90,
-                          child: item.posterPath != null
-                              ? CachedNetworkImage(
-                                  imageUrl: 'https://image.tmdb.org/t/p/w200${item.posterPath}',
-                                  fit: BoxFit.cover,
-                                  errorWidget: (_, __, ___) => const Icon(Icons.movie),
-                                )
-                              : Container(color: Colors.grey, child: const Icon(Icons.movie)),
-                        ),
+                      Consumer(
+                        builder: (context, ref, child) {
+                          final prefsAsync = ref.watch(preferencesProvider);
+                          return prefsAsync.when(
+                            data: (prefs) {
+                              final movieDetailsPreference = prefs.movieDetailsPreference ?? 'both';
+                              final movieCacheRepo = ref.read(movieCacheRepositoryProvider);
+                              final movie = movieCacheRepo.getMovie(entry.tmdbId);
+                              final hasImdbId = movie?.imdbId != null && movie!.imdbId!.isNotEmpty;
+                              
+                              // Determine primary provider (poster/title click)
+                              String primaryProvider;
+                              String primaryTooltip;
+                              VoidCallback primaryAction;
+                              
+                              if (movieDetailsPreference == 'imdb' && hasImdbId) {
+                                primaryProvider = 'imdb';
+                                primaryTooltip = 'View on IMDb';
+                                primaryAction = () => _launchImdbUrl(context, movie!.imdbId!);
+                              } else {
+                                primaryProvider = 'tmdb';
+                                primaryTooltip = 'View on TMDB';
+                                primaryAction = () => _launchTmdbUrl(context, entry);
+                              }
+                              
+                              return Tooltip(
+                                message: primaryTooltip,
+                                child: Material(
+                                  color: Colors.transparent,
+                                  borderRadius: BorderRadius.circular(4),
+                                  child: InkWell(
+                                    borderRadius: BorderRadius.circular(4),
+                                    onTap: primaryAction,
+                                    child: ClipRRect(
+                                      borderRadius: BorderRadius.circular(4),
+                                      child: SizedBox(
+                                        width: 60,
+                                        height: 90,
+                                        child: item.posterPath != null
+                                            ? CachedNetworkImage(
+                                                imageUrl: 'https://image.tmdb.org/t/p/w200${item.posterPath}',
+                                                fit: BoxFit.cover,
+                                                errorWidget: (_, __, ___) => const Icon(Icons.movie),
+                                              )
+                                            : Container(color: Colors.grey, child: const Icon(Icons.movie)),
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                              );
+                            },
+                            loading: () => ClipRRect(
+                              borderRadius: BorderRadius.circular(4),
+                              child: SizedBox(
+                                width: 60,
+                                height: 90,
+                                child: item.posterPath != null
+                                    ? CachedNetworkImage(
+                                        imageUrl: 'https://image.tmdb.org/t/p/w200${item.posterPath}',
+                                        fit: BoxFit.cover,
+                                        errorWidget: (_, __, ___) => const Icon(Icons.movie),
+                                      )
+                                    : Container(color: Colors.grey, child: const Icon(Icons.movie)),
+                              ),
+                            ),
+                            error: (_, __) => ClipRRect(
+                              borderRadius: BorderRadius.circular(4),
+                              child: SizedBox(
+                                width: 60,
+                                height: 90,
+                                child: item.posterPath != null
+                                    ? CachedNetworkImage(
+                                        imageUrl: 'https://image.tmdb.org/t/p/w200${item.posterPath}',
+                                        fit: BoxFit.cover,
+                                        errorWidget: (_, __, ___) => const Icon(Icons.movie),
+                                      )
+                                    : Container(color: Colors.grey, child: const Icon(Icons.movie)),
+                              ),
+                            ),
+                          );
+                        },
                       ),
                       const SizedBox(width: 16),
                       // Content
@@ -215,9 +284,55 @@ class HistoryScreen extends ConsumerWidget {
                             Row(
                               children: [
                                 Expanded(
-                                  child: Text(
-                                    item.title, 
-                                    style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold)
+                                  child: Consumer(
+                                    builder: (context, ref, child) {
+                                      final prefsAsync = ref.watch(preferencesProvider);
+                                      return prefsAsync.when(
+                                        data: (prefs) {
+                                          final movieDetailsPreference = prefs.movieDetailsPreference ?? 'both';
+                                          final movieCacheRepo = ref.read(movieCacheRepositoryProvider);
+                                          final movie = movieCacheRepo.getMovie(entry.tmdbId);
+                                          final hasImdbId = movie?.imdbId != null && movie!.imdbId!.isNotEmpty;
+                                          
+                                          // Determine primary provider (poster/title click)
+                                          String primaryTooltip;
+                                          VoidCallback primaryAction;
+                                          
+                                          if (movieDetailsPreference == 'imdb' && hasImdbId) {
+                                            primaryTooltip = 'View on IMDb';
+                                            primaryAction = () => _launchImdbUrl(context, movie!.imdbId!);
+                                          } else {
+                                            primaryTooltip = 'View on TMDB';
+                                            primaryAction = () => _launchTmdbUrl(context, entry);
+                                          }
+                                          
+                                          return Tooltip(
+                                            message: primaryTooltip,
+                                            child: Material(
+                                              color: Colors.transparent,
+                                              child: InkWell(
+                                                onTap: primaryAction,
+                                                child: Text(
+                                                  item.title, 
+                                                  style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                                                    fontWeight: FontWeight.bold,
+                                                    color: Theme.of(context).colorScheme.primary,
+                                                  ),
+                                                ),
+                                              ),
+                                            ),
+                                          );
+                                        },
+                                        loading: () => Text(
+                                          item.title, 
+                                          style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold)
+                                        ),
+                                        error: (_, __) => Text(
+                                          item.title, 
+                                          style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold)
+                                        ),
+                                      );
+                                    },
                                   ),
                                 ),
                               ],
@@ -248,82 +363,13 @@ class HistoryScreen extends ConsumerWidget {
                                   final movie = movieCacheRepo.getMovie(entry.tmdbId);
                                   final hasImdbId = movie?.imdbId != null && movie!.imdbId!.isNotEmpty;
                                   
-                                  final showTmdb = movieDetailsPreference == 'tmdb' || 
-                                                   movieDetailsPreference == 'both' ||
-                                                   (movieDetailsPreference == 'imdb' && !hasImdbId); // Fallback
-                                  final showImdb = (movieDetailsPreference == 'imdb' || movieDetailsPreference == 'both') && hasImdbId;
+                                  // Only show button in "both" mode for Provider B (IMDb)
+                                  final showImdbButton = movieDetailsPreference == 'both' && hasImdbId;
                                   
                                   return Column(
                                     children: [
-                                      // View on TMDB button
-                                      if (showTmdb)
-                                        Container(
-                                          margin: const EdgeInsets.only(bottom: 4),
-                                          child: Tooltip(
-                                            message: 'View on TMDB',
-                                            child: Material(
-                                              color: Colors.white,
-                                              borderRadius: BorderRadius.circular(4),
-                                              child: InkWell(
-                                                borderRadius: BorderRadius.circular(4),
-                                                onTap: () async {
-                                                  final tmdbId = entry.tmdbId;
-                                                  // Determine if it's a TV show or movie based on release events
-                                                  final isTV = entry.notificationEvents.any((e) => e.releaseType.toLowerCase() == 'tv');
-                                                  final typePath = isTV ? 'tv' : 'movie';
-                                                  final url = 'https://www.themoviedb.org/$typePath/$tmdbId';
-                                                  
-                                                  final uri = Uri.parse(url);
-                                                  if (await canLaunchUrl(uri)) {
-                                                    await launchUrl(uri, mode: LaunchMode.externalApplication);
-                                                  } else {
-                                                    if (context.mounted) {
-                                                      ScaffoldMessenger.of(context).showSnackBar(
-                                                        const SnackBar(content: Text('Could not open TMDB page')),
-                                                      );
-                                                    }
-                                                  }
-                                                },
-                                                child: Container(
-                                                  width: 36,
-                                                  height: 36,
-                                                  padding: const EdgeInsets.all(4),
-                                                  decoration: BoxDecoration(
-                                                    color: const Color(0xFF0d253f),
-                                                    border: Border.all(color: const Color(0xFF01B4E4), width: 1),
-                                                    borderRadius: BorderRadius.circular(4),
-                                                  ),
-                                                  child: Image.asset(
-                                                    'assets/images/tmdb_square.png',
-                                                    width: 28,
-                                                    height: 28,
-                                                    fit: BoxFit.contain,
-                                                    errorBuilder: (context, error, stackTrace) => Container(
-                                                      width: 28,
-                                                      height: 28,
-                                                      decoration: BoxDecoration(
-                                                        color: const Color(0xFF01B4E4),
-                                                        borderRadius: BorderRadius.circular(2),
-                                                      ),
-                                                      child: const Center(
-                                                        child: Text(
-                                                          'T',
-                                                          style: TextStyle(
-                                                            color: Colors.white,
-                                                            fontSize: 16,
-                                                            fontWeight: FontWeight.bold,
-                                                          ),
-                                                        ),
-                                                      ),
-                                                    ),
-                                                  ),
-                                                ),
-                                              ),
-                                            ),
-                                          ),
-                                        ),
-                                      // View on IMDB button
-                                      if (showImdb)
+                                      // View on IMDb button (Provider B in "both" mode)
+                                      if (showImdbButton)
                                         Container(
                                           margin: const EdgeInsets.only(bottom: 4),
                                           child: Tooltip(
@@ -333,29 +379,7 @@ class HistoryScreen extends ConsumerWidget {
                                               borderRadius: BorderRadius.circular(4),
                                               child: InkWell(
                                                 borderRadius: BorderRadius.circular(4),
-                                                onTap: () async {
-                                                  final imdbId = movie?.imdbId;
-                                                  
-                                                  if (imdbId != null && imdbId.isNotEmpty) {
-                                                    final url = 'https://www.imdb.com/title/$imdbId/';
-                                                    final uri = Uri.parse(url);
-                                                    if (await canLaunchUrl(uri)) {
-                                                      await launchUrl(uri, mode: LaunchMode.externalApplication);
-                                                    } else {
-                                                      if (context.mounted) {
-                                                        ScaffoldMessenger.of(context).showSnackBar(
-                                                          const SnackBar(content: Text('Could not open IMDB page')),
-                                                        );
-                                                      }
-                                                    }
-                                                  } else {
-                                                    if (context.mounted) {
-                                                      ScaffoldMessenger.of(context).showSnackBar(
-                                                        const SnackBar(content: Text('IMDB ID not available for this movie')),
-                                                      );
-                                                    }
-                                                  }
-                                                },
+                                                onTap: () => _launchImdbUrl(context, movie!.imdbId!),
                                                 child: Container(
                                                   width: 36,
                                                   height: 36,
@@ -512,6 +536,47 @@ class HistoryScreen extends ConsumerWidget {
       await prefsRepo.savePreferences(updatedPrefs);
     } catch (e) {
       debugPrint('[HistoryScreen] Failed to mark history as viewed: $e');
+    }
+  }
+
+  Future<void> _launchTmdbUrl(BuildContext context, NotificationHistoryEntry entry) async {
+    final tmdbId = entry.tmdbId;
+    // Determine if it's a TV show or movie based on release events
+    final isTV = entry.notificationEvents.any((e) => e.releaseType.toLowerCase() == 'tv');
+    final typePath = isTV ? 'tv' : 'movie';
+    final url = 'https://www.themoviedb.org/$typePath/$tmdbId';
+    
+    final uri = Uri.parse(url);
+    if (await canLaunchUrl(uri)) {
+      await launchUrl(uri, mode: LaunchMode.externalApplication);
+    } else {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Could not open TMDB page')),
+        );
+      }
+    }
+  }
+
+  Future<void> _launchImdbUrl(BuildContext context, String imdbId) async {
+    if (imdbId.isNotEmpty) {
+      final url = 'https://www.imdb.com/title/$imdbId/';
+      final uri = Uri.parse(url);
+      if (await canLaunchUrl(uri)) {
+        await launchUrl(uri, mode: LaunchMode.externalApplication);
+      } else {
+        if (context.mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Could not open IMDb page')),
+          );
+        }
+      }
+    } else {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('IMDb ID not available for this movie')),
+        );
+      }
     }
   }
 }

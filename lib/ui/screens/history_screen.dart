@@ -220,6 +220,7 @@ class HistoryScreen extends ConsumerWidget {
                               
                               return Tooltip(
                                 message: primaryTooltip,
+                                waitDuration: const Duration(milliseconds: 800),
                                 child: Material(
                                   color: Colors.transparent,
                                   borderRadius: BorderRadius.circular(4),
@@ -308,6 +309,7 @@ class HistoryScreen extends ConsumerWidget {
                                           
                                           return Tooltip(
                                             message: primaryTooltip,
+                                            waitDuration: const Duration(milliseconds: 800),
                                             child: Material(
                                               color: Colors.transparent,
                                               child: InkWell(
@@ -374,6 +376,7 @@ class HistoryScreen extends ConsumerWidget {
                                           margin: const EdgeInsets.only(bottom: 4),
                                           child: Tooltip(
                                             message: 'View on IMDb',
+                                            waitDuration: const Duration(milliseconds: 800),
                                             child: Material(
                                               color: Colors.transparent,
                                               borderRadius: BorderRadius.circular(4),

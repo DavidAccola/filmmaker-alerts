@@ -24,6 +24,9 @@ migrate_working_dir/
 .env.production
 .env.staging
 
+#Images
+assets/images/Unused
+
 # Personal data files
 *.csv
 *.xlsx

@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'dart:io';
+import 'package:window_manager/window_manager.dart';
 import '../../providers/providers.dart';
 import '../common/adaptive_scaffold.dart';
 import '../common/department_selection_dialog.dart';
@@ -20,7 +22,7 @@ class MainScreen extends ConsumerStatefulWidget {
   ConsumerState<MainScreen> createState() => _MainScreenState();
 }
 
-class _MainScreenState extends ConsumerState<MainScreen> {
+class _MainScreenState extends ConsumerState<MainScreen> with WindowListener {
   bool _hasCheckedOnboarding = false;
 
   final List<Widget> _screens = const [
@@ -28,6 +30,78 @@ class _MainScreenState extends ConsumerState<MainScreen> {
     HistoryScreen(),
     DebugScreen(),
   ];
+
+  @override
+  void initState() {
+    super.initState();
+    debugPrint('[MainScreen] initState() called');
+    if (Platform.isWindows) {
+      debugPrint('[MainScreen] Adding window listener for Windows');
+      windowManager.addListener(this);
+    } else {
+      debugPrint('[MainScreen] Not Windows, skipping window listener');
+    }
+  }
+
+  @override
+  void dispose() {
+    debugPrint('[MainScreen] dispose() called');
+    if (Platform.isWindows) {
+      debugPrint('[MainScreen] Removing window listener');
+      windowManager.removeListener(this);
+    }
+    super.dispose();
+  }
+
+  @override
+  void onWindowClose() async {
+    debugPrint('[MainScreen] onWindowClose() called - X button clicked!');
+    if (Platform.isWindows) {
+      debugPrint('[MainScreen] Platform is Windows, preventing close and minimizing to tray');
+      
+      try {
+        // Prevent default close behavior
+        bool isPreventClose = await windowManager.isPreventClose();
+        debugPrint('[MainScreen] Current preventClose status: $isPreventClose');
+        
+        if (!isPreventClose) {
+          debugPrint('[MainScreen] Setting preventClose to true');
+          await windowManager.setPreventClose(true);
+        }
+        
+        // Minimize to tray instead of closing
+        debugPrint('[MainScreen] Getting system tray service');
+        final systemTray = ref.read(systemTrayServiceProvider);
+        debugPrint('[MainScreen] Calling minimizeToTray()');
+        await systemTray.minimizeToTray();
+        debugPrint('[MainScreen] minimizeToTray() completed');
+      } catch (e) {
+        debugPrint('[MainScreen] Error in onWindowClose: $e');
+      }
+    } else {
+      debugPrint('[MainScreen] Not Windows, allowing normal close');
+    }
+  }
+
+  @override
+  void onWindowFocus() {
+    debugPrint('[MainScreen] Window gained focus');
+  }
+
+  @override
+  void onWindowBlur() {
+    debugPrint('[MainScreen] Window lost focus');
+  }
+
+  @override
+  void onWindowMinimize() {
+    debugPrint('[MainScreen] Window minimized (not to tray)');
+  }
+
+  @override
+  void onWindowRestore() {
+    debugPrint('[MainScreen] Window restored');
+  }
 
   void _handleContributorResult(dynamic result) {
     if (result is Map && result['contributor'] is Contributor) {

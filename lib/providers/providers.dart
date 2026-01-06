@@ -12,6 +12,7 @@ import '../logic/latest_work_logic.dart';
 import '../logic/release_checker.dart';
 import '../logic/search_logic.dart';
 import '../data/services/notification_service.dart';
+import '../data/services/system_tray_service.dart';
 import '../data/models/preferences.dart';
 
 // --- Repositories ---
@@ -44,6 +45,10 @@ final tmdbServiceProvider = Provider<TmdbService>((ref) {
 
 final notificationServiceProvider = Provider<NotificationService>((ref) {
   return NotificationService();
+});
+
+final systemTrayServiceProvider = Provider<SystemTrayService>((ref) {
+  return SystemTrayService();
 });
 
 // --- Logic ---

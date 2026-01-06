@@ -1,8 +1,10 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../data/models/contributor.dart';
 import '../data/repositories/contributor_repository.dart';
 import '../data/repositories/history_repository.dart';
 import '../data/repositories/movie_cache_repository.dart';
+import '../data/repositories/tv_cache_repository.dart';
 import '../data/repositories/preferences_repository.dart';
 import '../data/services/tmdb_service.dart';
 import '../logic/contributor_logic.dart';
@@ -28,6 +30,10 @@ final historyRepositoryProvider = Provider<HistoryRepository>((ref) {
 
 final movieCacheRepositoryProvider = Provider<MovieCacheRepository>((ref) {
   return MovieCacheRepository();
+});
+
+final tvCacheRepositoryProvider = Provider<TvCacheRepository>((ref) {
+  return TvCacheRepository();
 });
 
 // --- Services ---
@@ -68,6 +74,7 @@ final releaseCheckerProvider = Provider<ReleaseChecker>((ref) {
     ref.watch(preferencesRepositoryProvider),
     ref.watch(historyRepositoryProvider),
     ref.watch(movieCacheRepositoryProvider),
+    ref.watch(tvCacheRepositoryProvider),
   );
 });
 
@@ -82,7 +89,9 @@ final contributorsProvider = FutureProvider<List<Contributor>>((ref) async {
 
 final preferencesProvider = FutureProvider<Preferences>((ref) async {
   final repo = ref.watch(preferencesRepositoryProvider);
-  return repo.getPreferences();
+  final prefs = repo.getPreferences();
+  debugPrint('[PreferencesProvider] Loaded preferences with notifyTV: ${prefs.notifyTV}');
+  return prefs;
 });
 
 final historyProvider = FutureProvider<List<EnrichedHistoryEntry>>((ref) async {

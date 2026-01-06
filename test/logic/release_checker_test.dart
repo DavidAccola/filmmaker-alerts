@@ -4,6 +4,7 @@ import 'package:filmmaker_alerts/data/repositories/contributor_repository.dart';
 import 'package:filmmaker_alerts/data/repositories/history_repository.dart';
 import 'package:filmmaker_alerts/data/repositories/movie_cache_repository.dart';
 import 'package:filmmaker_alerts/data/repositories/preferences_repository.dart';
+import 'package:filmmaker_alerts/data/repositories/tv_cache_repository.dart';
 import 'package:filmmaker_alerts/data/services/tmdb_service.dart';
 import 'package:filmmaker_alerts/logic/release_checker.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -24,6 +25,7 @@ void main() {
     mockPreferencesRepo = MockPreferencesRepository();
     mockHistoryRepo = MockHistoryRepository();
     mockMovieCacheRepo = MockMovieCacheRepository();
+    final mockTvCacheRepo = MockTvCacheRepository();
 
     releaseChecker = ReleaseChecker(
       mockTmdbService,
@@ -31,6 +33,7 @@ void main() {
       mockPreferencesRepo,
       mockHistoryRepo,
       mockMovieCacheRepo,
+      mockTvCacheRepo,
     );
 
     // Default Preferences

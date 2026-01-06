@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/constants.dart';
 import '../../data/models/preferences.dart';
+import '../../data/models/contributor.dart';
 import '../../providers/providers.dart';
 
 import '../common/multi_select_chip_group.dart';
@@ -53,6 +54,8 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                     _buildReleaseSection(context, ref, prefs),
                     const SizedBox(height: 24),
                     _buildRoleSection(context, ref, prefs),
+                    const SizedBox(height: 24),
+                    _buildTvSection(context, ref, prefs),
                     const SizedBox(height: 24),
                     _buildSearchSection(context, ref, prefs),
                     const SizedBox(height: 24),
@@ -124,6 +127,10 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
               }
             },
             onChanged: (newValues) {
+              debugPrint('[SettingsScreen] Release types changed: $newValues');
+              debugPrint('[SettingsScreen] TV Airings selected: ${newValues.contains('TV Airings')}');
+              debugPrint('[SettingsScreen] Current notifyTV before update: ${prefs.notifyTV}');
+              
               _updatePrefs(
                 ref, 
                 prefs,
@@ -392,6 +399,99 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     );
   }
 
+  Widget _buildTvSection(BuildContext context, WidgetRef ref, Preferences prefs) {
+    final defaultTvPrefs = prefs.defaultTvNotificationPrefs ?? TvNotificationPreferences();
+    
+    return _buildCard(
+      context,
+      title: 'TV Show Notifications',
+      icon: Icons.tv_outlined,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Padding(
+            padding: const EdgeInsets.only(bottom: 16.0),
+            child: Text(
+              'Default notification preferences for new TV shows.',
+              style: Theme.of(context).textTheme.bodySmall,
+            ),
+          ),
+          CheckboxListTile(
+            title: const Text('Series Premiere'),
+            subtitle: const Text('First episode of brand new shows'),
+            value: defaultTvPrefs.seriesPremiere,
+            dense: true,
+            contentPadding: EdgeInsets.zero,
+            onChanged: (value) => _updateTvPrefs(ref, prefs, seriesPremiere: value ?? false),
+          ),
+          CheckboxListTile(
+            title: const Text('Season Premieres'),
+            subtitle: const Text('First episode of any season'),
+            value: defaultTvPrefs.seasonPremieres,
+            dense: true,
+            contentPadding: EdgeInsets.zero,
+            onChanged: (value) => _updateTvPrefs(ref, prefs, seasonPremieres: value ?? false),
+          ),
+          CheckboxListTile(
+            title: const Text('Season Finales'),
+            subtitle: const Text('Last episode of any season'),
+            value: defaultTvPrefs.seasonFinales,
+            dense: true,
+            contentPadding: EdgeInsets.zero,
+            onChanged: (value) => _updateTvPrefs(ref, prefs, seasonFinales: value ?? false),
+          ),
+          CheckboxListTile(
+            title: const Text('New Episodes'),
+            subtitle: const Text('All episodes as they air'),
+            value: defaultTvPrefs.newEpisodes,
+            dense: true,
+            contentPadding: EdgeInsets.zero,
+            onChanged: (value) => _updateTvPrefs(ref, prefs, newEpisodes: value ?? false),
+          ),
+          CheckboxListTile(
+            title: const Text('Specials'),
+            subtitle: const Text('Holiday specials and one-offs'),
+            value: defaultTvPrefs.specials,
+            dense: true,
+            contentPadding: EdgeInsets.zero,
+            onChanged: (value) => _updateTvPrefs(ref, prefs, specials: value ?? false),
+          ),
+          const Padding(
+            padding: EdgeInsets.symmetric(vertical: 8.0),
+            child: Divider(),
+          ),
+          SwitchListTile(
+            title: const Text('Notify when followed people direct TV episodes'),
+            subtitle: const Text('Get notifications for TV episodes directed by people you follow'),
+            value: prefs.notifyPersonTvEpisodes ?? true,
+            dense: true,
+            contentPadding: EdgeInsets.zero,
+            onChanged: (val) => _updatePrefs(ref, prefs, notifyPersonTvEpisodes: val),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _updateTvPrefs(WidgetRef ref, Preferences current, {
+    bool? seriesPremiere,
+    bool? seasonPremieres,
+    bool? seasonFinales,
+    bool? newEpisodes,
+    bool? specials,
+  }) {
+    final currentTvPrefs = current.defaultTvNotificationPrefs ?? TvNotificationPreferences();
+    final newTvPrefs = TvNotificationPreferences(
+      seriesPremiere: seriesPremiere ?? currentTvPrefs.seriesPremiere,
+      seasonPremieres: seasonPremieres ?? currentTvPrefs.seasonPremieres,
+      seasonFinales: seasonFinales ?? currentTvPrefs.seasonFinales,
+      newEpisodes: newEpisodes ?? currentTvPrefs.newEpisodes,
+      specials: specials ?? currentTvPrefs.specials,
+    );
+    
+    _updatePrefs(ref, current, defaultTvNotificationPrefs: newTvPrefs);
+  }
+
   String _getMovieDetailsDescription(String preference) {
     switch (preference) {
       case 'tmdb':
@@ -470,7 +570,12 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     bool? allReleaseTypesSelected,
     bool? autoFollowNewRoles,
     String? movieDetailsPreference,
+    TvNotificationPreferences? defaultTvNotificationPrefs,
+    bool? notifyPersonTvEpisodes,
   }) async {
+    debugPrint('[SettingsScreen] _updatePrefs called with notifyTV: $notifyTV');
+    debugPrint('[SettingsScreen] Current preferences notifyTV: ${current.notifyTV}');
+    
     // Create new object with updates
     final newPrefs = Preferences(
       scheduleTime: scheduleTime ?? current.scheduleTime,
@@ -488,9 +593,20 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
       lastCheckTime: current.lastCheckTime,
       lastViewedHistoryTime: current.lastViewedHistoryTime,
       movieDetailsPreference: movieDetailsPreference ?? current.movieDetailsPreference,
+      defaultTvNotificationPrefs: defaultTvNotificationPrefs ?? current.defaultTvNotificationPrefs,
+      notifyPersonTvEpisodes: notifyPersonTvEpisodes ?? current.notifyPersonTvEpisodes,
     );
 
+    debugPrint('[SettingsScreen] New preferences notifyTV: ${newPrefs.notifyTV}');
+    debugPrint('[SettingsScreen] Saving preferences...');
+    
     await ref.read(preferencesRepositoryProvider).savePreferences(newPrefs);
+    
+    debugPrint('[SettingsScreen] Preferences saved, invalidating provider...');
     ref.invalidate(preferencesProvider);
+    
+    // Verify the save worked
+    final savedPrefs = ref.read(preferencesRepositoryProvider).getPreferences();
+    debugPrint('[SettingsScreen] Verified saved notifyTV: ${savedPrefs.notifyTV}');
   }
 }

@@ -1,6 +1,7 @@
 import 'package:hive/hive.dart';
 
 import '../../core/constants.dart';
+import 'contributor.dart';
 
 part 'preferences.g.dart';
 
@@ -57,6 +58,12 @@ class Preferences extends HiveObject {
   @HiveField(16)
   String? movieDetailsPreference; // 'tmdb', 'imdb', or 'both'
 
+  @HiveField(17)
+  TvNotificationPreferences? defaultTvNotificationPrefs;
+
+  @HiveField(18)
+  bool? notifyPersonTvEpisodes;
+
   Preferences({
     this.notifyTheatre = true,
     this.notifyStreaming = true,
@@ -75,6 +82,8 @@ class Preferences extends HiveObject {
     this.lastCheckTime,
     this.lastViewedHistoryTime,
     this.movieDetailsPreference = 'both',
+    this.defaultTvNotificationPrefs,
+    this.notifyPersonTvEpisodes = true,
   });
 
   // Helper getters for "True All" logic

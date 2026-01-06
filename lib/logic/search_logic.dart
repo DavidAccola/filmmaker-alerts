@@ -96,6 +96,13 @@ class SearchLogic {
           // Deep Sort for collections
           rawResults = await _enrichCollectionsWithMaxPopularity(collections.take(15).toList());
           break;
+
+        case ContributorType.tvShow:
+          final data = await _tmdbService.searchTv(query);
+          rawResults = data['results'] ?? [];
+          totalPages = data['total_pages'] ?? 1;
+          totalResults = data['total_results'] ?? 0;
+          break;
       }
     } catch (e) {
       debugPrint('Search error: $e');
@@ -232,6 +239,10 @@ class SearchLogic {
           
           final examples = ["Pixar", "Disney"];
           return "e.g., ${examples[random % examples.length]}";
+
+        case ContributorType.tvShow:
+          final examples = ["Breaking Bad", "The Office", "Stranger Things"];
+          return "e.g., ${examples[random % examples.length]}";
           
         default:
           return "e.g., Greta Gerwig";
@@ -292,6 +303,9 @@ class SearchLogic {
         case ContributorType.collection:
           data = await _tmdbService.searchCollection(query, page: page);
           break;
+        case ContributorType.tvShow:
+          data = await _tmdbService.searchTv(query, page: page);
+          break;
       }
 
       final results = (data['results'] as List? ?? [])
@@ -338,6 +352,8 @@ class SearchLogic {
       }
     } else if (isCollection) {
       knownFor = 'Collection';
+    } else if (type == ContributorType.tvShow) {
+      knownFor = (json['first_air_date'] as String?)?.split('-').first ?? 'Upcoming';
     } else {
       knownFor = (json['release_date'] as String?)?.split('-').first ?? 'Upcoming';
     }

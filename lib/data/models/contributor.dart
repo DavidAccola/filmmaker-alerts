@@ -2,6 +2,32 @@ import 'package:hive/hive.dart';
 
 part 'contributor.g.dart';
 
+@HiveType(typeId: 8)
+class TvNotificationPreferences {
+  @HiveField(0)
+  final bool seriesPremiere;
+
+  @HiveField(1)
+  final bool seasonPremieres;
+
+  @HiveField(2)
+  final bool seasonFinales;
+
+  @HiveField(3)
+  final bool newEpisodes;
+
+  @HiveField(4)
+  final bool specials;
+
+  TvNotificationPreferences({
+    this.seriesPremiere = true,
+    this.seasonPremieres = true,
+    this.seasonFinales = false,
+    this.newEpisodes = false,
+    this.specials = false,
+  });
+}
+
 @HiveType(typeId: 7)
 enum ContributorType {
   @HiveField(0)
@@ -12,6 +38,8 @@ enum ContributorType {
   movie,
   @HiveField(3)
   collection,
+  @HiveField(4)
+  tvShow,
 }
 
 @HiveType(typeId: 1)
@@ -92,6 +120,21 @@ class Contributor extends HiveObject {
   @HiveField(9)
   bool? allRolesSelected;
 
+  @HiveField(10)
+  TvNotificationPreferences? tvNotificationPrefs;
+
+  @HiveField(11)
+  bool? notifyTvEpisodeWork;
+
+  @HiveField(12)
+  String? showStatus;
+
+  @HiveField(13)
+  int? totalSeasons;
+
+  @HiveField(14)
+  String? nextEpisodeDate;
+
   Contributor({
     required this.tmdbId,
     required this.name,
@@ -103,5 +146,10 @@ class Contributor extends HiveObject {
     this.latestWork,
     this.followedAt,
     this.allRolesSelected,
+    this.tvNotificationPrefs,
+    this.notifyTvEpisodeWork,
+    this.showStatus,
+    this.totalSeasons,
+    this.nextEpisodeDate,
   });
 }

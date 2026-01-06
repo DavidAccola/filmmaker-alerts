@@ -53,9 +53,29 @@ class NotificationHistoryEntry extends HiveObject {
   @HiveField(2)
   List<NotificationEvent> notificationEvents;
 
+  @HiveField(3)
+  final String? mediaType; // 'movie' or 'tv'
+
+  @HiveField(4)
+  final int? seasonNumber;
+
+  @HiveField(5)
+  final int? episodeNumber;
+
+  @HiveField(6)
+  final String? episodeTitle;
+
+  @HiveField(7)
+  final String? tvNotificationType; // 'series_premiere', 'season_premiere', etc.
+
   NotificationHistoryEntry({
     required this.tmdbId,
     required this.reasons,
     required this.notificationEvents,
+    this.mediaType,
+    this.seasonNumber,
+    this.episodeNumber,
+    this.episodeTitle,
+    this.tvNotificationType,
   });
 }

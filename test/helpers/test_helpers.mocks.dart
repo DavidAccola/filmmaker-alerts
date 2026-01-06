@@ -10,6 +10,7 @@ import 'package:filmmaker_alerts/data/models/contributor.dart' as _i7;
 import 'package:filmmaker_alerts/data/models/movie_cache_entry.dart' as _i12;
 import 'package:filmmaker_alerts/data/models/notification_history.dart' as _i10;
 import 'package:filmmaker_alerts/data/models/preferences.dart' as _i3;
+import 'package:filmmaker_alerts/data/models/tv_cache.dart' as _i14;
 import 'package:filmmaker_alerts/data/repositories/contributor_repository.dart'
     as _i6;
 import 'package:filmmaker_alerts/data/repositories/history_repository.dart'
@@ -18,8 +19,10 @@ import 'package:filmmaker_alerts/data/repositories/movie_cache_repository.dart'
     as _i11;
 import 'package:filmmaker_alerts/data/repositories/preferences_repository.dart'
     as _i8;
-import 'package:filmmaker_alerts/data/services/notification_service.dart'
+import 'package:filmmaker_alerts/data/repositories/tv_cache_repository.dart'
     as _i13;
+import 'package:filmmaker_alerts/data/services/notification_service.dart'
+    as _i15;
 import 'package:filmmaker_alerts/data/services/tmdb_service.dart' as _i4;
 import 'package:mockito/mockito.dart' as _i1;
 
@@ -200,6 +203,21 @@ class MockTmdbService extends _i1.Mock implements _i4.TmdbService {
       ) as _i5.Future<Map<String, dynamic>>);
 
   @override
+  _i5.Future<Map<String, dynamic>> searchTv(
+    String? query, {
+    int? page = 1,
+  }) =>
+      (super.noSuchMethod(
+        Invocation.method(
+          #searchTv,
+          [query],
+          {#page: page},
+        ),
+        returnValue:
+            _i5.Future<Map<String, dynamic>>.value(<String, dynamic>{}),
+      ) as _i5.Future<Map<String, dynamic>>);
+
+  @override
   _i5.Future<Map<String, dynamic>> getTrendingMovies() => (super.noSuchMethod(
         Invocation.method(
           #getTrendingMovies,
@@ -308,6 +326,101 @@ class MockTmdbService extends _i1.Mock implements _i4.TmdbService {
         Invocation.method(
           #getCollectionDetails,
           [id],
+        ),
+        returnValue:
+            _i5.Future<Map<String, dynamic>>.value(<String, dynamic>{}),
+      ) as _i5.Future<Map<String, dynamic>>);
+
+  @override
+  _i5.Future<Map<String, dynamic>> getTvDetails(int? id) => (super.noSuchMethod(
+        Invocation.method(
+          #getTvDetails,
+          [id],
+        ),
+        returnValue:
+            _i5.Future<Map<String, dynamic>>.value(<String, dynamic>{}),
+      ) as _i5.Future<Map<String, dynamic>>);
+
+  @override
+  _i5.Future<Map<String, dynamic>> getTvSeasonDetails(
+    int? showId,
+    int? seasonNumber,
+  ) =>
+      (super.noSuchMethod(
+        Invocation.method(
+          #getTvSeasonDetails,
+          [
+            showId,
+            seasonNumber,
+          ],
+        ),
+        returnValue:
+            _i5.Future<Map<String, dynamic>>.value(<String, dynamic>{}),
+      ) as _i5.Future<Map<String, dynamic>>);
+
+  @override
+  _i5.Future<Map<String, dynamic>> getTvEpisodeDetails(
+    int? showId,
+    int? seasonNumber,
+    int? episodeNumber,
+  ) =>
+      (super.noSuchMethod(
+        Invocation.method(
+          #getTvEpisodeDetails,
+          [
+            showId,
+            seasonNumber,
+            episodeNumber,
+          ],
+        ),
+        returnValue:
+            _i5.Future<Map<String, dynamic>>.value(<String, dynamic>{}),
+      ) as _i5.Future<Map<String, dynamic>>);
+
+  @override
+  _i5.Future<Map<String, dynamic>> getTvCredits(int? id) => (super.noSuchMethod(
+        Invocation.method(
+          #getTvCredits,
+          [id],
+        ),
+        returnValue:
+            _i5.Future<Map<String, dynamic>>.value(<String, dynamic>{}),
+      ) as _i5.Future<Map<String, dynamic>>);
+
+  @override
+  _i5.Future<Map<String, dynamic>> getTvEpisodeCredits(
+    int? showId,
+    int? seasonNumber,
+    int? episodeNumber,
+  ) =>
+      (super.noSuchMethod(
+        Invocation.method(
+          #getTvEpisodeCredits,
+          [
+            showId,
+            seasonNumber,
+            episodeNumber,
+          ],
+        ),
+        returnValue:
+            _i5.Future<Map<String, dynamic>>.value(<String, dynamic>{}),
+      ) as _i5.Future<Map<String, dynamic>>);
+
+  @override
+  _i5.Future<Map<String, dynamic>> getTvOnTheAir() => (super.noSuchMethod(
+        Invocation.method(
+          #getTvOnTheAir,
+          [],
+        ),
+        returnValue:
+            _i5.Future<Map<String, dynamic>>.value(<String, dynamic>{}),
+      ) as _i5.Future<Map<String, dynamic>>);
+
+  @override
+  _i5.Future<Map<String, dynamic>> getTvAiringToday() => (super.noSuchMethod(
+        Invocation.method(
+          #getTvAiringToday,
+          [],
         ),
         returnValue:
             _i5.Future<Map<String, dynamic>>.value(<String, dynamic>{}),
@@ -1240,11 +1353,141 @@ class MockMovieCacheRepository extends _i1.Mock
       )) as _i12.MovieCacheEntry?);
 }
 
+/// A class which mocks [TvCacheRepository].
+///
+/// See the documentation for Mockito's code generation for more information.
+class MockTvCacheRepository extends _i1.Mock implements _i13.TvCacheRepository {
+  MockTvCacheRepository() {
+    _i1.throwOnMissingStub(this);
+  }
+
+  @override
+  _i5.Future<void> init() => (super.noSuchMethod(
+        Invocation.method(
+          #init,
+          [],
+        ),
+        returnValue: _i5.Future<void>.value(),
+        returnValueForMissingStub: _i5.Future<void>.value(),
+      ) as _i5.Future<void>);
+
+  @override
+  _i5.Future<void> addOrUpdateShow(_i14.TvShowCacheEntry? show) =>
+      (super.noSuchMethod(
+        Invocation.method(
+          #addOrUpdateShow,
+          [show],
+        ),
+        returnValue: _i5.Future<void>.value(),
+        returnValueForMissingStub: _i5.Future<void>.value(),
+      ) as _i5.Future<void>);
+
+  @override
+  _i14.TvShowCacheEntry? getShow(int? tmdbId) =>
+      (super.noSuchMethod(Invocation.method(
+        #getShow,
+        [tmdbId],
+      )) as _i14.TvShowCacheEntry?);
+
+  @override
+  List<_i14.TvShowCacheEntry> getAllShows() => (super.noSuchMethod(
+        Invocation.method(
+          #getAllShows,
+          [],
+        ),
+        returnValue: <_i14.TvShowCacheEntry>[],
+      ) as List<_i14.TvShowCacheEntry>);
+
+  @override
+  _i5.Future<void> deleteShow(int? tmdbId) => (super.noSuchMethod(
+        Invocation.method(
+          #deleteShow,
+          [tmdbId],
+        ),
+        returnValue: _i5.Future<void>.value(),
+        returnValueForMissingStub: _i5.Future<void>.value(),
+      ) as _i5.Future<void>);
+
+  @override
+  _i5.Future<void> addOrUpdateEpisode(_i14.TvEpisodeCacheEntry? episode) =>
+      (super.noSuchMethod(
+        Invocation.method(
+          #addOrUpdateEpisode,
+          [episode],
+        ),
+        returnValue: _i5.Future<void>.value(),
+        returnValueForMissingStub: _i5.Future<void>.value(),
+      ) as _i5.Future<void>);
+
+  @override
+  _i14.TvEpisodeCacheEntry? getEpisode(
+    int? showId,
+    int? seasonNumber,
+    int? episodeNumber,
+  ) =>
+      (super.noSuchMethod(Invocation.method(
+        #getEpisode,
+        [
+          showId,
+          seasonNumber,
+          episodeNumber,
+        ],
+      )) as _i14.TvEpisodeCacheEntry?);
+
+  @override
+  List<_i14.TvEpisodeCacheEntry> getEpisodesForShow(int? showId) =>
+      (super.noSuchMethod(
+        Invocation.method(
+          #getEpisodesForShow,
+          [showId],
+        ),
+        returnValue: <_i14.TvEpisodeCacheEntry>[],
+      ) as List<_i14.TvEpisodeCacheEntry>);
+
+  @override
+  List<_i14.TvEpisodeCacheEntry> getAllEpisodes() => (super.noSuchMethod(
+        Invocation.method(
+          #getAllEpisodes,
+          [],
+        ),
+        returnValue: <_i14.TvEpisodeCacheEntry>[],
+      ) as List<_i14.TvEpisodeCacheEntry>);
+
+  @override
+  _i5.Future<void> deleteEpisode(
+    int? showId,
+    int? seasonNumber,
+    int? episodeNumber,
+  ) =>
+      (super.noSuchMethod(
+        Invocation.method(
+          #deleteEpisode,
+          [
+            showId,
+            seasonNumber,
+            episodeNumber,
+          ],
+        ),
+        returnValue: _i5.Future<void>.value(),
+        returnValueForMissingStub: _i5.Future<void>.value(),
+      ) as _i5.Future<void>);
+
+  @override
+  _i5.Future<void> deleteAllEpisodesForShow(int? showId) => (super.noSuchMethod(
+        Invocation.method(
+          #deleteAllEpisodesForShow,
+          [showId],
+        ),
+        returnValue: _i5.Future<void>.value(),
+        returnValueForMissingStub: _i5.Future<void>.value(),
+      ) as _i5.Future<void>);
+}
+
 /// A class which mocks [NotificationService].
 ///
 /// See the documentation for Mockito's code generation for more information.
 class MockNotificationService extends _i1.Mock
-    implements _i13.NotificationService {
+    implements _i15.NotificationService {
   MockNotificationService() {
     _i1.throwOnMissingStub(this);
   }

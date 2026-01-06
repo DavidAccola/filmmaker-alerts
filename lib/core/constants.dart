@@ -4,6 +4,7 @@ class AppConstants {
   static const String preferencesBox = 'preferences';
   static const String historyBox = 'history';
   static const String movieCacheBox = 'movieCache';
+  static const String tvCacheBox = 'tvCache';
 
   // Department Order (Critical for UI consistency)
   static const List<String> allDepartments = [

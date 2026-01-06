@@ -2,6 +2,7 @@ import 'package:hive_flutter/hive_flutter.dart';
 import '../../core/constants.dart';
 import '../models/notification_history.dart';
 import '../models/movie_cache_entry.dart';
+import '../models/tv_cache.dart';
 
 /// A DTO that combines the history entry with cached movie details for the UI.
 class EnrichedHistoryEntry {
@@ -19,6 +20,7 @@ class EnrichedHistoryEntry {
 class HistoryRepository {
   Box<NotificationHistoryEntry> get _historyBox => Hive.box<NotificationHistoryEntry>(AppConstants.historyBox);
   Box<MovieCacheEntry> get _movieCacheBox => Hive.box<MovieCacheEntry>(AppConstants.movieCacheBox);
+  Box<TvShowCacheEntry> get _tvCacheBox => Hive.box<TvShowCacheEntry>('tv_shows_cache');
 
   /// Get full history, sorted by most recent notification, with titles populated.
   List<EnrichedHistoryEntry> getHistory() {
@@ -31,17 +33,38 @@ class HistoryRepository {
       return bDate.compareTo(aDate); 
     });
 
-    // Join with Movie Cache
+    // Join with Movie Cache or TV Cache based on media type
     return history.map((entry) {
-      final movieEntry = _movieCacheBox.values.firstWhere(
-        (m) => m.tmdbId == entry.tmdbId,
-        orElse: () => MovieCacheEntry(tmdbId: entry.tmdbId, title: 'Unknown Title'),
-      );
+      String title = 'Unknown Title';
+      String? posterPath;
+      
+      if (entry.mediaType == 'tv') {
+        // Look in TV cache
+        try {
+          final tvEntry = _tvCacheBox.values.firstWhere(
+            (tv) => tv.tmdbId == entry.tmdbId,
+            orElse: () => TvShowCacheEntry(tmdbId: entry.tmdbId, name: 'Unknown Title'),
+          );
+          title = tvEntry.name;
+          posterPath = tvEntry.posterPath;
+        } catch (e) {
+          // TV cache box might not be open, fallback to Unknown Title
+          title = 'Unknown Title';
+        }
+      } else {
+        // Look in movie cache (default for movies and other content)
+        final movieEntry = _movieCacheBox.values.firstWhere(
+          (m) => m.tmdbId == entry.tmdbId,
+          orElse: () => MovieCacheEntry(tmdbId: entry.tmdbId, title: 'Unknown Title'),
+        );
+        title = movieEntry.title;
+        posterPath = movieEntry.posterPath;
+      }
 
       return EnrichedHistoryEntry(
         entry: entry,
-        title: movieEntry.title,
-        posterPath: movieEntry.posterPath,
+        title: title,
+        posterPath: posterPath,
       );
     }).toList();
   }

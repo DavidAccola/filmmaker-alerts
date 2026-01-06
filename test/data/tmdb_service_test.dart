@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'dart:typed_data';
 
 import 'package:dio/dio.dart';
@@ -84,6 +85,95 @@ void main() {
     
     expect(callCount, 4); 
   });
+
+  // Property-based test for TV search validation
+  test('Property 1: TV Search Result Validation - Property Test', () async {
+    // **Property 1: TV Search Result Validation**
+    // **Validates: Requirements 1.1, 1.2**
+    
+    // Test with various mock TV search responses
+    for (int i = 0; i < 100; i++) {
+      final mockResults = _generateMockTvResults(i);
+      
+      dio.httpClientAdapter = _MockAdapter((options) {
+        return ResponseBody.fromString(
+          jsonEncode({'results': mockResults}),
+          200,
+          headers: {
+            Headers.contentTypeHeader: [Headers.jsonContentType],
+          },
+        );
+      });
+
+      final result = await service.searchTv('test query');
+      final results = result['results'] as List;
+      
+      // Property: For any valid TV show search query, the returned results 
+      // SHALL contain only entries with valid tmdbId (positive integer), 
+      // name (non-empty string), and first air year (valid year or null)
+      for (final tvShow in results) {
+        // Validate tmdbId is positive integer
+        expect(tvShow['id'], isA<int>(), 
+          reason: 'tmdbId should be an integer');
+        expect(tvShow['id'], greaterThan(0), 
+          reason: 'tmdbId should be positive');
+        
+        // Validate name is non-empty string
+        expect(tvShow['name'], isA<String>(), 
+          reason: 'name should be a string');
+        expect(tvShow['name'], isNotEmpty, 
+          reason: 'name should not be empty');
+        
+        // Validate first_air_date is valid year or null
+        final firstAirDate = tvShow['first_air_date'];
+        if (firstAirDate != null) {
+          expect(firstAirDate, isA<String>(), 
+            reason: 'first_air_date should be a string when not null');
+          if (firstAirDate.isNotEmpty) {
+            final year = int.tryParse(firstAirDate.split('-')[0]);
+            expect(year, isNotNull, 
+              reason: 'first_air_date should contain a valid year');
+            expect(year!, greaterThanOrEqualTo(1900), 
+              reason: 'year should be reasonable (>= 1900)');
+            expect(year, lessThanOrEqualTo(2050), 
+              reason: 'year should be reasonable (<= 2050)');
+          }
+        }
+      }
+    }
+  });
+}
+
+List<Map<String, dynamic>> _generateMockTvResults(int seed) {
+  // Generate different mock TV show results based on seed
+  final List<Map<String, dynamic>> results = [];
+  
+  final numResults = (seed % 5) + 1; // 1-5 results
+  
+  for (int i = 0; i < numResults; i++) {
+    final id = (seed * 100) + i + 1; // Ensure positive ID
+    final name = 'Test Show ${seed}_$i';
+    
+    // Vary first_air_date: sometimes null, sometimes valid date
+    String? firstAirDate;
+    if (seed % 3 != 0) { // 2/3 of the time, include a date
+      final year = 2000 + (seed % 25); // Years 2000-2024
+      final month = (i % 12) + 1;
+      final day = (i % 28) + 1;
+      firstAirDate = '$year-${month.toString().padLeft(2, '0')}-${day.toString().padLeft(2, '0')}';
+    }
+    
+    results.add({
+      'id': id,
+      'name': name,
+      'first_air_date': firstAirDate,
+      'poster_path': '/test_poster_$i.jpg',
+      'overview': 'Test overview for show $i',
+      'vote_average': 7.5 + (i * 0.1),
+    });
+  }
+  
+  return results;
 }
 
 class _MockAdapter implements HttpClientAdapter {

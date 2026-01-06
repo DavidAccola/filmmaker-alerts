@@ -19,6 +19,8 @@ class LatestWorkLogic {
         case ContributorType.person:
         case ContributorType.company:
           return _getLatestForPersonOrCompany(contributor, pretendToday);
+        case ContributorType.tvShow:
+          return _getLatestForTvShow(contributor);
       }
     } catch (e) {
       debugPrint('Error calculating latest work for ${contributor.name}: $e');
@@ -155,6 +157,7 @@ class LatestWorkLogic {
     if (validCredits.isEmpty) return null;
 
     final latest = validCredits.first;
+    final isTV = latest['first_air_date'] != null; // TV content has first_air_date instead of release_date
     
     // Aggregation: Find all credits for this specific movie/show to list all roles (e.g. Director, Writer)
     final allRolesForLatest = validCredits.where((c) => c['id'] == latest['id']);
@@ -167,12 +170,48 @@ class LatestWorkLogic {
       }
     }
 
+    String title;
+    String department;
+    String job;
+
+    if (isTV) {
+      // For TV content: Show Name (S#E# - Episode Name) format
+      // Note: TMDB person credits API may not always have episode-level details
+      
+      final showName = latest['name'] ?? 'Unknown';
+      
+      // Check if we have episode-specific information
+      final episodeName = latest['episode_name'];
+      final seasonNumber = latest['season_number'];
+      final episodeNumber = latest['episode_number'];
+      
+      if (seasonNumber != null && episodeNumber != null && episodeName != null) {
+        // We have episode details - format as: Show Name (S#E# - Episode Name)
+        if (seasonNumber == 0) {
+          title = '$showName (Special - $episodeName)';
+        } else {
+          title = '$showName (S${seasonNumber}E$episodeNumber - $episodeName)';
+        }
+      } else {
+        // Fall back to show name only if no episode details available
+        title = showName;
+      }
+      
+      department = latest['department'] ?? (contributor.type == ContributorType.company ? 'Production' : 'Actor');
+      job = distinctJobs.join(', ');
+    } else {
+      // For movies: existing logic
+      title = latest['title'] ?? 'Unknown';
+      department = latest['department'] ?? (contributor.type == ContributorType.company ? 'Production' : 'Actor');
+      job = distinctJobs.join(', ');
+    }
+
     return LatestWork(
-      title: latest['title'] ?? latest['name'] ?? 'Unknown',
+      title: title,
       releaseYear: (latest['release_date'] ?? latest['first_air_date'])?.split('-').first ?? '',
       releaseDate: latest['release_date'] ?? latest['first_air_date'],
-      department: latest['department'] ?? (contributor.type == ContributorType.company ? 'Production' : 'Actor'),
-      job: distinctJobs.join(', '), // Aggregated jobs
+      department: department,
+      job: job,
       posterPath: latest['poster_path'],
     );
   }
@@ -180,5 +219,45 @@ class LatestWorkLogic {
   String _getReleaseTypeString(int? type) {
     const types = {1: 'Premiere', 2: 'Theatrical (Limited)', 3: 'Theatrical', 4: 'Digital', 5: 'Physical', 6: 'TV'};
     return types[type] ?? 'Unknown';
+  }
+
+  Future<LatestWork?> _getLatestForTvShow(Contributor contributor) async {
+    final data = await _tmdbService.getTvDetails(contributor.tmdbId);
+    
+    // Get the last aired episode information
+    final lastEpisodeToAir = data['last_episode_to_air'];
+    if (lastEpisodeToAir != null) {
+      final seasonNumber = lastEpisodeToAir['season_number'];
+      final episodeNumber = lastEpisodeToAir['episode_number'];
+      final episodeName = lastEpisodeToAir['name'] ?? 'Episode $episodeNumber';
+      final airDate = lastEpisodeToAir['air_date'] ?? '';
+      
+      // Format as "Episode Name - S#E#" for the title field
+      String title;
+      if (seasonNumber == 0) {
+        title = '$episodeName - Special';
+      } else {
+        title = '$episodeName - S${seasonNumber}E$episodeNumber';
+      }
+      
+      return LatestWork(
+        title: title,
+        releaseYear: airDate.split('-').first,
+        releaseDate: airDate,
+        department: '', // Empty department so it doesn't show extra text
+        job: null,
+        posterPath: data['poster_path'],
+      );
+    }
+    
+    // Fallback to show premiere if no episodes aired yet
+    return LatestWork(
+      title: 'Series Premiere',
+      releaseYear: (data['first_air_date'] as String?)?.split('-').first ?? '',
+      releaseDate: data['first_air_date'] ?? '',
+      department: '',
+      job: null,
+      posterPath: data['poster_path'],
+    );
   }
 }

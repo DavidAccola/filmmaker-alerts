@@ -68,6 +68,11 @@ class TmdbService {
     return response.data;
   }
 
+  Future<Map<String, dynamic>> searchTv(String query, {int page = 1}) async {
+    final response = await _dio.get('/search/tv', queryParameters: {'query': query, 'page': page});
+    return response.data;
+  }
+
   // --- Trending ---
   Future<Map<String, dynamic>> getTrendingMovies() async {
     final response = await _dio.get('/trending/movie/week');
@@ -163,6 +168,45 @@ class TmdbService {
 
   Future<Map<String, dynamic>> getCollectionDetails(int id) async {
     final response = await _dio.get('/collection/$id');
+    return response.data;
+  }
+
+  // --- TV Show Details & Credits ---
+  Future<Map<String, dynamic>> getTvDetails(int id) async {
+    final response = await _dio.get('/tv/$id', queryParameters: {
+      'append_to_response': 'external_ids',
+    });
+    return response.data;
+  }
+
+  Future<Map<String, dynamic>> getTvSeasonDetails(int showId, int seasonNumber) async {
+    final response = await _dio.get('/tv/$showId/season/$seasonNumber');
+    return response.data;
+  }
+
+  Future<Map<String, dynamic>> getTvEpisodeDetails(int showId, int seasonNumber, int episodeNumber) async {
+    final response = await _dio.get('/tv/$showId/season/$seasonNumber/episode/$episodeNumber');
+    return response.data;
+  }
+
+  Future<Map<String, dynamic>> getTvCredits(int id) async {
+    final response = await _dio.get('/tv/$id/credits');
+    return response.data;
+  }
+
+  Future<Map<String, dynamic>> getTvEpisodeCredits(int showId, int seasonNumber, int episodeNumber) async {
+    final response = await _dio.get('/tv/$showId/season/$seasonNumber/episode/$episodeNumber/credits');
+    return response.data;
+  }
+
+  // --- TV Airing Information ---
+  Future<Map<String, dynamic>> getTvOnTheAir() async {
+    final response = await _dio.get('/tv/on_the_air', queryParameters: {'region': 'US'});
+    return response.data;
+  }
+
+  Future<Map<String, dynamic>> getTvAiringToday() async {
+    final response = await _dio.get('/tv/airing_today', queryParameters: {'region': 'US'});
     return response.data;
   }
 }

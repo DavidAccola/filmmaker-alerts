@@ -34,8 +34,9 @@ class _ContributorCardState extends State<ContributorCard> {
     final theme = Theme.of(context);
     final latestWork = widget.contributor.latestWork;
 
-    // Default to Profile, but show Poster when hovering "Latest" info
-    final mainImagePath = (_showLatestPoster && latestWork?.posterPath != null)
+    // Default to Profile, but show Poster when hovering "Latest" info (only for people)
+    final isPerson = widget.contributor.type == ContributorType.person;
+    final mainImagePath = (isPerson && _showLatestPoster && latestWork?.posterPath != null)
         ? latestWork!.posterPath
         : widget.contributor.profilePath;
 
@@ -76,8 +77,9 @@ class _ContributorCardState extends State<ContributorCard> {
                 fontSize: 11,
               );
 
-              // NEW: Differentiated layout for Movies vs People
+              // NEW: Differentiated layout for Movies vs People vs TV Shows
               final isMovie = widget.contributor.type == ContributorType.movie || widget.contributor.type == ContributorType.collection;
+              final isTvShow = widget.contributor.type == ContributorType.tvShow;
 
               if (isMovie) {
                 // MOVIE LAYOUT: Similar to the legacy Electron app
@@ -158,6 +160,65 @@ class _ContributorCardState extends State<ContributorCard> {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: releaseLines,
                 );
+              } else if (isTvShow) {
+                // TV SHOW LAYOUT: Latest: Episode Name - S#E# (Date)
+                final formattedDate = _formatDate(latestWork.releaseDate);
+                
+                final titleSpan = TextSpan(
+                  style: textStyle,
+                  children: [
+                    TextSpan(text: 'Latest: ', style: latestLabelStyle),
+                    TextSpan(text: latestWork.title, style: titleStyle),
+                  ],
+                );
+
+                final detailsSpan = TextSpan(
+                  style: dateStyle,
+                  children: [
+                    if (formattedDate.isNotEmpty)
+                      TextSpan(text: '($formattedDate)'),
+                  ],
+                );
+
+                // Try a single line first
+                final fullRichSpan = TextSpan(
+                  style: textStyle,
+                  children: [
+                    titleSpan,
+                    const TextSpan(text: ' '),
+                    detailsSpan,
+                  ],
+                );
+
+                final tp = TextPainter(
+                  text: fullRichSpan,
+                  maxLines: 1,
+                  textDirection: ui.TextDirection.ltr,
+                )..layout(maxWidth: textColumnWidth);
+
+                if (tp.didExceedMaxLines) {
+                  // Split into two lines
+                  latestWorkWidget = Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      AdaptiveTooltipText.rich(
+                        titleSpan,
+                        customTooltip: latestWork.title,
+                        maxWidth: textColumnWidth,
+                      ),
+                      AdaptiveTooltipText.rich(
+                        detailsSpan,
+                        maxWidth: textColumnWidth,
+                      ),
+                    ],
+                  );
+                } else {
+                  latestWorkWidget = AdaptiveTooltipText.rich(
+                    fullRichSpan,
+                    customTooltip: '${latestWork.title} (${_formatDate(latestWork.releaseDate)})',
+                    maxWidth: textColumnWidth,
+                  );
+                }
               } else {
                 // PERSON LAYOUT: Latest: Title (Date)
                 final formattedDate = _formatDate(latestWork.releaseDate);
@@ -304,6 +365,8 @@ class _ContributorCardState extends State<ContributorCard> {
                                     widget.onRemove();
                                   } else if (value == 'edit_roles') {
                                     widget.onEditRoles?.call();
+                                  } else if (value == 'edit_tv_prefs') {
+                                    widget.onEditRoles?.call(); // Reuse the same callback for TV preferences
                                   }
                                 },
                                 itemBuilder: (context) => [
@@ -311,6 +374,11 @@ class _ContributorCardState extends State<ContributorCard> {
                                     const PopupMenuItem(
                                       value: 'edit_roles',
                                       child: Text('Edit Roles'),
+                                    ),
+                                  if (widget.contributor.type == ContributorType.tvShow)
+                                    const PopupMenuItem(
+                                      value: 'edit_tv_prefs',
+                                      child: Text('Edit TV Preferences'),
                                     ),
                                   const PopupMenuItem(
                                     value: 'remove',
@@ -328,7 +396,8 @@ class _ContributorCardState extends State<ContributorCard> {
                             Expanded(
                               child: MouseRegion(
                                 onEnter: (_) {
-                                  if (!_showLatestPoster && widget.contributor.latestWork?.posterPath != null) {
+                                  // Only enable poster switching for people, not movies/TV shows
+                                  if (isPerson && !_showLatestPoster && widget.contributor.latestWork?.posterPath != null) {
                                     setState(() {
                                       _showLatestPoster = true;
                                       _keyCounter++;
@@ -336,7 +405,7 @@ class _ContributorCardState extends State<ContributorCard> {
                                   }
                                 },
                                 onExit: (_) {
-                                  if (_showLatestPoster) {
+                                  if (isPerson && _showLatestPoster) {
                                     setState(() {
                                       _showLatestPoster = false;
                                       _keyCounter++;

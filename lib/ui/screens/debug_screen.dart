@@ -5,6 +5,8 @@ import 'dart:io';
 import '../../providers/providers.dart';
 import '../../logic/notification_logic.dart';
 import '../../data/models/preferences.dart';
+import '../../utils/debug_logger.dart';
+import 'package:flutter/services.dart';
 
 class DebugScreen extends ConsumerWidget {
   const DebugScreen({super.key});
@@ -189,12 +191,22 @@ class DebugScreen extends ConsumerWidget {
                   final movieCacheRepo = ref.read(movieCacheRepositoryProvider);
                   final historyRepo = ref.read(historyRepositoryProvider);
                   
+                  // DEBUG: Check preferences
+                  final prefsRepo = ref.read(preferencesRepositoryProvider);
+                  final currentPrefs = prefsRepo.getPreferences();
+                  debugPrint('[DebugScreen] DEBUG: TV notifications enabled: ${currentPrefs.effectiveNotifyTV}');
+                  debugPrint('[DebugScreen] DEBUG: notifyTV: ${currentPrefs.notifyTV}');
+                  debugPrint('[DebugScreen] DEBUG: allReleaseTypesSelected: ${currentPrefs.allReleaseTypesSelected}');
+                  debugPrint('[DebugScreen] DEBUG: pretendToday: ${currentPrefs.pretendToday}');
+                  
                   // Run the actual release check
                   final newReleases = await releaseChecker.findNewReleases();
                   
                   // Update last check time (like the real background service does)
-                  final prefsRepo = ref.read(preferencesRepositoryProvider);
-                  final currentPrefs = prefsRepo.getPreferences();
+                  debugPrint('[DebugScreen] DEBUG: Before updating preferences - notifyTV: ${currentPrefs.notifyTV}');
+                  debugPrint('[DebugScreen] DEBUG: Before updating preferences - defaultTvNotificationPrefs: ${currentPrefs.defaultTvNotificationPrefs}');
+                  debugPrint('[DebugScreen] DEBUG: Before updating preferences - notifyPersonTvEpisodes: ${currentPrefs.notifyPersonTvEpisodes}');
+                  
                   final updatedPrefs = Preferences(
                     notifyTheatre: currentPrefs.notifyTheatre,
                     notifyStreaming: currentPrefs.notifyStreaming,
@@ -211,9 +223,24 @@ class DebugScreen extends ConsumerWidget {
                     allReleaseTypesSelected: currentPrefs.allReleaseTypesSelected,
                     autoFollowNewRoles: currentPrefs.autoFollowNewRoles,
                     lastCheckTime: DateTime.now().toIso8601String(),
+                    lastViewedHistoryTime: currentPrefs.lastViewedHistoryTime, // MISSING!
+                    movieDetailsPreference: currentPrefs.movieDetailsPreference, // MISSING!
+                    defaultTvNotificationPrefs: currentPrefs.defaultTvNotificationPrefs, // MISSING!
+                    notifyPersonTvEpisodes: currentPrefs.notifyPersonTvEpisodes, // MISSING!
                   );
+                  
+                  debugPrint('[DebugScreen] DEBUG: After creating updated preferences - notifyTV: ${updatedPrefs.notifyTV}');
+                  debugPrint('[DebugScreen] DEBUG: After creating updated preferences - defaultTvNotificationPrefs: ${updatedPrefs.defaultTvNotificationPrefs}');
+                  debugPrint('[DebugScreen] DEBUG: After creating updated preferences - notifyPersonTvEpisodes: ${updatedPrefs.notifyPersonTvEpisodes}');
+                  
                   await prefsRepo.savePreferences(updatedPrefs);
                   ref.invalidate(preferencesProvider);
+                  
+                  // Verify the save worked
+                  final verifyPrefs = prefsRepo.getPreferences();
+                  debugPrint('[DebugScreen] DEBUG: After saving - verified notifyTV: ${verifyPrefs.notifyTV}');
+                  debugPrint('[DebugScreen] DEBUG: After saving - verified defaultTvNotificationPrefs: ${verifyPrefs.defaultTvNotificationPrefs}');
+                  debugPrint('[DebugScreen] DEBUG: After saving - verified notifyPersonTvEpisodes: ${verifyPrefs.notifyPersonTvEpisodes}');
                   
                   if (newReleases.isEmpty) {
                     if (context.mounted) {
@@ -240,17 +267,40 @@ class DebugScreen extends ConsumerWidget {
                   // Get movie titles for notification
                   final movieTitles = <String>[];
                   for (final release in newReleases) {
-                    final movie = movieCacheRepo.getMovie(release.tmdbId);
-                    if (movie != null) {
-                      movieTitles.add(movie.title);
+                    String? title;
+                    if (release.mediaType == 'tv') {
+                      // Get TV show title from TV cache
+                      final tvCacheRepo = ref.read(tvCacheRepositoryProvider);
+                      final tvShow = tvCacheRepo.getShow(release.tmdbId);
+                      title = tvShow?.name;
+                      debugPrint('[DebugScreen] TV show lookup: tmdbId=${release.tmdbId}, found=${tvShow != null}, title="$title"');
+                    } else {
+                      // Get movie title from movie cache
+                      final movie = movieCacheRepo.getMovie(release.tmdbId);
+                      title = movie?.title;
+                      debugPrint('[DebugScreen] Movie lookup: tmdbId=${release.tmdbId}, found=${movie != null}, title="$title"');
+                    }
+                    
+                    if (title != null) {
+                      movieTitles.add(title);
                     }
                   }
                   
                   if (movieTitles.isNotEmpty) {
                     // Format notification using real logic
-                    final title = NotificationLogic.formatTitle(movieTitles);
+                    final title = NotificationLogic.formatTitle(movieTitles, entries: newReleases);
                     final body = NotificationLogic.formatBody(movieTitles, newReleases,
-                      getMoviePosterPath: (tmdbId) => movieCacheRepo.getMovie(tmdbId)?.posterPath);
+                      getMoviePosterPath: (tmdbId) {
+                        // Handle both movies and TV shows
+                        final release = newReleases.firstWhere((r) => r.tmdbId == tmdbId, orElse: () => newReleases.first);
+                        if (release.mediaType == 'tv') {
+                          final tvCacheRepo = ref.read(tvCacheRepositoryProvider);
+                          final tvShow = tvCacheRepo.getShow(tmdbId);
+                          return tvShow?.posterPath;
+                        } else {
+                          return movieCacheRepo.getMovie(tmdbId)?.posterPath;
+                        }
+                      });
                     
                     // Always use history payload for debug notifications
                     String payload = 'app://history';
@@ -258,10 +308,23 @@ class DebugScreen extends ConsumerWidget {
                     // Image Logic: Collect up to 4 poster images from the releases
                     List<String> imagePaths = [];
                     for (int i = 0; i < newReleases.length && i < 4; i++) {
-                      final movie = movieCacheRepo.getMovie(newReleases[i].tmdbId);
-                      if (movie?.posterPath != null && movie!.posterPath!.isNotEmpty) {
+                      final release = newReleases[i];
+                      String? posterPath;
+                      
+                      if (release.mediaType == 'tv') {
+                        // For TV shows, get series poster
+                        final tvCacheRepo = ref.read(tvCacheRepositoryProvider);
+                        final tvShow = tvCacheRepo.getShow(release.tmdbId);
+                        posterPath = tvShow?.posterPath;
+                      } else {
+                        // For movies, get movie poster
+                        final movie = movieCacheRepo.getMovie(release.tmdbId);
+                        posterPath = movie?.posterPath;
+                      }
+                      
+                      if (posterPath != null && posterPath.isNotEmpty) {
                         // Convert TMDB poster path to full URL
-                        imagePaths.add('https://image.tmdb.org/t/p/w200${movie.posterPath}');
+                        imagePaths.add('https://image.tmdb.org/t/p/w200$posterPath');
                       }
                     }
                     
@@ -316,9 +379,11 @@ class DebugScreen extends ConsumerWidget {
             ElevatedButton.icon(
               onPressed: () async {
                 try {
+                  debugPrint('[DebugScreen] DEBUG: Clearing notification history...');
                   final historyRepo = ref.read(historyRepositoryProvider);
                   await historyRepo.clearAllHistory();
                   ref.invalidate(historyProvider);
+                  debugPrint('[DebugScreen] DEBUG: Notification history cleared successfully');
                   
                   if (context.mounted) {
                     ScaffoldMessenger.of(context).showSnackBar(
@@ -345,6 +410,75 @@ class DebugScreen extends ConsumerWidget {
               style: ElevatedButton.styleFrom(
                 padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 16),
                 backgroundColor: Colors.orange,
+                foregroundColor: Colors.white,
+              ),
+            ),
+            const SizedBox(height: 20),
+            ElevatedButton.icon(
+              onPressed: () async {
+                try {
+                  await DebugLogger.instance.init();
+                  final logPath = await DebugLogger.instance.getLogPath();
+                  final logContent = await DebugLogger.instance.getLogContent();
+                  
+                  if (context.mounted) {
+                    showDialog(
+                      context: context,
+                      builder: (context) => AlertDialog(
+                        title: const Text('Debug Log'),
+                        content: SizedBox(
+                          width: double.maxFinite,
+                          height: 400,
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text('Log file: $logPath', 
+                                style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
+                              const SizedBox(height: 10),
+                              Expanded(
+                                child: SingleChildScrollView(
+                                  child: SelectableText(
+                                    logContent,
+                                    style: const TextStyle(fontFamily: 'monospace', fontSize: 11),
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                        actions: [
+                          TextButton(
+                            onPressed: () async {
+                              await Clipboard.setData(ClipboardData(text: logContent));
+                              if (context.mounted) {
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  const SnackBar(content: Text('Log copied to clipboard')),
+                                );
+                              }
+                            },
+                            child: const Text('Copy'),
+                          ),
+                          TextButton(
+                            onPressed: () => Navigator.of(context).pop(),
+                            child: const Text('Close'),
+                          ),
+                        ],
+                      ),
+                    );
+                  }
+                } catch (e) {
+                  if (context.mounted) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(content: Text('Error reading log: $e')),
+                    );
+                  }
+                }
+              },
+              icon: const Icon(Icons.bug_report),
+              label: const Text('View Debug Log'),
+              style: ElevatedButton.styleFrom(
+                padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 16),
+                backgroundColor: Colors.green,
                 foregroundColor: Colors.white,
               ),
             ),
@@ -384,6 +518,10 @@ class DebugScreen extends ConsumerWidget {
       allReleaseTypesSelected: current.allReleaseTypesSelected,
       autoFollowNewRoles: current.autoFollowNewRoles,
       lastCheckTime: current.lastCheckTime,
+      lastViewedHistoryTime: current.lastViewedHistoryTime,
+      movieDetailsPreference: current.movieDetailsPreference,
+      defaultTvNotificationPrefs: current.defaultTvNotificationPrefs,
+      notifyPersonTvEpisodes: current.notifyPersonTvEpisodes,
     );
 
     await ref.read(preferencesRepositoryProvider).savePreferences(newPrefs);

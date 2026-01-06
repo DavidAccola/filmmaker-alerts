@@ -49,6 +49,8 @@ class ContributorLogic {
       return ['Movie'];
     } else if (contributor.type == ContributorType.collection) {
       return ['Collection'];
+    } else if (contributor.type == ContributorType.tvShow) {
+      return ['TV Show'];
     }
     return [];
   }
@@ -92,7 +94,14 @@ class ContributorLogic {
       pretendToday: prefs.pretendToday,
     );
 
-    // 4. Create Final Enriched Contributor
+    // 4. Apply global TV preferences if needed
+    TvNotificationPreferences? finalTvPrefs = sparseContributor.tvNotificationPrefs;
+    if (sparseContributor.type == ContributorType.tvShow && finalTvPrefs == null) {
+      // Apply global TV preferences as defaults
+      finalTvPrefs = prefs.defaultTvNotificationPrefs ?? TvNotificationPreferences();
+    }
+
+    // 5. Create Final Enriched Contributor
     final enrichedContributor = Contributor(
       tmdbId: sparseContributor.tmdbId,
       name: sparseContributor.name,
@@ -104,6 +113,11 @@ class ContributorLogic {
       latestWork: latestWork,
       followedAt: DateTime.now(),
       allRolesSelected: allRolesSelected,
+      tvNotificationPrefs: finalTvPrefs,
+      notifyTvEpisodeWork: sparseContributor.notifyTvEpisodeWork,
+      showStatus: sparseContributor.showStatus,
+      totalSeasons: sparseContributor.totalSeasons,
+      nextEpisodeDate: sparseContributor.nextEpisodeDate,
     );
 
     return await _contributorRepository.addContributor(enrichedContributor);
@@ -123,6 +137,10 @@ class ContributorLogic {
       knownFor: contributor.knownFor,
       followedAt: contributor.followedAt,
       allRolesSelected: contributor.allRolesSelected,
+      tvNotificationPrefs: contributor.tvNotificationPrefs, // Preserve TV preferences
+      showStatus: contributor.showStatus,
+      totalSeasons: contributor.totalSeasons,
+      nextEpisodeDate: contributor.nextEpisodeDate,
     );
 
     final latestWork = await _latestWorkLogic.calculateLatestWork(
@@ -141,6 +159,10 @@ class ContributorLogic {
       latestWork: latestWork,
       followedAt: contributor.followedAt,
       allRolesSelected: contributor.allRolesSelected,
+      tvNotificationPrefs: contributor.tvNotificationPrefs, // Preserve TV preferences
+      showStatus: contributor.showStatus,
+      totalSeasons: contributor.totalSeasons,
+      nextEpisodeDate: contributor.nextEpisodeDate,
     );
 
     await _contributorRepository.updateContributor(finalUpdated);
@@ -186,6 +208,12 @@ class ContributorLogic {
             availableDepartments: availableDepts,
             knownFor: contributor.knownFor,
             latestWork: latestWork,
+            followedAt: contributor.followedAt,
+            allRolesSelected: contributor.allRolesSelected,
+            tvNotificationPrefs: contributor.tvNotificationPrefs, // Preserve TV preferences
+            showStatus: contributor.showStatus,
+            totalSeasons: contributor.totalSeasons,
+            nextEpisodeDate: contributor.nextEpisodeDate,
           );
           await _contributorRepository.updateContributor(updated);
         } else {
@@ -203,6 +231,12 @@ class ContributorLogic {
             availableDepartments: contributor.availableDepartments,
             knownFor: contributor.knownFor,
             latestWork: latestWork,
+            followedAt: contributor.followedAt,
+            allRolesSelected: contributor.allRolesSelected,
+            tvNotificationPrefs: contributor.tvNotificationPrefs, // Preserve TV preferences
+            showStatus: contributor.showStatus,
+            totalSeasons: contributor.totalSeasons,
+            nextEpisodeDate: contributor.nextEpisodeDate,
           );
           await _contributorRepository.updateContributor(updated);
         }

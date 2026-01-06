@@ -9,16 +9,31 @@ void showSuccessSnackBar(
   required List<String> roles,
   required List<String> availableRoles,
   required VoidCallback onChange,
+  TvNotificationPreferences? tvNotificationPrefs,
 }) {
   // For movies and companies, show a simple "Following [name]" message
   // For people, show the detailed role information
+  // For TV shows, show the notification preferences information
   String message;
   bool showChangeButton = false;
   Duration timerDuration = const Duration(seconds: 3);
 
-  if (contributor.type == ContributorType.movie || contributor.type == ContributorType.company) {
-    // Movies and companies get simple follow message
+  if (contributor.type == ContributorType.movie || contributor.type == ContributorType.company || contributor.type == ContributorType.collection) {
+    // Movies, companies, and collections get simple follow message
     message = "Following ${contributor.name}";
+  } else if (contributor.type == ContributorType.tvShow && tvNotificationPrefs != null) {
+    // TV shows show notification preferences summary
+    final List<String> activePrefs = [];
+    if (tvNotificationPrefs.seriesPremiere) activePrefs.add('Series Premiere');
+    if (tvNotificationPrefs.seasonPremieres) activePrefs.add('Season Premieres');
+    if (tvNotificationPrefs.seasonFinales) activePrefs.add('Season Finales');
+    if (tvNotificationPrefs.newEpisodes) activePrefs.add('New Episodes');
+    if (tvNotificationPrefs.specials) activePrefs.add('Specials');
+    
+    final prefsString = activePrefs.join(', ');
+    message = "Following ${contributor.name} for $prefsString";
+    showChangeButton = true;
+    timerDuration = const Duration(seconds: 4);
   } else {
     // Detailed role message for people
     final bool isSingleRoleMatch = roles.length == 1 && availableRoles.length == 1;
@@ -116,11 +131,13 @@ class _TimerSnackBarContentState extends State<_TimerSnackBarContent> with Singl
     return MouseRegion(
       onEnter: (_) {
         setState(() => _isHovering = true);
-        _controller.stop();
+        _controller.stop(); // Pause the timer when hovering
       },
       onExit: (_) {
         setState(() => _isHovering = false);
-        _controller.forward();
+        if (_controller.status != AnimationStatus.completed) {
+          _controller.forward(); // Resume the timer when not hovering
+        }
       },
       child: Column(
         mainAxisSize: MainAxisSize.min,

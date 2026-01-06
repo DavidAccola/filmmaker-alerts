@@ -34,13 +34,15 @@ class PreferencesAdapter extends TypeAdapter<Preferences> {
       lastCheckTime: fields[14] as String?,
       lastViewedHistoryTime: fields[15] as String?,
       movieDetailsPreference: fields[16] as String?,
+      defaultTvNotificationPrefs: fields[17] as TvNotificationPreferences?,
+      notifyPersonTvEpisodes: fields[18] as bool?,
     );
   }
 
   @override
   void write(BinaryWriter writer, Preferences obj) {
     writer
-      ..writeByte(17)
+      ..writeByte(19)
       ..writeByte(0)
       ..write(obj.notifyTheatre)
       ..writeByte(1)
@@ -74,7 +76,11 @@ class PreferencesAdapter extends TypeAdapter<Preferences> {
       ..writeByte(15)
       ..write(obj.lastViewedHistoryTime)
       ..writeByte(16)
-      ..write(obj.movieDetailsPreference);
+      ..write(obj.movieDetailsPreference)
+      ..writeByte(17)
+      ..write(obj.defaultTvNotificationPrefs)
+      ..writeByte(18)
+      ..write(obj.notifyPersonTvEpisodes);
   }
 
   @override

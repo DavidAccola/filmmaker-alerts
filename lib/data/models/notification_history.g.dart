@@ -104,19 +104,34 @@ class NotificationHistoryEntryAdapter
       tmdbId: fields[0] as int,
       reasons: (fields[1] as List).cast<NotificationReason>(),
       notificationEvents: (fields[2] as List).cast<NotificationEvent>(),
+      mediaType: fields[3] as String?,
+      seasonNumber: fields[4] as int?,
+      episodeNumber: fields[5] as int?,
+      episodeTitle: fields[6] as String?,
+      tvNotificationType: fields[7] as String?,
     );
   }
 
   @override
   void write(BinaryWriter writer, NotificationHistoryEntry obj) {
     writer
-      ..writeByte(3)
+      ..writeByte(8)
       ..writeByte(0)
       ..write(obj.tmdbId)
       ..writeByte(1)
       ..write(obj.reasons)
       ..writeByte(2)
-      ..write(obj.notificationEvents);
+      ..write(obj.notificationEvents)
+      ..writeByte(3)
+      ..write(obj.mediaType)
+      ..writeByte(4)
+      ..write(obj.seasonNumber)
+      ..writeByte(5)
+      ..write(obj.episodeNumber)
+      ..writeByte(6)
+      ..write(obj.episodeTitle)
+      ..writeByte(7)
+      ..write(obj.tvNotificationType);
   }
 
   @override

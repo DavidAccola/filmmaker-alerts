@@ -105,7 +105,7 @@ class _AddContributorScreenState extends ConsumerState<AddContributorScreen> {
 
       List<String>? selectedDepts;
       List<String>? availableDepts;
-
+      TvNotificationPreferences? tvNotificationPrefs;
       bool isAllSelected = false;
 
       if (contributor.type == ContributorType.person) {
@@ -139,6 +139,31 @@ class _AddContributorScreenState extends ConsumerState<AddContributorScreen> {
         } else {
            selectedDepts = [];
         }
+      } else if (contributor.type == ContributorType.tvShow) {
+        // Use default TV notification preferences without showing dialog
+        final defaultPrefs = prefs.defaultTvNotificationPrefs ?? TvNotificationPreferences();
+        
+        // Get TV show details for metadata
+        setState(() => _isLoading = true);
+        final tvDetails = await ref.read(tmdbServiceProvider).getTvDetails(contributor.tmdbId);
+        setState(() => _isLoading = false);
+        
+        // Update contributor with TV show metadata and default preferences
+        contributor = Contributor(
+          tmdbId: contributor.tmdbId,
+          name: contributor.name,
+          type: contributor.type,
+          profilePath: contributor.profilePath,
+          notifyForDepartments: ['TV Show'],
+          availableDepartments: ['TV Show'],
+          knownFor: contributor.knownFor,
+          tvNotificationPrefs: defaultPrefs,
+          showStatus: tvDetails['status'],
+          totalSeasons: tvDetails['number_of_seasons'],
+          nextEpisodeDate: tvDetails['next_episode_to_air']?['air_date'],
+        );
+        
+        tvNotificationPrefs = defaultPrefs;
       }
 
       setState(() => _isLoading = true);
@@ -161,6 +186,7 @@ class _AddContributorScreenState extends ConsumerState<AddContributorScreen> {
             'roles': selectedDepts,
             'availableRoles': availableDepts,
             'allRolesSelected': isAllSelected,
+            'tvNotificationPrefs': tvNotificationPrefs,
           });
         }
       } else {
@@ -180,7 +206,6 @@ class _AddContributorScreenState extends ConsumerState<AddContributorScreen> {
       }
     }
   }
-
 
   @override
   Widget build(BuildContext context) {
@@ -212,6 +237,7 @@ class _AddContributorScreenState extends ConsumerState<AddContributorScreen> {
                     ButtonSegment(value: ContributorType.person, label: Text('Person')),
                     ButtonSegment(value: ContributorType.company, label: Text('Company')),
                     ButtonSegment(value: ContributorType.movie, label: Text('Movie')),
+                    ButtonSegment(value: ContributorType.tvShow, label: Text('TV Show')),
                   ],
                   selected: {_selectedType},
                   onSelectionChanged: (Set<ContributorType> newSelection) {

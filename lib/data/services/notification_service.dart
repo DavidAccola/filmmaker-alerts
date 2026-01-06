@@ -6,6 +6,7 @@ import 'package:windows_notification/notification_message.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:dio/dio.dart';
 import 'dart:io';
+import '../../utils/debug_logger.dart';
 
 class NotificationService {
   FlutterLocalNotificationsPlugin? _flutterLocalNotificationsPlugin;
@@ -119,17 +120,32 @@ class NotificationService {
     int? totalMovieCount, // Total number of movies for "+X more" logic
   }) async {
     try {
-      debugPrint('[NotificationService] showNotification called - ID: $id, Title: $title');
+      // Initialize logger
+      await DebugLogger.instance.init();
+      
+      DebugLogger.instance.logNotification('=== SHOW NOTIFICATION DEBUG ===');
+      DebugLogger.instance.logNotification('ID: $id');
+      DebugLogger.instance.logNotification('Title: "$title"');
+      DebugLogger.instance.logNotification('Body: "$body"');
+      DebugLogger.instance.logNotification('Payload: $payload');
+      DebugLogger.instance.logNotification('ImagePath: $imagePath');
+      DebugLogger.instance.logNotification('ImagePaths: $imagePaths');
+      DebugLogger.instance.logNotification('ReleaseDates: $releaseDates');
+      DebugLogger.instance.logNotification('TotalMovieCount: $totalMovieCount');
+      DebugLogger.instance.logNotification('Platform.isWindows: ${Platform.isWindows}');
+      DebugLogger.instance.logNotification('_isInitialized: $_isInitialized');
       
       if (!_isInitialized) {
-        debugPrint('[NotificationService] Not initialized, calling init...');
+        DebugLogger.instance.logNotification('Not initialized, calling init...');
         await init();
       }
       
       if (Platform.isWindows) {
-        debugPrint('[NotificationService] Using windows_notification for Windows...');
+        DebugLogger.instance.logNotification('Using windows_notification for Windows...');
+        DebugLogger.instance.logNotification('_windowsNotification == null: ${_windowsNotification == null}');
         
         if (_windowsNotification == null) {
+          DebugLogger.instance.logNotification('ERROR: Windows notification not initialized');
           throw StateError('Windows notification not initialized');
         }
         
@@ -138,33 +154,40 @@ class NotificationService {
         
         // Handle multiple images (up to 4)
         if (imagePaths != null && imagePaths.isNotEmpty) {
+          DebugLogger.instance.logNotification('Processing ${imagePaths.length} image paths...');
           for (int i = 0; i < imagePaths.length && i < 4; i++) {
             final imageUrl = imagePaths[i];
+            DebugLogger.instance.logNotification('Processing image $i: $imageUrl');
             if (imageUrl.startsWith('http')) {
               try {
                 final localPath = await _downloadImageForNotification(imageUrl);
                 localImagePaths.add(localPath);
-                debugPrint('[NotificationService] Downloaded image ${i + 1} to: $localPath');
+                DebugLogger.instance.logNotification('Downloaded image ${i + 1} to: $localPath');
               } catch (e) {
-                debugPrint('[NotificationService] Failed to download image ${i + 1}: $e');
+                DebugLogger.instance.logNotification('Failed to download image ${i + 1}: $e');
               }
             } else {
               localImagePaths.add(imageUrl);
+              DebugLogger.instance.logNotification('Using local image path: $imageUrl');
             }
           }
         } else if (imagePath != null) {
+          DebugLogger.instance.logNotification('Processing single image path: $imagePath');
           // Handle single image (backward compatibility)
           if (imagePath.startsWith('http')) {
             try {
               final localPath = await _downloadImageForNotification(imagePath);
               localImagePaths.add(localPath);
-              debugPrint('[NotificationService] Downloaded image to: $localPath');
+              DebugLogger.instance.logNotification('Downloaded image to: $localPath');
             } catch (e) {
-              debugPrint('[NotificationService] Failed to download image: $e');
+              DebugLogger.instance.logNotification('Failed to download image: $e');
             }
           } else {
             localImagePaths.add(imagePath);
+            DebugLogger.instance.logNotification('Using local image path: $imagePath');
           }
+        } else {
+          DebugLogger.instance.logNotification('No images to process');
         }
         
         try {
@@ -172,14 +195,14 @@ class NotificationService {
           String releaseDatesXml = '';
           String imagesXml = '';
           
-          debugPrint('[NotificationService] Building notification template...');
+          DebugLogger.instance.logNotification('Building notification template...');
           
           if (localImagePaths.isNotEmpty) {
-            debugPrint('[NotificationService] Adding ${localImagePaths.length} images to template');
+            DebugLogger.instance.logNotification('Adding ${localImagePaths.length} images to template');
             
             // Add release dates grid above posters if provided
             if (releaseDates != null && releaseDates.isNotEmpty) {
-              debugPrint('[NotificationService] Adding ${releaseDates.length} release dates');
+              DebugLogger.instance.logNotification('Adding ${releaseDates.length} release dates');
               releaseDatesXml = '<group>';
               
               // Show release dates for actual movie columns
@@ -199,18 +222,20 @@ class NotificationService {
             // Add poster images grid
             imagesXml = '<group>';
             for (int i = 0; i < localImagePaths.length && i < 4; i++) {
-              debugPrint('[NotificationService] Adding image $i: ${localImagePaths[i]}');
+              DebugLogger.instance.logNotification('Adding image $i: ${localImagePaths[i]}');
               imagesXml += '<subgroup hint-weight="25"><image src="${localImagePaths[i]}" hint-removeMargin="true"/></subgroup>';
             }
             
             // Add "+X more" text in poster grid if there are more movies than posters
             if (totalMovieCount != null && totalMovieCount > localImagePaths.length) {
               final moreCount = totalMovieCount - localImagePaths.length;
-              debugPrint('[NotificationService] Adding +$moreCount more indicator');
+              DebugLogger.instance.logNotification('Adding +$moreCount more indicator');
               imagesXml += '<subgroup hint-weight="25" hint-textStacking="center"><text hint-align="center" hint-style="captionSubtle">+$moreCount more</text></subgroup>';
             }
             
             imagesXml += '</group>';
+          } else {
+            DebugLogger.instance.logNotification('No images to add to template');
           }
           
           String customTemplate = '''
@@ -230,7 +255,8 @@ class NotificationService {
   </actions>
 </toast>''';
 
-          debugPrint('[NotificationService] Template created, sending notification...');
+          DebugLogger.instance.logNotification('Custom template created (${customTemplate.length} chars)');
+          DebugLogger.instance.logNotification('Attempting to send notification...');
 
           final message = NotificationMessage.fromCustomTemplate(
             id.toString(),
@@ -238,15 +264,17 @@ class NotificationService {
           );
           
           await _windowsNotification!.showNotificationCustomTemplate(message, customTemplate);
-          debugPrint('[NotificationService] Windows notification sent with custom template (text first, ${localImagePaths.length} images below)');
+          DebugLogger.instance.logNotification('✅ Windows notification sent successfully with custom template');
         } catch (e, stackTrace) {
-          debugPrint('[NotificationService] Custom template failed: $e');
-          debugPrint('[NotificationService] Stack trace: $stackTrace');
+          DebugLogger.instance.logNotification('❌ Custom template failed: $e');
+          DebugLogger.instance.logNotification('Stack trace: ${stackTrace.toString().substring(0, 500)}...');
           
           try {
             // Fallback to plugin template with first image
-            debugPrint('[NotificationService] Attempting fallback to plugin template...');
+            DebugLogger.instance.logNotification('Attempting fallback to plugin template...');
             final firstImage = localImagePaths.isNotEmpty ? localImagePaths.first : null;
+            DebugLogger.instance.logNotification('Using fallback image: $firstImage');
+            
             final message = NotificationMessage.fromPluginTemplate(
               id.toString(),
               title,
@@ -255,23 +283,24 @@ class NotificationService {
               image: firstImage,
             );
             await _windowsNotification!.showNotificationPluginTemplate(message);
-            debugPrint('[NotificationService] Windows notification sent with plugin template');
+            DebugLogger.instance.logNotification('✅ Windows notification sent with plugin template');
           } catch (fallbackError) {
-            debugPrint('[NotificationService] Fallback also failed: $fallbackError');
+            DebugLogger.instance.logNotification('❌ Fallback also failed: $fallbackError');
             rethrow;
           }
         }
       } else {
-        debugPrint('[NotificationService] Using flutter_local_notifications for non-Windows...');
+        DebugLogger.instance.logNotification('Using flutter_local_notifications for non-Windows...');
         
         if (_flutterLocalNotificationsPlugin == null) {
+          DebugLogger.instance.logNotification('ERROR: Notification plugin not initialized for this platform');
           throw StateError('Notification plugin not initialized for this platform');
         }
         
         // Try with minimal notification details first
         const NotificationDetails notificationDetails = NotificationDetails();
 
-        debugPrint('[NotificationService] Calling plugin show with minimal details...');
+        DebugLogger.instance.logNotification('Calling plugin show with minimal details...');
         await _flutterLocalNotificationsPlugin!.show(
           id,
           title,
@@ -279,11 +308,11 @@ class NotificationService {
           notificationDetails,
           payload: payload,
         );
-        debugPrint('[NotificationService] Notification sent successfully');
+        DebugLogger.instance.logNotification('✅ Non-Windows notification sent successfully');
       }
     } catch (e, stackTrace) {
-      debugPrint('[NotificationService] showNotification failed: $e');
-      debugPrint('[NotificationService] Stack trace: $stackTrace');
+      DebugLogger.instance.logNotification('❌ showNotification failed: $e');
+      DebugLogger.instance.logNotification('Stack trace: ${stackTrace.toString().substring(0, 500)}...');
       rethrow;
     }
   }

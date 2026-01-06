@@ -8,6 +8,7 @@ import '../../data/models/notification_history.dart';
 import '../../providers/providers.dart';
 import '../common/snackbar_utils.dart';
 import '../common/tmdb_attribution.dart';
+import '../../utils/debug_logger.dart';
 
 class HistoryScreen extends ConsumerWidget {
   const HistoryScreen({super.key});
@@ -79,7 +80,7 @@ class HistoryScreen extends ConsumerWidget {
                     style: TextStyle(fontSize: 16, color: Colors.grey),
                   ),
                   Text(
-                    'Movies you have been notified about will appear here.',
+                    'Movies and TV shows you have been notified about will appear here.',
                     style: TextStyle(fontSize: 14, color: Colors.grey),
                   ),
                 ],
@@ -153,12 +154,12 @@ class HistoryScreen extends ConsumerWidget {
                       }
                     }
 
-              // Group reasons by contributor name - only show for people contributors
+              // Group reasons by contributor name - show for people contributors only, not TV shows
               final reasonsMap = <String, List<String>>{};
               for (var reason in entry.reasons) {
-                // Only include person contributors (those with typical film roles)
-                if (reason.job != null && 
-                    ['Director', 'Writer', 'Producer', 'Actor', 'Actress', 'Creator', 'Editor', 'Cinematographer'].contains(reason.job)) {
+                // Only include person contributors (those with typical film/TV roles), exclude "Followed Show"
+                if (reason.job != null && reason.job != 'Followed Show' &&
+                    (['Director', 'Writer', 'Producer', 'Actor', 'Actress', 'Creator', 'Editor', 'Cinematographer'].contains(reason.job))) {
                   reasonsMap.putIfAbsent(reason.contributorName, () => []).add(reason.job!);
                 }
               }
@@ -176,6 +177,12 @@ class HistoryScreen extends ConsumerWidget {
                 final releaseTypeLabel = _getReleaseTypeLabel(e.releaseType);
                 return '$releaseTypeLabel: $formattedDate';
               }).join("\n");
+
+              // TV-specific episode information widgets
+              final episodeWidgets = <Widget>[];
+              if (entry.mediaType == 'tv') {
+                episodeWidgets.addAll(_getTvEpisodeWidgets(context, entry));
+              }
 
               // Footer Date (Most recent notification) - format as MM/DD/YYYY
               final notifiedOn = entry.notificationEvents.isNotEmpty
@@ -199,9 +206,24 @@ class HistoryScreen extends ConsumerWidget {
                           return prefsAsync.when(
                             data: (prefs) {
                               final movieDetailsPreference = prefs.movieDetailsPreference ?? 'both';
-                              final movieCacheRepo = ref.read(movieCacheRepositoryProvider);
-                              final movie = movieCacheRepo.getMovie(entry.tmdbId);
-                              final hasImdbId = movie?.imdbId != null && movie!.imdbId!.isNotEmpty;
+                              
+                              // Get IMDb ID based on media type
+                              String? imdbId;
+                              bool hasImdbId = false;
+                              
+                              if (entry.mediaType == 'tv') {
+                                // TV show - get from TV cache
+                                final tvCacheRepo = ref.read(tvCacheRepositoryProvider);
+                                final tvShow = tvCacheRepo.getShow(entry.tmdbId);
+                                imdbId = tvShow?.imdbId;
+                                hasImdbId = imdbId != null && imdbId.isNotEmpty;
+                              } else {
+                                // Movie - get from movie cache
+                                final movieCacheRepo = ref.read(movieCacheRepositoryProvider);
+                                final movie = movieCacheRepo.getMovie(entry.tmdbId);
+                                imdbId = movie?.imdbId;
+                                hasImdbId = imdbId != null && imdbId.isNotEmpty;
+                              }
                               
                               // Determine primary provider (poster/title click)
                               String primaryProvider;
@@ -211,7 +233,7 @@ class HistoryScreen extends ConsumerWidget {
                               if (movieDetailsPreference == 'imdb' && hasImdbId) {
                                 primaryProvider = 'imdb';
                                 primaryTooltip = 'View on IMDb';
-                                primaryAction = () => _launchImdbUrl(context, movie!.imdbId!);
+                                primaryAction = () => _launchImdbUrl(context, imdbId!);
                               } else {
                                 primaryProvider = 'tmdb';
                                 primaryTooltip = 'View on TMDB';
@@ -291,9 +313,24 @@ class HistoryScreen extends ConsumerWidget {
                                       return prefsAsync.when(
                                         data: (prefs) {
                                           final movieDetailsPreference = prefs.movieDetailsPreference ?? 'both';
-                                          final movieCacheRepo = ref.read(movieCacheRepositoryProvider);
-                                          final movie = movieCacheRepo.getMovie(entry.tmdbId);
-                                          final hasImdbId = movie?.imdbId != null && movie!.imdbId!.isNotEmpty;
+                                          
+                                          // Get IMDb ID based on media type
+                                          String? imdbId;
+                                          bool hasImdbId = false;
+                                          
+                                          if (entry.mediaType == 'tv') {
+                                            // TV show - get from TV cache
+                                            final tvCacheRepo = ref.read(tvCacheRepositoryProvider);
+                                            final tvShow = tvCacheRepo.getShow(entry.tmdbId);
+                                            imdbId = tvShow?.imdbId;
+                                            hasImdbId = imdbId != null && imdbId.isNotEmpty;
+                                          } else {
+                                            // Movie - get from movie cache
+                                            final movieCacheRepo = ref.read(movieCacheRepositoryProvider);
+                                            final movie = movieCacheRepo.getMovie(entry.tmdbId);
+                                            imdbId = movie?.imdbId;
+                                            hasImdbId = imdbId != null && imdbId.isNotEmpty;
+                                          }
                                           
                                           // Determine primary provider (poster/title click)
                                           String primaryTooltip;
@@ -301,7 +338,7 @@ class HistoryScreen extends ConsumerWidget {
                                           
                                           if (movieDetailsPreference == 'imdb' && hasImdbId) {
                                             primaryTooltip = 'View on IMDb';
-                                            primaryAction = () => _launchImdbUrl(context, movie!.imdbId!);
+                                            primaryAction = () => _launchImdbUrl(context, imdbId!);
                                           } else {
                                             primaryTooltip = 'View on TMDB';
                                             primaryAction = () => _launchTmdbUrl(context, entry);
@@ -340,12 +377,20 @@ class HistoryScreen extends ConsumerWidget {
                               ],
                             ),
                             const SizedBox(height: 4),
+                            // TV episode information
+                            if (episodeWidgets.isNotEmpty) ...[
+                              ...episodeWidgets,
+                              const SizedBox(height: 4),
+                            ],
                             if (reasonsText.isNotEmpty) ...[
                               Text(reasonsText, style: Theme.of(context).textTheme.bodyMedium),
                               const SizedBox(height: 8),
                             ],
-                            Text(eventsText, style: Theme.of(context).textTheme.bodySmall),
-                            const SizedBox(height: 8),
+                            // Only show eventsText for non-TV entries (movies)
+                            if (entry.mediaType != 'tv') ...[
+                              Text(eventsText, style: Theme.of(context).textTheme.bodySmall),
+                              const SizedBox(height: 8),
+                            ],
                             Text('Notified on $notifiedOn', style: Theme.of(context).textTheme.labelSmall?.copyWith(color: Colors.grey)),
                           ],
                         ),
@@ -361,9 +406,24 @@ class HistoryScreen extends ConsumerWidget {
                               return prefsAsync.when(
                                 data: (prefs) {
                                   final movieDetailsPreference = prefs.movieDetailsPreference ?? 'both';
-                                  final movieCacheRepo = ref.read(movieCacheRepositoryProvider);
-                                  final movie = movieCacheRepo.getMovie(entry.tmdbId);
-                                  final hasImdbId = movie?.imdbId != null && movie!.imdbId!.isNotEmpty;
+                                  
+                                  // Get IMDb ID based on media type
+                                  String? imdbId;
+                                  bool hasImdbId = false;
+                                  
+                                  if (entry.mediaType == 'tv') {
+                                    // TV show - get from TV cache
+                                    final tvCacheRepo = ref.read(tvCacheRepositoryProvider);
+                                    final tvShow = tvCacheRepo.getShow(entry.tmdbId);
+                                    imdbId = tvShow?.imdbId;
+                                    hasImdbId = imdbId != null && imdbId.isNotEmpty;
+                                  } else {
+                                    // Movie - get from movie cache
+                                    final movieCacheRepo = ref.read(movieCacheRepositoryProvider);
+                                    final movie = movieCacheRepo.getMovie(entry.tmdbId);
+                                    imdbId = movie?.imdbId;
+                                    hasImdbId = imdbId != null && imdbId.isNotEmpty;
+                                  }
                                   
                                   // Only show button in "both" mode for Provider B (IMDb)
                                   final showImdbButton = movieDetailsPreference == 'both' && hasImdbId;
@@ -382,7 +442,7 @@ class HistoryScreen extends ConsumerWidget {
                                               borderRadius: BorderRadius.circular(4),
                                               child: InkWell(
                                                 borderRadius: BorderRadius.circular(4),
-                                                onTap: () => _launchImdbUrl(context, movie!.imdbId!),
+                                                onTap: () => _launchImdbUrl(context, imdbId!),
                                                 child: Container(
                                                   width: 36,
                                                   height: 36,
@@ -512,6 +572,246 @@ class HistoryScreen extends ConsumerWidget {
     }
   }
 
+  /// Get TV episode widgets for display in history (returns multiple widgets for grouped episodes)
+  List<Widget> _getTvEpisodeWidgets(BuildContext context, NotificationHistoryEntry entry) {
+    if (entry.mediaType != 'tv') return [];
+    
+    // Initialize logger and log entry details
+    DebugLogger.instance.init();
+    DebugLogger.instance.logHistory('=== TV Episode Debug ===');
+    DebugLogger.instance.logHistory('tmdbId: ${entry.tmdbId}');
+    DebugLogger.instance.logHistory('mediaType: ${entry.mediaType}');
+    DebugLogger.instance.logHistory('tvNotificationType: ${entry.tvNotificationType}');
+    DebugLogger.instance.logHistory('seasonNumber: ${entry.seasonNumber}');
+    DebugLogger.instance.logHistory('episodeNumber: ${entry.episodeNumber}');
+    DebugLogger.instance.logHistory('episodeTitle: "${entry.episodeTitle}"');
+    DebugLogger.instance.logHistory('notificationEvents.length: ${entry.notificationEvents.length}');
+    for (int i = 0; i < entry.notificationEvents.length; i++) {
+      final event = entry.notificationEvents[i];
+      DebugLogger.instance.logHistory('event[$i]: releaseType="${event.releaseType}", releaseDate="${event.releaseDate}"');
+    }
+    
+    final List<Widget> episodeWidgets = [];
+    
+    // Handle grouped episodes differently
+    final isGroupedByType = entry.tvNotificationType == 'grouped_episodes';
+    final isGroupedByCount = entry.notificationEvents.length > 1;
+    final isGroupedByTitle = entry.episodeTitle != null && entry.episodeTitle!.contains('episodes');
+    
+    DebugLogger.instance.logHistory('isGroupedByType: $isGroupedByType');
+    DebugLogger.instance.logHistory('isGroupedByCount: $isGroupedByCount');
+    DebugLogger.instance.logHistory('isGroupedByTitle: $isGroupedByTitle');
+    
+    if ((isGroupedByType || isGroupedByCount || isGroupedByTitle) && 
+        entry.notificationEvents.isNotEmpty) {
+      DebugLogger.instance.logHistory('Using GROUPED episode logic');
+      
+      // For grouped episodes, create one widget per episode
+      if (entry.notificationEvents.length > 1) {
+        DebugLogger.instance.logHistory('Multiple events format (${entry.notificationEvents.length} events)');
+        // New format: multiple notification events with individual episode data
+        for (int i = 0; i < entry.notificationEvents.length; i++) {
+          final event = entry.notificationEvents[i];
+          DebugLogger.instance.logHistory('Processing event $i: ${event.releaseType}');
+          
+          // Parse episode info from releaseType: "episode_type|season|episode|title"
+          final releaseTypeParts = event.releaseType.split('|');
+          if (releaseTypeParts.length >= 4) {
+            DebugLogger.instance.logHistory('Using pipe format parsing');
+            final seasonNum = int.tryParse(releaseTypeParts[1]) ?? 1;
+            final episodeNum = int.tryParse(releaseTypeParts[2]) ?? 1;
+            final episodeTitle = releaseTypeParts[3];
+            
+            DebugLogger.instance.logHistory('Parsed: S${seasonNum}E${episodeNum} - "$episodeTitle"');
+            
+            // Format the air date
+            final formattedDate = _formatDateForHistory(event.releaseDate);
+            
+            // Create a widget for this episode with consistent styling
+            episodeWidgets.add(
+              Text(
+                '"$episodeTitle" - S${seasonNum}E${episodeNum.toString().padLeft(2, '0')} - $formattedDate',
+                style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                  fontWeight: FontWeight.w500,
+                  color: Theme.of(context).colorScheme.secondary,
+                ),
+              ),
+            );
+          } else {
+            DebugLogger.instance.logHistory('Using underscore format parsing');
+            // Fallback for old format or unparseable data
+            final underscoreParts = event.releaseType.split('_');
+            if (underscoreParts.length >= 4) {
+              DebugLogger.instance.logHistory('Underscore parts: $underscoreParts');
+              
+              // Handle different old formats:
+              // Format 1: episode_37_14_Title
+              // Format 2: season_finale_37_15_Title
+              int seasonNum = 1;
+              int episodeNum = 1;
+              int titleStartIndex = 3;
+              
+              if (underscoreParts[0] == 'episode') {
+                // Format: episode_37_14_Title
+                seasonNum = int.tryParse(underscoreParts[1]) ?? 1;
+                episodeNum = int.tryParse(underscoreParts[2]) ?? 1;
+                titleStartIndex = 3;
+                DebugLogger.instance.logHistory('Format 1: episode_season_episode_title');
+              } else if (underscoreParts.length >= 5 && 
+                         (underscoreParts[0] == 'season' || underscoreParts[0] == 'series')) {
+                // Format: season_finale_37_15_Title or series_premiere_1_1_Title
+                seasonNum = int.tryParse(underscoreParts[2]) ?? 1;
+                episodeNum = int.tryParse(underscoreParts[3]) ?? 1;
+                titleStartIndex = 4;
+                DebugLogger.instance.logHistory('Format 2: season_type_season_episode_title');
+              } else {
+                DebugLogger.instance.logHistory('Format 3: fallback numeric search');
+                // Fallback: assume last two numeric parts are season/episode
+                for (int j = 1; j < underscoreParts.length - 1; j++) {
+                  final num1 = int.tryParse(underscoreParts[j]);
+                  final num2 = int.tryParse(underscoreParts[j + 1]);
+                  if (num1 != null && num2 != null) {
+                    seasonNum = num1;
+                    episodeNum = num2;
+                    titleStartIndex = j + 2;
+                    DebugLogger.instance.logHistory('Found numbers at positions $j,${j+1}: $seasonNum,$episodeNum');
+                    break;
+                  }
+                }
+              }
+              
+              // Extract episode title
+              String episodeTitle = 'Episode $episodeNum';
+              if (underscoreParts.length > titleStartIndex) {
+                episodeTitle = underscoreParts.sublist(titleStartIndex).join(' ');
+              }
+              
+              DebugLogger.instance.logHistory('Final parsed: S${seasonNum}E${episodeNum} - "$episodeTitle"');
+              
+              // Format the air date
+              final formattedDate = _formatDateForHistory(event.releaseDate);
+              
+              // Create a widget for this episode
+              episodeWidgets.add(
+                Text(
+                  '"$episodeTitle" - S${seasonNum}E${episodeNum.toString().padLeft(2, '0')} - $formattedDate',
+                  style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                    fontWeight: FontWeight.w500,
+                    color: Theme.of(context).colorScheme.secondary,
+                  ),
+                ),
+              );
+            } else {
+              DebugLogger.instance.logHistory('Could not parse event: ${event.releaseType}');
+            }
+          }
+        }
+      } else {
+        DebugLogger.instance.logHistory('Single event format, generating from episode count');
+        // Old format: single notification event but multiple episodes
+        // Generate episode widgets based on episode count
+        final episodeCount = entry.episodeNumber ?? 1;
+        final seasonNum = entry.seasonNumber ?? 1;
+        final baseEpisodeNum = 1; // We don't know the starting episode number, so assume 1
+        final airDate = entry.notificationEvents.first.releaseDate;
+        final formattedDate = _formatDateForHistory(airDate);
+        
+        DebugLogger.instance.logHistory('Generating $episodeCount episodes starting from S${seasonNum}E${baseEpisodeNum}');
+        
+        for (int i = 0; i < episodeCount; i++) {
+          final episodeNum = baseEpisodeNum + i;
+          final episodeTitle = 'Episode $episodeNum'; // Generic title since we don't have individual titles
+          
+          episodeWidgets.add(
+            Text(
+              '"$episodeTitle" - S${seasonNum}E${episodeNum.toString().padLeft(2, '0')} - $formattedDate',
+              style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                fontWeight: FontWeight.w500,
+                color: Theme.of(context).colorScheme.secondary,
+              ),
+            ),
+          );
+        }
+      }
+      
+      // Add spacing between episode widgets
+      final spacedWidgets = <Widget>[];
+      for (int i = 0; i < episodeWidgets.length; i++) {
+        spacedWidgets.add(episodeWidgets[i]);
+        if (i < episodeWidgets.length - 1) {
+          spacedWidgets.add(const SizedBox(height: 2)); // Small spacing between episodes
+        }
+      }
+      
+      DebugLogger.instance.logHistory('Created ${spacedWidgets.length} widgets (${episodeWidgets.length} episodes + spacing)');
+      return spacedWidgets;
+    } else {
+      DebugLogger.instance.logHistory('Using SINGLE episode logic');
+      // Single episode - create one widget
+      final List<String> parts = [];
+      
+      if (entry.episodeTitle != null && 
+          entry.episodeTitle!.isNotEmpty && 
+          !entry.episodeTitle!.contains('episodes')) {
+        parts.add('"${entry.episodeTitle}"');
+        DebugLogger.instance.logHistory('Added episode title: "${entry.episodeTitle}"');
+      } else {
+        DebugLogger.instance.logHistory('No episode title (empty or contains "episodes")');
+      }
+      
+      // Add episode format (S#E#)
+      if (entry.seasonNumber != null && entry.episodeNumber != null) {
+        parts.add('S${entry.seasonNumber}E${entry.episodeNumber.toString().padLeft(2, '0')}');
+        DebugLogger.instance.logHistory('Added S#E#: S${entry.seasonNumber}E${entry.episodeNumber}');
+      }
+      
+      // Add the air date
+      if (entry.notificationEvents.isNotEmpty) {
+        final formattedDate = _formatDateForHistory(entry.notificationEvents.first.releaseDate);
+        parts.add(formattedDate);
+        DebugLogger.instance.logHistory('Added date: $formattedDate');
+      }
+      
+      final finalText = parts.join(' - ');
+      DebugLogger.instance.logHistory('Final single episode text: "$finalText"');
+      
+      if (parts.isNotEmpty) {
+        return [
+          Text(
+            finalText,
+            style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+              fontWeight: FontWeight.w500,
+              color: Theme.of(context).colorScheme.secondary,
+            ),
+          ),
+        ];
+      }
+    }
+    
+    DebugLogger.instance.logHistory('Returning empty widget list');
+    return [];
+  }
+
+  /// Get display label for TV notification type
+  String _getTvNotificationTypeLabel(String tvNotificationType) {
+    switch (tvNotificationType) {
+      case 'series_premiere':
+        return 'Series Premiere';
+      case 'season_premiere':
+        return 'Season Premiere';
+      case 'season_finale':
+        return 'Season Finale';
+      case 'special':
+        return 'Special';
+      case 'grouped_episodes':
+        return 'Multiple Episodes';
+      case 'episode':
+        return 'New Episode';
+      default:
+        return '';
+    }
+  }
+
   void _markHistoryAsViewed(WidgetRef ref) async {
     try {
       final prefsRepo = ref.read(preferencesRepositoryProvider);
@@ -534,6 +834,9 @@ class HistoryScreen extends ConsumerWidget {
         autoFollowNewRoles: currentPrefs.autoFollowNewRoles,
         lastCheckTime: currentPrefs.lastCheckTime,
         lastViewedHistoryTime: DateTime.now().toIso8601String(),
+        movieDetailsPreference: currentPrefs.movieDetailsPreference,
+        defaultTvNotificationPrefs: currentPrefs.defaultTvNotificationPrefs,
+        notifyPersonTvEpisodes: currentPrefs.notifyPersonTvEpisodes,
       );
       
       await prefsRepo.savePreferences(updatedPrefs);
@@ -544,8 +847,17 @@ class HistoryScreen extends ConsumerWidget {
 
   Future<void> _launchTmdbUrl(BuildContext context, NotificationHistoryEntry entry) async {
     final tmdbId = entry.tmdbId;
-    // Determine if it's a TV show or movie based on release events
-    final isTV = entry.notificationEvents.any((e) => e.releaseType.toLowerCase() == 'tv');
+    
+    // Determine if it's a TV show or movie based on mediaType field first,
+    // then fall back to release event detection
+    bool isTV = false;
+    if (entry.mediaType != null) {
+      isTV = entry.mediaType == 'tv';
+    } else {
+      // Fallback: check release events for TV type
+      isTV = entry.notificationEvents.any((e) => e.releaseType.toLowerCase() == 'tv');
+    }
+    
     final typePath = isTV ? 'tv' : 'movie';
     final url = 'https://www.themoviedb.org/$typePath/$tmdbId';
     

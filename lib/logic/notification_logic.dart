@@ -1,4 +1,5 @@
 import '../data/models/notification_history.dart';
+import 'package:flutter/foundation.dart';
 
 class NotificationLogic {
   static String formatTitle(List<String> movieTitles, {List<NotificationHistoryEntry>? entries}) {
@@ -67,9 +68,6 @@ class NotificationLogic {
           lines.add(''); // Empty line for spacing
         }
       }
-      
-      // Add contributor info only for people, not movies/companies/collections
-      final Set<String> contributorinfo = {};
       
       // Group jobs by contributor name
       final Map<String, List<String>> grouped = {};
@@ -205,53 +203,6 @@ class NotificationLogic {
     }
   }
 
-  static String _createAcronym(String title) {
-    // If title has 2 or fewer words, return as-is
-    final words = title.split(' ');
-    if (words.length <= 2) {
-      return title;
-    }
-    
-    String acronym = '';
-    for (int i = 0; i < words.length; i++) {
-      final word = words[i];
-      
-      // Handle special cases
-      if (word.toLowerCase() == 'and') {
-        acronym += '&';
-      } else if (word == '-' || word == ':') {
-        acronym += word;
-      } else if (word.contains('-') && word != '-') {
-        // Handle hyphenated words like "Spider-Man"
-        final parts = word.split('-');
-        for (int j = 0; j < parts.length; j++) {
-          if (parts[j].isNotEmpty) {
-            acronym += parts[j][0];
-          }
-          if (j < parts.length - 1) {
-            acronym += '-';
-          }
-        }
-      } else if (word.contains(':') && word != ':') {
-        // Handle words with colons
-        final parts = word.split(':');
-        for (int j = 0; j < parts.length; j++) {
-          if (parts[j].isNotEmpty) {
-            acronym += parts[j][0];
-          }
-          if (j < parts.length - 1) {
-            acronym += ':';
-          }
-        }
-      } else if (word.isNotEmpty) {
-        // Regular word - take first letter, preserve capitalization
-        acronym += word[0];
-      }
-    }
-    
-    return acronym;
-  }
-
   static String _getReleaseTypeEmoji(String releaseType) {
     switch (releaseType.toLowerCase()) {
       case 'streaming':
@@ -275,8 +226,61 @@ class NotificationLogic {
   static String formatMixedBody(List<String> titles, List<NotificationHistoryEntry> entries) {
     if (titles.isEmpty) return '';
     
-    if (titles.length == 1) {
-      final entry = entries.first;
+    // Group entries by show (tmdbId) to avoid duplicate show names for TV shows
+    final Map<int, List<NotificationHistoryEntry>> entriesByShow = {};
+    final List<NotificationHistoryEntry> movieEntries = [];
+    
+    for (final entry in entries) {
+      if (entry.mediaType == 'tv') {
+        entriesByShow.putIfAbsent(entry.tmdbId, () => []).add(entry);
+      } else {
+        movieEntries.add(entry);
+      }
+    }
+    
+    // Create unique titles list
+    final uniqueTitles = <String>[];
+    final uniqueEntries = <NotificationHistoryEntry>[];
+    
+    // Add TV shows (grouped by show)
+    for (final showId in entriesByShow.keys) {
+      final showEntries = entriesByShow[showId]!;
+      final showEntry = showEntries.first;
+      
+      // Find the show title
+      String? showTitle;
+      for (int i = 0; i < entries.length; i++) {
+        if (entries[i].tmdbId == showId && entries[i].mediaType == 'tv') {
+          showTitle = titles[i];
+          break;
+        }
+      }
+      
+      if (showTitle != null) {
+        uniqueTitles.add(showTitle);
+        uniqueEntries.add(showEntry);
+      }
+    }
+    
+    // Add movies
+    for (final movieEntry in movieEntries) {
+      // Find the movie title
+      String? movieTitle;
+      for (int i = 0; i < entries.length; i++) {
+        if (entries[i] == movieEntry) {
+          movieTitle = titles[i];
+          break;
+        }
+      }
+      
+      if (movieTitle != null) {
+        uniqueTitles.add(movieTitle);
+        uniqueEntries.add(movieEntry);
+      }
+    }
+    
+    if (uniqueTitles.length == 1) {
+      final entry = uniqueEntries.first;
       final List<String> lines = [];
       
       // Add release date with appropriate emoji
@@ -285,15 +289,36 @@ class NotificationLogic {
         String emoji;
         
         if (entry.mediaType == 'tv') {
-          // For TV shows, get earliest date and use TV emoji
-          final sortedEvents = List<NotificationEvent>.from(entry.notificationEvents);
-          sortedEvents.sort((a, b) {
-            final dateA = DateTime.tryParse(a.releaseDate) ?? DateTime.now();
-            final dateB = DateTime.tryParse(b.releaseDate) ?? DateTime.now();
-            return dateA.compareTo(dateB);
-          });
-          releaseDate = _formatDateForNotification(sortedEvents.first.releaseDate);
-          emoji = '📺';
+          // For TV shows, get all unique dates from all episodes of this show
+          final showEntries = entriesByShow[entry.tmdbId]!;
+          final Set<String> uniqueDates = {};
+          for (final showEntry in showEntries) {
+            for (final event in showEntry.notificationEvents) {
+              if (event.releaseDate.isNotEmpty) {
+                uniqueDates.add(event.releaseDate);
+              }
+            }
+          }
+          
+          if (uniqueDates.isNotEmpty) {
+            final sortedDates = uniqueDates.toList();
+            sortedDates.sort();
+            
+            releaseDate = _formatDateForNotification(sortedDates.first);
+            emoji = '📺';
+            
+            // Add count of additional episodes if there are multiple dates
+            if (sortedDates.length > 1) {
+              final additionalCount = sortedDates.length - 1;
+              lines.add('$emoji $releaseDate (+$additionalCount more)');
+            } else {
+              lines.add('$emoji $releaseDate');
+            }
+            return lines.join('\n');
+          } else {
+            emoji = '📺';
+            releaseDate = '';
+          }
         } else {
           // For movies, use standard logic
           releaseDate = _formatDateForNotification(entry.notificationEvents.first.releaseDate);
@@ -304,17 +329,19 @@ class NotificationLogic {
           return lines.join('\n');
         }
         
-        lines.add('$emoji $releaseDate');
+        if (releaseDate.isNotEmpty) {
+          lines.add('$emoji $releaseDate');
+        }
       }
       
       return lines.join('\n');
-    } else if (titles.length <= 3) {
+    } else if (uniqueTitles.length <= 3) {
       // For 2-3 items, show compact list
-      return titles.join(' • ');
+      return uniqueTitles.join(' • ');
     } else {
       // Multiple items logic (4+)
-      final displayTitles = titles.take(3).toList();
-      final remainingCount = titles.length - displayTitles.length;
+      final displayTitles = uniqueTitles.take(3).toList();
+      final remainingCount = uniqueTitles.length - displayTitles.length;
       
       if (remainingCount > 0) {
         return '${displayTitles.join(' • ')} • +$remainingCount more';
@@ -328,6 +355,12 @@ class NotificationLogic {
   static String formatTvTitle(List<String> showTitles, List<NotificationHistoryEntry> entries) {
     if (showTitles.isEmpty) return '';
     
+    debugPrint('[NotificationLogic] formatTvTitle called with ${showTitles.length} shows, ${entries.length} entries');
+    for (int i = 0; i < entries.length; i++) {
+      final entry = entries[i];
+      debugPrint('[NotificationLogic] Entry $i: tmdbId=${entry.tmdbId}, episodeNumber=${entry.episodeNumber}, notificationEvents.length=${entry.notificationEvents.length}, tvNotificationType=${entry.tvNotificationType}');
+    }
+    
     if (showTitles.length == 1) {
       final entry = entries.first;
       final showTitle = showTitles.first;
@@ -337,12 +370,15 @@ class NotificationLogic {
       if (entry.tvNotificationType == 'grouped_episodes' && entry.notificationEvents.length > 1) {
         // Multiple events = multiple episodes
         totalEpisodes = entry.notificationEvents.length;
-      } else if (entry.episodeNumber != null && entry.episodeNumber! > 1) {
-        // Single event but episodeNumber indicates multiple episodes
+        debugPrint('[NotificationLogic] Using notificationEvents.length: $totalEpisodes');
+      } else if (entry.tvNotificationType == 'grouped_episodes' && entry.episodeNumber != null && entry.episodeNumber! > 1) {
+        // Grouped episodes where episodeNumber represents the count
         totalEpisodes = entry.episodeNumber!;
+        debugPrint('[NotificationLogic] Using episodeNumber for grouped: $totalEpisodes');
       } else {
-        // Single episode
+        // Single episode (episodeNumber here is the actual episode number, not count)
         totalEpisodes = 1;
+        debugPrint('[NotificationLogic] Using default: 1 episode (episodeNumber=${entry.episodeNumber} is episode number, not count)');
       }
       
       // Format: "New Release/Releases" + show name + episode count
@@ -356,15 +392,24 @@ class NotificationLogic {
     // Multiple shows - count total episodes
     int totalEpisodes = 0;
     for (final entry in entries) {
+      int entryEpisodes = 0;
       if (entry.tvNotificationType == 'grouped_episodes' && entry.notificationEvents.length > 1) {
-        totalEpisodes += entry.notificationEvents.length;
-      } else if (entry.episodeNumber != null && entry.episodeNumber! > 1) {
-        totalEpisodes += entry.episodeNumber!;
+        // For grouped episodes, use the number of notification events (each represents one episode)
+        entryEpisodes = entry.notificationEvents.length;
+        debugPrint('[NotificationLogic] Entry ${entry.tmdbId}: grouped_episodes, adding ${entryEpisodes} episodes (from notificationEvents)');
+      } else if (entry.tvNotificationType == 'grouped_episodes' && entry.episodeNumber != null && entry.episodeNumber! > 1) {
+        // For grouped episodes where episodeNumber represents the count
+        entryEpisodes = entry.episodeNumber!;
+        debugPrint('[NotificationLogic] Entry ${entry.tmdbId}: grouped_episodes, adding ${entryEpisodes} episodes (from episodeNumber)');
       } else {
-        totalEpisodes += 1;
+        // Single episode (episodeNumber here is the actual episode number, not count)
+        entryEpisodes = 1;
+        debugPrint('[NotificationLogic] Entry ${entry.tmdbId}: single episode, adding 1 episode (episodeNumber=${entry.episodeNumber} is episode number, not count)');
       }
+      totalEpisodes += entryEpisodes;
     }
     
+    debugPrint('[NotificationLogic] Total episodes calculated: $totalEpisodes');
     return '🎬 $totalEpisodes New TV Episodes';
   }
 
@@ -372,25 +417,64 @@ class NotificationLogic {
   static String formatTvBody(List<String> showTitles, List<NotificationHistoryEntry> entries) {
     if (showTitles.isEmpty) return '';
     
-    if (showTitles.length == 1) {
-      final entry = entries.first;
-      final List<String> lines = [];
+    // Group entries by show (tmdbId) to avoid duplicate show names
+    final Map<int, List<NotificationHistoryEntry>> entriesByShow = {};
+    for (final entry in entries) {
+      entriesByShow.putIfAbsent(entry.tmdbId, () => []).add(entry);
+    }
+    
+    // Create unique show titles list
+    final uniqueShowTitles = <String>[];
+    final uniqueEntries = <NotificationHistoryEntry>[];
+    
+    for (final showId in entriesByShow.keys) {
+      final showEntries = entriesByShow[showId]!;
+      final showEntry = showEntries.first;
       
-      // Get the earliest air date from all notification events
-      String earliestDate = '';
-      if (entry.notificationEvents.isNotEmpty) {
-        final sortedEvents = List<NotificationEvent>.from(entry.notificationEvents);
-        sortedEvents.sort((a, b) {
-          final dateA = DateTime.tryParse(a.releaseDate) ?? DateTime.now();
-          final dateB = DateTime.tryParse(b.releaseDate) ?? DateTime.now();
-          return dateA.compareTo(dateB);
-        });
-        earliestDate = _formatDateForNotification(sortedEvents.first.releaseDate);
+      // Find the show title
+      String? showTitle;
+      for (int i = 0; i < entries.length; i++) {
+        if (entries[i].tmdbId == showId) {
+          showTitle = showTitles[i];
+          break;
+        }
       }
       
-      // Add TV emoji and date
-      if (earliestDate.isNotEmpty) {
-        lines.add('📺 $earliestDate');
+      if (showTitle != null) {
+        uniqueShowTitles.add(showTitle);
+        uniqueEntries.add(showEntry);
+      }
+    }
+    
+    if (uniqueShowTitles.length == 1) {
+      final entry = uniqueEntries.first;
+      final showEntries = entriesByShow[entry.tmdbId]!;
+      final List<String> lines = [];
+      
+      // Get all unique air dates from all episodes of this show
+      final Set<String> uniqueDates = {};
+      for (final showEntry in showEntries) {
+        for (final event in showEntry.notificationEvents) {
+          if (event.releaseDate.isNotEmpty) {
+            uniqueDates.add(event.releaseDate);
+          }
+        }
+      }
+      
+      // Sort dates and get the earliest
+      final sortedDates = uniqueDates.toList();
+      sortedDates.sort();
+      
+      if (sortedDates.isNotEmpty) {
+        final earliestDate = _formatDateForNotification(sortedDates.first);
+        
+        // Add count of additional episodes if there are multiple dates
+        if (sortedDates.length > 1) {
+          final additionalCount = sortedDates.length - 1;
+          lines.add('📺 $earliestDate (+$additionalCount more)');
+        } else {
+          lines.add('📺 $earliestDate');
+        }
       }
       
       // Only add contributor info for people (creators, directors), not for "Followed Show"
@@ -446,34 +530,19 @@ class NotificationLogic {
       }
       
       return lines.join('\n');
-    } else if (showTitles.length <= 3) {
+    } else if (uniqueShowTitles.length <= 3) {
       // For 2-3 shows, show compact show list
-      return showTitles.join(' • ');
+      return uniqueShowTitles.join(' • ');
     } else {
       // Multiple shows logic (4+)
-      final displayShows = showTitles.take(3).toList();
-      final remainingCount = showTitles.length - displayShows.length;
+      final displayShows = uniqueShowTitles.take(3).toList();
+      final remainingCount = uniqueShowTitles.length - displayShows.length;
       
       if (remainingCount > 0) {
         return '${displayShows.join(' • ')} • +$remainingCount more';
       } else {
         return displayShows.join(' • ');
       }
-    }
-  }
-
-  /// Get TV-specific release type prefix
-  static String _getTvReleaseTypePrefix(String releaseType) {
-    switch (releaseType.toLowerCase()) {
-      case 'streaming':
-      case 'digital':
-        return 'Streaming';
-      case 'tv':
-      case 'broadcast':
-      case 'air':
-        return 'Airing';
-      default:
-        return 'Air Date:';
     }
   }
 
@@ -493,16 +562,29 @@ class NotificationLogic {
       
       // Handle TV shows vs movies differently
       if (entry.mediaType == 'tv') {
-        // For TV shows, get earliest date and use TV emoji
-        final sortedEvents = List<NotificationEvent>.from(entry.notificationEvents);
-        sortedEvents.sort((a, b) {
-          final dateA = DateTime.tryParse(a.releaseDate) ?? DateTime.now();
-          final dateB = DateTime.tryParse(b.releaseDate) ?? DateTime.now();
-          return dateA.compareTo(dateB);
-        });
+        // For TV shows, get all unique dates and show earliest with count
+        final Set<String> uniqueDates = {};
+        for (final event in entry.notificationEvents) {
+          if (event.releaseDate.isNotEmpty) {
+            uniqueDates.add(event.releaseDate);
+          }
+        }
         
-        final date = _formatDateForNotification(sortedEvents.first.releaseDate);
-        releaseDates.add('📺 $date');
+        if (uniqueDates.isNotEmpty) {
+          final sortedDates = uniqueDates.toList();
+          sortedDates.sort();
+          
+          final earliestDate = _formatDateForNotification(sortedDates.first);
+          
+          if (sortedDates.length > 1) {
+            final additionalCount = sortedDates.length - 1;
+            releaseDates.add('📺 $earliestDate (+$additionalCount more)');
+          } else {
+            releaseDates.add('📺 $earliestDate');
+          }
+        } else {
+          releaseDates.add('');
+        }
       } else {
         // For movies, use existing logic
         // Get all events for this movie, sorted by date

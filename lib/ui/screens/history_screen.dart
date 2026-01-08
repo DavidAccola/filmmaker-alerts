@@ -104,19 +104,18 @@ class HistoryScreen extends ConsumerWidget {
 
           // Check if user has viewed history since the most recent notification
           final prefsAsync = ref.watch(preferencesProvider);
-          bool hasUnviewedBatch = false;
           
           prefsAsync.whenData((prefs) {
             if (mostRecentNotificationTime != null) {
               final lastViewedTime = prefs.lastViewedHistoryTime;
               if (lastViewedTime == null) {
-                hasUnviewedBatch = true;
+                // hasUnviewedBatch = true;
               } else {
                 try {
                   final lastViewed = DateTime.parse(lastViewedTime);
-                  hasUnviewedBatch = mostRecentNotificationTime!.isAfter(lastViewed);
+                  // hasUnviewedBatch = mostRecentNotificationTime.isAfter(lastViewed);
                 } catch (e) {
-                  hasUnviewedBatch = true;
+                  // hasUnviewedBatch = true;
                 }
               }
             }
@@ -453,7 +452,7 @@ class HistoryScreen extends ConsumerWidget {
                                                   child: ClipRRect(
                                                     borderRadius: BorderRadius.circular(3),
                                                     child: Image.asset(
-                                                      'assets/images/imdb_square_black.png',
+                                                      'assets/images/imdb_square_gold.png',
                                                       width: 36,
                                                       height: 36,
                                                       fit: BoxFit.cover,

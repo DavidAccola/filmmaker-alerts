@@ -152,7 +152,11 @@ class BackgroundTaskProcessor {
 
     for (final release in newReleases) {
       // A. Update History
+      DebugLogger.instance.logBackground('Adding notification to history: tmdbId=${release.tmdbId}, mediaType=${release.mediaType}');
+      DebugLogger.instance.logBackground('  seasonNumber=${release.seasonNumber}, episodeNumber=${release.episodeNumber}');
+      DebugLogger.instance.logBackground('  episodeTitle="${release.episodeTitle}", tvNotificationType=${release.tvNotificationType}');
       await historyRepo.addNotificationToHistory(release);
+      DebugLogger.instance.logBackground('✅ Successfully added to history: tmdbId=${release.tmdbId}');
 
       // B. Get Movie/TV Show Details for Notification Text
       String? title;

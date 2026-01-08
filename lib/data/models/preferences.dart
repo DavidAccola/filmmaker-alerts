@@ -64,6 +64,9 @@ class Preferences extends HiveObject {
   @HiveField(18)
   bool? notifyPersonTvEpisodes;
 
+  @HiveField(19)
+  bool? useDarkMode;
+
   Preferences({
     this.notifyTheatre = true,
     this.notifyStreaming = true,
@@ -84,6 +87,7 @@ class Preferences extends HiveObject {
     this.movieDetailsPreference = 'both',
     this.defaultTvNotificationPrefs,
     this.notifyPersonTvEpisodes = true,
+    this.useDarkMode,
   });
 
   // Helper getters for "True All" logic

@@ -74,7 +74,7 @@ void main() {
     await tester.pumpAndSettle();
 
     // Verify Add Screen
-    expect(find.text('Add Contributor'), findsOneWidget);
+    expect(find.text('Add an Alert'), findsOneWidget);
 
     // 3. Search for Greta
     await tester.enterText(find.byType(TextField), 'Greta');
@@ -98,7 +98,7 @@ void main() {
     await tester.pumpAndSettle();
 
     // Home screen should be back
-    expect(find.text('Followed Contributors'), findsOneWidget);
+    expect(find.text('Following'), findsOneWidget);
     
     // 5. Verify Greta appears in the list
     // The FutureProvider will re-fetch from the mock repo which now returns Greta

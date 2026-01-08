@@ -211,7 +211,7 @@ class _AddContributorScreenState extends ConsumerState<AddContributorScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Add Contributor'),
+        title: _AnimatedTypeTitle(),
       ),
       body: Column(
         children: [
@@ -306,6 +306,92 @@ class _AddContributorScreenState extends ConsumerState<AddContributorScreen> {
             ),
           ),
         ],
+      ),
+    );
+  }
+}
+
+/// Animated title that cycles through "Find a Person", "Find a Company", "Find a Movie", "Find a TV Show"
+class _AnimatedTypeTitle extends StatefulWidget {
+  const _AnimatedTypeTitle();
+
+  @override
+  State<_AnimatedTypeTitle> createState() => _AnimatedTypeTitleState();
+}
+
+class _AnimatedTypeTitleState extends State<_AnimatedTypeTitle> with TickerProviderStateMixin {
+  late AnimationController _fadeController;
+  late AnimationController _slideController;
+  late Animation<double> _fadeAnimation;
+  late Animation<Offset> _slideAnimation;
+  
+  final List<String> _types = ['Person', 'Company', 'Movie', 'TV Show'];
+  int _currentIndex = 0;
+  Timer? _cycleTimer;
+
+  @override
+  void initState() {
+    super.initState();
+    
+    _fadeController = AnimationController(
+      duration: const Duration(milliseconds: 500),
+      vsync: this,
+    );
+    
+    _slideController = AnimationController(
+      duration: const Duration(milliseconds: 500),
+      vsync: this,
+    );
+    
+    _fadeAnimation = Tween<double>(begin: 1.0, end: 0.0).animate(_fadeController);
+    _slideAnimation = Tween<Offset>(begin: Offset.zero, end: const Offset(0.0, 0.2)).animate(_slideController);
+    
+    // Start the cycle timer
+    _startCycleTimer();
+  }
+
+  void _startCycleTimer() {
+    _cycleTimer = Timer.periodic(const Duration(seconds: 2), (_) async {
+      if (mounted) {
+        // Fade out and slide down
+        await Future.wait([
+          _fadeController.forward(),
+          _slideController.forward(),
+        ]);
+        
+        // Update index
+        setState(() {
+          _currentIndex = (_currentIndex + 1) % _types.length;
+        });
+        
+        // Reset animations
+        _fadeController.reset();
+        _slideController.reset();
+        
+        // Fade in and slide up
+        await Future.wait([
+          _fadeController.reverse(),
+          _slideController.reverse(),
+        ]);
+      }
+    });
+  }
+
+  @override
+  void dispose() {
+    _cycleTimer?.cancel();
+    _fadeController.dispose();
+    _slideController.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return FadeTransition(
+      opacity: _fadeAnimation,
+      child: SlideTransition(
+        position: _slideAnimation,
+        child: Text('Find a ${_types[_currentIndex]}'),
       ),
     );
   }

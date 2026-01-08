@@ -102,11 +102,11 @@ class LatestWorkLogic {
     if (contributor.type == ContributorType.person) {
       final data = await _tmdbService.getPersonCombinedCredits(contributor.tmdbId);
       final cast = (data['cast'] as List? ?? []).map((c) {
-        if (c is Map) (c as Map)['_is_cast'] = true;
+        if (c is Map) c['_is_cast'] = true;
         return c;
       }).toList();
       final crew = (data['crew'] as List? ?? []).map((c) {
-        if (c is Map) (c as Map)['_is_cast'] = false;
+        if (c is Map) c['_is_cast'] = false;
         return c;
       }).toList();
       credits = [...cast, ...crew];

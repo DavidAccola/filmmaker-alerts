@@ -47,29 +47,52 @@ class TmdbService {
 
   Dio get client => _dio;
 
+  /// Helper method to log API calls
+  void _logApiCall(String endpoint, [Map<String, dynamic>? params]) {
+    final paramsStr = params != null && params.isNotEmpty 
+        ? '?${params.entries.map((e) => '${e.key}=${e.value}').join('&')}'
+        : '';
+    debugPrint('[TMDB API] GET $_baseUrl$endpoint$paramsStr');
+  }
+
   // --- Search ---
   Future<Map<String, dynamic>> searchPerson(String query, {int page = 1}) async {
-    final response = await _dio.get('/search/person', queryParameters: {'query': query, 'page': page});
+    final endpoint = '/search/person';
+    final params = {'query': query, 'page': page};
+    _logApiCall(endpoint, params);
+    final response = await _dio.get(endpoint, queryParameters: params);
     return response.data;
   }
 
   Future<Map<String, dynamic>> searchCompany(String query, {int page = 1}) async {
-    final response = await _dio.get('/search/company', queryParameters: {'query': query, 'page': page});
+    final endpoint = '/search/company';
+    final params = {'query': query, 'page': page};
+    _logApiCall(endpoint, params);
+    final response = await _dio.get(endpoint, queryParameters: params);
     return response.data;
   }
 
   Future<Map<String, dynamic>> searchMovie(String query, {int page = 1}) async {
-    final response = await _dio.get('/search/movie', queryParameters: {'query': query, 'page': page});
+    final endpoint = '/search/movie';
+    final params = {'query': query, 'page': page};
+    _logApiCall(endpoint, params);
+    final response = await _dio.get(endpoint, queryParameters: params);
     return response.data;
   }
 
   Future<Map<String, dynamic>> searchCollection(String query, {int page = 1}) async {
-    final response = await _dio.get('/search/collection', queryParameters: {'query': query, 'page': page});
+    final endpoint = '/search/collection';
+    final params = {'query': query, 'page': page};
+    _logApiCall(endpoint, params);
+    final response = await _dio.get(endpoint, queryParameters: params);
     return response.data;
   }
 
   Future<Map<String, dynamic>> searchTv(String query, {int page = 1}) async {
-    final response = await _dio.get('/search/tv', queryParameters: {'query': query, 'page': page});
+    final endpoint = '/search/tv';
+    final params = {'query': query, 'page': page};
+    _logApiCall(endpoint, params);
+    final response = await _dio.get(endpoint, queryParameters: params);
     return response.data;
   }
 
@@ -96,7 +119,9 @@ class TmdbService {
 
   // --- Details & Credits ---
   Future<Map<String, dynamic>> getPersonCombinedCredits(int id) async {
-    final response = await _dio.get('/person/$id/combined_credits');
+    final endpoint = '/person/$id/combined_credits';
+    _logApiCall(endpoint);
+    final response = await _dio.get(endpoint);
     return response.data;
   }
 
@@ -114,6 +139,7 @@ class TmdbService {
         params['first_air_date.gte'] = since;
       }
     }
+    _logApiCall(endpoint, params);
     final response = await _dio.get(endpoint, queryParameters: params);
     return response.data;
   }
@@ -155,58 +181,200 @@ class TmdbService {
   }
 
   Future<Map<String, dynamic>> getMovieDetails(int id) async {
-    final response = await _dio.get('/movie/$id', queryParameters: {
-      'append_to_response': 'release_dates,external_ids',
-    });
+    final endpoint = '/movie/$id';
+    final params = {'append_to_response': 'release_dates,external_ids'};
+    _logApiCall(endpoint, params);
+    final response = await _dio.get(endpoint, queryParameters: params);
     return response.data;
   }
 
   Future<Map<String, dynamic>> getMovieCredits(int id) async {
-    final response = await _dio.get('/movie/$id/credits');
+    final endpoint = '/movie/$id/credits';
+    _logApiCall(endpoint);
+    final response = await _dio.get(endpoint);
     return response.data;
   }
 
   Future<Map<String, dynamic>> getCollectionDetails(int id) async {
-    final response = await _dio.get('/collection/$id');
+    final endpoint = '/collection/$id';
+    _logApiCall(endpoint);
+    final response = await _dio.get(endpoint);
     return response.data;
   }
 
   // --- TV Show Details & Credits ---
   Future<Map<String, dynamic>> getTvDetails(int id) async {
-    final response = await _dio.get('/tv/$id', queryParameters: {
-      'append_to_response': 'external_ids',
-    });
+    final endpoint = '/tv/$id';
+    final params = {'append_to_response': 'external_ids,next_episode_to_air,last_episode_to_air'};
+    _logApiCall(endpoint, params);
+    final response = await _dio.get(endpoint, queryParameters: params);
     return response.data;
   }
 
+  // Lightweight method that gets only basic show info for release checking
+  Future<Map<String, dynamic>> getTvDetailsBasic(int id) async {
+    final endpoint = '/tv/$id';
+    _logApiCall(endpoint);
+    final response = await _dio.get(endpoint);
+    return response.data;
+  }
+
+  // Method to get show details with next/last episode info (no seasons metadata)
+  Future<Map<String, dynamic>> getTvDetailsWithEpisodes(int id) async {
+    final endpoint = '/tv/$id';
+    final params = {'append_to_response': 'next_episode_to_air,last_episode_to_air'};
+    _logApiCall(endpoint, params);
+    final response = await _dio.get(endpoint, queryParameters: params);
+    return response.data;
+  }
+
+  // Optimized method that gets show details with smart filtering
+  Future<Map<String, dynamic>> getTvDetailsOptimized(int id) async {
+    final endpoint = '/tv/$id';
+    final params = {'append_to_response': 'next_episode_to_air,last_episode_to_air'};
+    _logApiCall(endpoint, params);
+    final response = await _dio.get(endpoint, queryParameters: params);
+    return response.data;
+  }
+
+  // Batch method to check if shows are worth processing
+  Future<List<TvShowCandidate>> filterTvShowCandidates(List<int> showIds) async {
+    final candidates = <TvShowCandidate>[];
+    
+    for (final showId in showIds) {
+      try {
+        final details = await getTvDetailsOptimized(showId);
+        final candidate = TvShowCandidate.fromTmdbData(showId, details);
+        
+        if (candidate.isWorthProcessing) {
+          candidates.add(candidate);
+        }
+      } catch (e) {
+        // Skip shows that can't be fetched
+        continue;
+      }
+    }
+    
+    return candidates;
+  }
+
+  // Efficient method to check for new episodes using next/last episode data
+  Future<List<Map<String, dynamic>>> getTvNewEpisodesEfficient(int showId, String startDate, String endDate) async {
+    final details = await getTvDetailsWithEpisodes(showId);
+    final episodes = <Map<String, dynamic>>[];
+    final episodeDates = <String>{};
+    
+    // Check next episode to air
+    final nextEpisode = details['next_episode_to_air'];
+    if (nextEpisode != null) {
+      final airDate = nextEpisode['air_date'] as String?;
+      if (airDate != null && 
+          airDate.compareTo(startDate) >= 0 && 
+          airDate.compareTo(endDate) <= 0) {
+        episodes.add(nextEpisode);
+        episodeDates.add(airDate);
+      }
+    }
+    
+    // Check last episode to air (for recently aired episodes)
+    final lastEpisode = details['last_episode_to_air'];
+    if (lastEpisode != null) {
+      final airDate = lastEpisode['air_date'] as String?;
+      if (airDate != null && 
+          airDate.compareTo(startDate) >= 0 && 
+          airDate.compareTo(endDate) <= 0) {
+        // Only add if not already added (avoid duplicates)
+        if (!episodes.any((e) => e['id'] == lastEpisode['id'])) {
+          episodes.add(lastEpisode);
+          episodeDates.add(airDate);
+        }
+      }
+    }
+    
+    // If we found episodes, fetch the full season to get all episodes on those dates
+    if (episodes.isNotEmpty && episodeDates.isNotEmpty) {
+      final allEpisodesOnDates = <Map<String, dynamic>>[];
+      final seenEpisodeIds = <int>{};
+      
+      for (final episode in episodes) {
+        final seasonNumber = episode['season_number'] as int?;
+        final airDate = episode['air_date'] as String?;
+        
+        if (seasonNumber != null && airDate != null) {
+          try {
+            // Fetch full season to get all episodes on this date
+            final seasonDetails = await getTvSeasonDetails(showId, seasonNumber);
+            final seasonEpisodes = seasonDetails['episodes'] as List? ?? [];
+            
+            // Get all episodes that air on the same date (deduplicate by episode ID)
+            for (final ep in seasonEpisodes) {
+              final epAirDate = ep['air_date'] as String?;
+              final epId = ep['id'] as int?;
+              if (epAirDate == airDate && epId != null && !seenEpisodeIds.contains(epId)) {
+                allEpisodesOnDates.add(ep);
+                seenEpisodeIds.add(epId);
+              }
+            }
+          } catch (e) {
+            debugPrint('[TMDB] Error fetching season $seasonNumber: $e');
+            // Fallback to the original episodes
+            final epId = episode['id'] as int?;
+            if (epId != null && !seenEpisodeIds.contains(epId)) {
+              allEpisodesOnDates.add(episode);
+              seenEpisodeIds.add(epId);
+            }
+          }
+        }
+      }
+      
+      return allEpisodesOnDates.isNotEmpty ? allEpisodesOnDates : episodes;
+    }
+    
+    return episodes;
+  }
+
   Future<Map<String, dynamic>> getTvSeasonDetails(int showId, int seasonNumber) async {
-    final response = await _dio.get('/tv/$showId/season/$seasonNumber');
+    final endpoint = '/tv/$showId/season/$seasonNumber';
+    _logApiCall(endpoint);
+    final response = await _dio.get(endpoint);
     return response.data;
   }
 
   Future<Map<String, dynamic>> getTvEpisodeDetails(int showId, int seasonNumber, int episodeNumber) async {
-    final response = await _dio.get('/tv/$showId/season/$seasonNumber/episode/$episodeNumber');
+    final endpoint = '/tv/$showId/season/$seasonNumber/episode/$episodeNumber';
+    _logApiCall(endpoint);
+    final response = await _dio.get(endpoint);
     return response.data;
   }
 
   Future<Map<String, dynamic>> getTvCredits(int id) async {
-    final response = await _dio.get('/tv/$id/credits');
+    final endpoint = '/tv/$id/credits';
+    _logApiCall(endpoint);
+    final response = await _dio.get(endpoint);
     return response.data;
   }
 
   Future<Map<String, dynamic>> getTvEpisodeCredits(int showId, int seasonNumber, int episodeNumber) async {
-    final response = await _dio.get('/tv/$showId/season/$seasonNumber/episode/$episodeNumber/credits');
+    final endpoint = '/tv/$showId/season/$seasonNumber/episode/$episodeNumber/credits';
+    _logApiCall(endpoint);
+    final response = await _dio.get(endpoint);
     return response.data;
   }
 
   // --- TV Airing Information ---
   Future<Map<String, dynamic>> getTvOnTheAir() async {
-    final response = await _dio.get('/tv/on_the_air', queryParameters: {'region': 'US'});
+    final endpoint = '/tv/on_the_air';
+    final params = {'region': 'US'};
+    _logApiCall(endpoint, params);
+    final response = await _dio.get(endpoint, queryParameters: params);
     return response.data;
   }
 
   Future<Map<String, dynamic>> getTvAiringToday() async {
-    final response = await _dio.get('/tv/airing_today', queryParameters: {'region': 'US'});
+    final endpoint = '/tv/airing_today';
+    final params = {'region': 'US'};
+    _logApiCall(endpoint, params);
+    final response = await _dio.get(endpoint, queryParameters: params);
     return response.data;
   }
 }
@@ -263,5 +431,69 @@ class _RateLimitInterceptor extends Interceptor {
     }
 
     return handler.next(err);
+  }
+}
+
+class TvShowCandidate {
+  final int showId;
+  final String name;
+  final String status;
+  final bool inProduction;
+  final Map<String, dynamic>? nextEpisode;
+  final Map<String, dynamic>? lastEpisode;
+  final String? lastAirDate;
+  final List seasons;
+  
+  TvShowCandidate({
+    required this.showId,
+    required this.name,
+    required this.status,
+    required this.inProduction,
+    this.nextEpisode,
+    this.lastEpisode,
+    this.lastAirDate,
+    required this.seasons,
+  });
+  
+  factory TvShowCandidate.fromTmdbData(int showId, Map<String, dynamic> data) {
+    return TvShowCandidate(
+      showId: showId,
+      name: data['name'] as String? ?? 'Unknown',
+      status: data['status'] as String? ?? '',
+      inProduction: data['in_production'] as bool? ?? false,
+      nextEpisode: data['next_episode_to_air'] as Map<String, dynamic>?,
+      lastEpisode: data['last_episode_to_air'] as Map<String, dynamic>?,
+      lastAirDate: data['last_air_date'] as String?,
+      seasons: data['seasons'] as List? ?? [],
+    );
+  }
+  
+  /// Quick filter: is this show worth processing?
+  bool get isWorthProcessing {
+    // Always process if in production or has upcoming episodes
+    if (inProduction || nextEpisode != null) return true;
+    
+    // Process if recently ended (within last 30 days)
+    if (status.toLowerCase() == 'ended' && lastAirDate != null) {
+      final lastAir = DateTime.tryParse(lastAirDate!);
+      if (lastAir != null) {
+        final daysSinceEnd = DateTime.now().difference(lastAir).inDays;
+        return daysSinceEnd <= 30;
+      }
+    }
+    
+    // Process if has recent episode activity
+    if (lastEpisode != null) {
+      final lastEpAirDate = lastEpisode!['air_date'] as String?;
+      if (lastEpAirDate != null) {
+        final lastEpAir = DateTime.tryParse(lastEpAirDate);
+        if (lastEpAir != null) {
+          final daysSinceLastEp = DateTime.now().difference(lastEpAir).inDays;
+          return daysSinceLastEp <= 14; // Recent episode within 2 weeks
+        }
+      }
+    }
+    
+    return false;
   }
 }

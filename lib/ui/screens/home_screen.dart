@@ -39,7 +39,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
         title: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            const Text('Followed Contributors'),
+            const Text('Following'),
             IconButton(
               icon: const Icon(Icons.refresh, size: 20),
               tooltip: 'Refresh All',
@@ -323,9 +323,11 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
         },
       ),
       floatingActionButton: Tooltip(
-        message: 'Add Contributor',
+        message: 'Find More to Follow',
         waitDuration: const Duration(milliseconds: 250),
         child: FloatingActionButton(
+          backgroundColor: const Color(0xFF2196F3), // Modern blue
+          foregroundColor: Colors.white,
           onPressed: () async {
             final result = await Navigator.push(context, MaterialPageRoute(builder: (_) => const AddContributorScreen()));
             

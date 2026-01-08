@@ -18,6 +18,26 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
   bool _showDebug = false;
   int _debugTapCount = 0;
 
+  Widget _buildAppearanceSection(BuildContext context, WidgetRef ref, Preferences prefs) {
+    return _buildCard(
+      context,
+      title: 'Appearance',
+      icon: Icons.palette_outlined,
+      child: Column(
+        children: [
+          SwitchListTile(
+            title: const Text('Dark Mode'),
+            subtitle: const Text('Use dark theme'),
+            value: prefs.useDarkMode ?? false,
+            dense: true,
+            contentPadding: EdgeInsets.zero,
+            onChanged: (val) => _updatePrefs(ref, prefs, useDarkMode: val),
+          ),
+        ],
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final prefsAsync = ref.watch(preferencesProvider);
@@ -51,6 +71,8 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
+                    _buildAppearanceSection(context, ref, prefs),
+                    const SizedBox(height: 24),
                     _buildReleaseSection(context, ref, prefs),
                     const SizedBox(height: 24),
                     _buildRoleSection(context, ref, prefs),
@@ -572,6 +594,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     String? movieDetailsPreference,
     TvNotificationPreferences? defaultTvNotificationPrefs,
     bool? notifyPersonTvEpisodes,
+    bool? useDarkMode,
   }) async {
     debugPrint('[SettingsScreen] _updatePrefs called with notifyTV: $notifyTV');
     debugPrint('[SettingsScreen] Current preferences notifyTV: ${current.notifyTV}');
@@ -595,6 +618,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
       movieDetailsPreference: movieDetailsPreference ?? current.movieDetailsPreference,
       defaultTvNotificationPrefs: defaultTvNotificationPrefs ?? current.defaultTvNotificationPrefs,
       notifyPersonTvEpisodes: notifyPersonTvEpisodes ?? current.notifyPersonTvEpisodes,
+      useDarkMode: useDarkMode ?? current.useDarkMode,
     );
 
     debugPrint('[SettingsScreen] New preferences notifyTV: ${newPrefs.notifyTV}');

@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import '../../data/models/contributor.dart';
-import '../../core/constants.dart';
 import 'adaptive_tooltip_text.dart';
 
 void showSuccessSnackBar(

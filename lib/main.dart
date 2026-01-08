@@ -14,7 +14,6 @@ import 'data/models/notification_history.dart';
 import 'data/models/preferences.dart';
 import 'ui/screens/main_screen.dart';
 import 'ui/common/rate_limit_listener.dart';
-import 'data/services/notification_service.dart';
 import 'logic/background_service.dart';
 import 'package:flutter_phoenix/flutter_phoenix.dart';
 import 'providers/providers.dart';
@@ -148,19 +147,57 @@ class MyApp extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    return MaterialApp(
-      title: 'Filmmaker Alerts',
-      theme: ThemeData(
-        colorScheme: ColorScheme.fromSeed(seedColor: Colors.deepPurple),
-        useMaterial3: true,
-        snackBarTheme: const SnackBarThemeData(
-          behavior: SnackBarBehavior.floating,
-          // 80 bottom padding ensures it floats above the FAB (approx 72px height w/ padding)
-          insetPadding: EdgeInsets.fromLTRB(16, 0, 16, 80),
+    final prefsAsync = ref.watch(preferencesProvider);
+    
+    return prefsAsync.when(
+      data: (prefs) {
+        final useDarkMode = prefs.useDarkMode ?? false;
+        
+        return MaterialApp(
+          title: 'Filmmaker Alerts',
+          theme: ThemeData(
+            colorScheme: ColorScheme.fromSeed(seedColor: Colors.deepPurple),
+            useMaterial3: true,
+            snackBarTheme: const SnackBarThemeData(
+              behavior: SnackBarBehavior.floating,
+              insetPadding: EdgeInsets.fromLTRB(16, 0, 16, 80),
+            ),
+          ),
+          darkTheme: ThemeData(
+            colorScheme: ColorScheme.fromSeed(
+              seedColor: Colors.deepPurple,
+              brightness: Brightness.dark,
+            ),
+            useMaterial3: true,
+            snackBarTheme: const SnackBarThemeData(
+              behavior: SnackBarBehavior.floating,
+              insetPadding: EdgeInsets.fromLTRB(16, 0, 16, 80),
+            ),
+          ),
+          themeMode: useDarkMode ? ThemeMode.dark : ThemeMode.light,
+          home: const RateLimitListener(child: MainScreen()),
+        );
+      },
+      loading: () => MaterialApp(
+        title: 'Filmmaker Alerts',
+        theme: ThemeData(
+          colorScheme: ColorScheme.fromSeed(seedColor: Colors.deepPurple),
+          useMaterial3: true,
+        ),
+        home: const Scaffold(
+          body: Center(child: CircularProgressIndicator()),
         ),
       ),
-      // Main app screen
-      home: const RateLimitListener(child: MainScreen()),
+      error: (err, stack) => MaterialApp(
+        title: 'Filmmaker Alerts',
+        theme: ThemeData(
+          colorScheme: ColorScheme.fromSeed(seedColor: Colors.deepPurple),
+          useMaterial3: true,
+        ),
+        home: Scaffold(
+          body: Center(child: Text('Error: $err')),
+        ),
+      ),
     );
   }
 }

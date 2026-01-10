@@ -55,6 +55,102 @@ class _GroupedTvShowWidgetState extends State<GroupedTvShowWidget> {
                   fit: StackFit.expand,
                   children: [
                     _buildPoster(theme, latestEpisode),
+
+                    // Bottom Gradient Overlay
+                    Positioned(
+                      bottom: 0,
+                      left: 0,
+                      right: 0,
+                      height: 60,
+                      child: Container(
+                        decoration: BoxDecoration(
+                          gradient: LinearGradient(
+                            begin: Alignment.bottomCenter,
+                            end: Alignment.topCenter,
+                            colors: [
+                              Colors.black.withOpacity(0.8),
+                              Colors.transparent,
+                            ],
+                          ),
+                        ),
+                      ),
+                    ),
+
+                    // Ratings and Popularity in Bottom-Left
+                    Positioned(
+                      bottom: 8,
+                      left: 8,
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
+                        decoration: BoxDecoration(
+                          color: Colors.black.withOpacity(0.5),
+                          borderRadius: BorderRadius.circular(4),
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            if (!widget.hideRatings && latestEpisode.tmdbRating != null && !(latestEpisode.tmdbRating == 0.0 && latestEpisode.releaseDate != null && latestEpisode.releaseDate!.isAfter(DateTime.now())))
+                              Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  const Icon(
+                                    Icons.star,
+                                    size: 14,
+                                    color: Colors.amber,
+                                  ),
+                                  const SizedBox(width: 2),
+                                  Text(
+                                    latestEpisode.tmdbRating!.toStringAsFixed(1),
+                                    style: theme.textTheme.labelSmall?.copyWith(
+                                      color: Colors.white,
+                                      fontWeight: FontWeight.bold,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                              const SizedBox(width: 8),
+                            if (!widget.hidePopularity && latestEpisode.popularity != null && !(latestEpisode.popularity == 0.0 && latestEpisode.releaseDate != null && latestEpisode.releaseDate!.isAfter(DateTime.now())))
+                              Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Icon(
+                                    Icons.trending_up,
+                                    size: 14,
+                                    color: theme.colorScheme.primaryContainer,
+                                  ),
+                                  const SizedBox(width: 2),
+                                  Text(
+                                    latestEpisode.popularity!.toInt().toString(),
+                                    style: theme.textTheme.labelSmall?.copyWith(
+                                      color: Colors.white,
+                                      fontWeight: FontWeight.bold,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                          ],
+                        ),
+                      ),
+                    ),
+
+                    // Media Type Icon in Bottom-Right
+                    Positioned(
+                      bottom: 8,
+                      right: 8,
+                      child: Container(
+                        padding: const EdgeInsets.all(4),
+                        decoration: BoxDecoration(
+                          color: Colors.black.withOpacity(0.5),
+                          borderRadius: BorderRadius.circular(4),
+                        ),
+                        child: const Icon(
+                          Icons.tv,
+                          size: 16,
+                          color: Colors.white,
+                        ),
+                      ),
+                    ),
+
                     // Overlay when hovered
                     AnimatedOpacity(
                       opacity: _isHovered ? 1.0 : 0.0,
@@ -124,30 +220,56 @@ class _GroupedTvShowWidgetState extends State<GroupedTvShowWidget> {
 
               // Show details
               Padding(
-                padding: const EdgeInsets.all(12.0),
+                padding: const EdgeInsets.symmetric(horizontal: 10.0, vertical: 8.0),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    AdaptiveTooltipText(
-                      '📺 ${widget.showTitle}',
-                      style: theme.textTheme.titleSmall?.copyWith(
-                        fontWeight: FontWeight.bold,
+                    // Title Area with consistent height for up to 2 lines
+                    SizedBox(
+                      height: 32,
+                      child: AdaptiveTooltipText(
+                        widget.showTitle,
+                        style: theme.textTheme.titleSmall?.copyWith(
+                          fontWeight: FontWeight.bold,
+                          height: 1.1,
+                          fontSize: 12,
+                        ),
+                        maxLines: 2,
                       ),
-                      maxLines: 1,
                     ),
-                    const SizedBox(height: 4),
-                    Text(
-                      'Latest: ${DateFormat('MMM d').format(latestEpisode.releaseDate!)}',
-                      style: theme.textTheme.bodySmall?.copyWith(
-                        color: theme.colorScheme.onSurfaceVariant,
-                        fontSize: 10,
-                      ),
+                    
+                    const SizedBox(height: 2),
+                    
+                    Row(
+                      children: [
+                        Expanded(
+                          child: Text(
+                            'Latest: ${DateFormat('MMM d').format(latestEpisode.releaseDate!)}',
+                            style: theme.textTheme.bodySmall?.copyWith(
+                              color: theme.colorScheme.onSurfaceVariant,
+                              fontSize: 10,
+                            ),
+                          ),
+                        ),
+                        if (widget.onEpisodeWatchlist != null)
+                          SizedBox(
+                            height: 24,
+                            width: 24,
+                            child: IconButton(
+                              padding: EdgeInsets.zero,
+                              icon: const Icon(Icons.add_circle_outline, size: 20),
+                              onPressed: () => widget.onEpisodeWatchlist!(latestEpisode),
+                              tooltip: 'Add latest to watchlist',
+                              color: theme.colorScheme.primary,
+                            ),
+                          ),
+                      ],
                     ),
                     
                     // Roles Row (Truncated with tooltip)
                     if (latestEpisode.contributorRoles.isNotEmpty)
                       Padding(
-                        padding: const EdgeInsets.only(top: 6),
+                        padding: const EdgeInsets.only(top: 2),
                         child: AdaptiveTooltipText(
                           WorkSortingLogic.sortRoles(latestEpisode.contributorRoles).map((r) => r.role).join(', '),
                           style: theme.textTheme.labelSmall?.copyWith(
@@ -158,39 +280,6 @@ class _GroupedTvShowWidgetState extends State<GroupedTvShowWidget> {
                           maxLines: 1,
                         ),
                       ),
-                    // Rating row
-                    if ((!widget.hideRatings && latestEpisode.tmdbRating != null) || 
-                        widget.onEpisodeWatchlist != null)
-                    Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        const SizedBox(height: 8),
-                        Row(
-                          children: [
-                            if (!widget.hideRatings && latestEpisode.tmdbRating != null) ...[
-                              const Icon(Icons.star, size: 14, color: Colors.amber),
-                              const SizedBox(width: 2),
-                              Text(
-                                latestEpisode.tmdbRating!.toStringAsFixed(1),
-                                style: theme.textTheme.bodySmall?.copyWith(fontSize: 11),
-                              ),
-                            ],
-                            const Spacer(),
-                            if (widget.onEpisodeWatchlist != null)
-                              SizedBox(
-                                height: 24,
-                                width: 24,
-                                child: IconButton(
-                                  padding: EdgeInsets.zero,
-                                  icon: const Icon(Icons.add, size: 18),
-                                  onPressed: () => widget.onEpisodeWatchlist!(latestEpisode),
-                                  tooltip: 'Add latest to watchlist',
-                                ),
-                              ),
-                          ],
-                        ),
-                      ],
-                    ),
                   ],
                 ),
               ),

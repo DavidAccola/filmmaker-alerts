@@ -36,7 +36,7 @@ class PreferencesAdapter extends TypeAdapter<Preferences> {
       movieDetailsPreference: fields[16] as String?,
       defaultTvNotificationPrefs: fields[17] as TvNotificationPreferences?,
       notifyPersonTvEpisodes: fields[18] as bool?,
-      useDarkMode: (fields[19] as bool?) ?? false,
+      useDarkMode: fields[19] as bool?,
       hidePopularityInDetails: fields[20] as bool?,
       hideRatingsInDetails: fields[21] as bool?,
       streamingCountry: fields[22] as String?,

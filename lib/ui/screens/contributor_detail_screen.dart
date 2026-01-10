@@ -1,3 +1,4 @@
+import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:cached_network_image/cached_network_image.dart';
@@ -10,7 +11,7 @@ import '../../logic/work_sorting_logic.dart';
 import '../../logic/tv_show_display_logic.dart';
 import '../common/work_widget.dart';
 import '../common/tv_show_credits_widget.dart';
-import '../common/directed_episodes_widget.dart';
+import '../common/credit_expansion_section.dart';
 import '../common/external_navigation_utils.dart';
 import '../common/grouped_tv_show_widget.dart';
 import '../../core/tmdb_mapping.dart';
@@ -78,55 +79,82 @@ class _ContributorDetailScreenState extends ConsumerState<ContributorDetailScree
     );
   }
 
-  Widget _buildContent(prefs, ContributorDetail? detail) {
+  Widget _buildContent(Preferences prefs, ContributorDetail? detail) {
     return Column(
       children: [
-        // Header with contributor info and preference toggles
+        // Header with contributor info
         _buildHeader(prefs),
         
         // Main content sections
         Expanded(
-          child: SingleChildScrollView(
-            padding: const EdgeInsets.all(16.0),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                // TV Show Creator Credits Section (if applicable)
-                _buildTvShowCreatorSection(prefs, detail),
-                
-                // TV Show Episodes Directed Section (if applicable)
-                _buildTvShowEpisodesSection(prefs, detail),
-                
-                // Upcoming Works Section
-                _buildSection(
-                  title: 'Upcoming',
-                  icon: Icons.schedule,
-                  child: _buildUpcomingWorksSection(prefs, detail),
-                ),
-                
-                const SizedBox(height: 24),
-                
-                // Latest Releases Section
-                _buildSection(
-                  title: 'Latest Releases',
-                  icon: Icons.new_releases,
-                  child: _buildLatestReleasesSection(prefs, detail),
-                ),
-                
-                const SizedBox(height: 24),
-                
-                // Biggest Hits Section
-                _buildSection(
-                  title: 'Biggest Hits',
-                  icon: Icons.star,
-                  child: _buildBiggestHitsSection(prefs, detail),
-                ),
-                
-                const SizedBox(height: 32),
-                
-                // External Links
-                _buildExternalLinks(),
-              ],
+          child: ScrollConfiguration(
+            behavior: ScrollConfiguration.of(context).copyWith(
+              dragDevices: {
+                ...ScrollConfiguration.of(context).dragDevices,
+                ui.PointerDeviceKind.mouse,
+              },
+            ),
+            child: SingleChildScrollView(
+              padding: const EdgeInsets.all(16.0),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  // Shows Created Section (Full Row)
+                  _buildTvShowCreatorSection(prefs, detail),
+                  
+                  const SizedBox(height: 16),
+                  
+                  const SizedBox(height: 16),
+                  
+                  // Upcoming Works Section
+                  _buildSection(
+                    title: 'Upcoming',
+                    icon: Icons.schedule,
+                    child: _buildUpcomingWorksSection(prefs, detail),
+                  ),
+                  
+                  const SizedBox(height: 16),
+                  
+                  // Latest Releases Section
+                  _buildSection(
+                    title: 'Latest Releases',
+                    icon: Icons.new_releases,
+                    child: _buildLatestReleasesSection(prefs, detail),
+                  ),
+                  
+                  const SizedBox(height: 16),
+                  
+                  // Biggest Hits Section
+                  _buildSection(
+                    title: 'Biggest Hits',
+                    icon: Icons.star,
+                    child: _buildBiggestHitsSection(prefs, detail),
+                  ),
+
+                  const SizedBox(height: 16),
+
+                  // Television Credits Section
+                  _buildSection(
+                    title: 'Television Credits',
+                    icon: Icons.tv,
+                    child: _buildTvCreditsSection(prefs, detail),
+                  ),
+
+                  const SizedBox(height: 16),
+
+                  // Movie Credits Section
+                  _buildSection(
+                    title: 'Movie Credits',
+                    icon: Icons.movie,
+                    child: _buildMovieCreditsSection(prefs, detail),
+                  ),
+                  
+                  const SizedBox(height: 24),
+                  
+                  // External Links
+                  _buildExternalLinks(),
+                ],
+              ),
             ),
           ),
         ),
@@ -220,12 +248,12 @@ class _ContributorDetailScreenState extends ConsumerState<ContributorDetailScree
   }
 
   Widget _buildTvShowCreatorSection(Preferences prefs, ContributorDetail? detail) {
-    // TODO: Get actual contributor detail data from repository
-    // For now, return empty container - will be populated from ContributorDetail
+    if (detail == null) return const SizedBox.shrink();
+
+    // Pool from Hits and Latest, but only where role is creator
     final List<Work> allWorks = _filterByFollowedRoles(<Work>[
-      ...(detail?.biggestHits ?? []),
-      ...(detail?.latestReleases ?? []),
-      ...(detail?.upcomingWorks ?? []),
+      ...(detail.biggestHits),
+      ...(detail.latestReleases),
     ].toSet().toList());
     
     final tvCredits = TvShowDisplayLogic.separateTvShowCredits(allWorks);
@@ -242,25 +270,26 @@ class _ContributorDetailScreenState extends ConsumerState<ContributorDetailScree
       return b.releaseDate!.compareTo(a.releaseDate!);
     });
     
-    final hideExtra = (prefs.hidePopularityInDetails ?? false) && (prefs.hideRatingsInDetails ?? false);
-    final sectionHeight = hideExtra ? 330.0 : 400.0;
+    final sectionHeight = 330.0; // Increased to prevent overflows
 
     return Column(
       children: [
         _buildSection(
-          title: 'Created Shows',
+          title: 'Shows Created',
           icon: Icons.create,
-          child: SizedBox(
-            height: sectionHeight, 
-            child: ListView.builder(
+          child: _ShelfWithArrows(
+            height: sectionHeight,
+            builder: (context, controller) => ListView.builder(
+              controller: controller, // Injected controller
               scrollDirection: Axis.horizontal,
+              physics: const AlwaysScrollableScrollPhysics(),
               itemCount: sortedShows.length,
               itemBuilder: (context, index) {
                 final show = sortedShows[index];
                 return Padding(
                   padding: EdgeInsets.only(right: index < sortedShows.length - 1 ? 12 : 0),
                   child: SizedBox(
-                    width: 160,
+                    width: 150,
                     child: TvShowCreditsWidget(
                       show: show,
                       hidePopularity: prefs.hidePopularityInDetails ?? false,
@@ -274,44 +303,45 @@ class _ContributorDetailScreenState extends ConsumerState<ContributorDetailScree
             ),
           ),
         ),
-        const SizedBox(height: 24),
       ],
     );
   }
 
-  Widget _buildTvShowEpisodesSection(Preferences prefs, ContributorDetail? detail) {
-    // TODO: Get actual contributor detail data from repository
-    // For now, return empty container - will be populated from ContributorDetail
-    final List<Work> allWorks = _filterByFollowedRoles(<Work>[
-      ...(detail?.biggestHits ?? []),
-      ...(detail?.latestReleases ?? []),
-      ...(detail?.upcomingWorks ?? []),
-    ].toSet().toList());
-    
-    final tvCredits = TvShowDisplayLogic.separateTvShowCredits(allWorks);
-    final directedEpisodes = tvCredits['episodes'] ?? [];
-    
-    if (directedEpisodes.isEmpty) {
-      return const SizedBox.shrink();
-    }
-    
-    final sortedEpisodes = TvShowDisplayLogic.sortEpisodesByAirDate(directedEpisodes);
-    
-    return Column(
-      children: [
-        _buildSection(
-          title: 'Episodes Directed',
-          icon: Icons.videocam,
-          child: DirectedEpisodesWidget(
-            episodes: sortedEpisodes,
-            hidePopularity: prefs.hidePopularityInDetails ?? false,
-            hideRatings: prefs.hideRatingsInDetails ?? false,
-            onEpisodeTap: (episode) => _onWorkTapped(episode),
-            onAddToWatchlist: (episode) => _onAddToWatchlist(episode),
-          ),
-        ),
-        const SizedBox(height: 24),
-      ],
+  Widget _buildTvCreditsSection(Preferences prefs, ContributorDetail? detail) {
+    if (detail == null) return const SizedBox.shrink();
+    final allWorks = detail.allWorks ?? [];
+    debugPrint('[ContributorDetailScreen] Building TV Credits. allWorks count: ${allWorks.length}');
+    if (allWorks.isEmpty) return const SizedBox.shrink();
+
+    final tvWorks = allWorks.where((w) => w.type == WorkType.tvShow || w.type == WorkType.tvEpisode).toList();
+    debugPrint('[ContributorDetailScreen] Found ${tvWorks.length} TV works');
+    if (tvWorks.isEmpty) return const SizedBox.shrink();
+
+    return CreditExpansionSection(
+      works: tvWorks,
+      hideRatings: prefs.hideRatingsInDetails ?? false,
+      hidePopularity: prefs.hidePopularityInDetails ?? false,
+      onWorkTap: (work) => _onWorkTapped(work),
+      onAddToWatchlist: (work) => _onAddToWatchlist(work),
+    );
+  }
+
+  Widget _buildMovieCreditsSection(Preferences prefs, ContributorDetail? detail) {
+    if (detail == null) return const SizedBox.shrink();
+    final allWorks = detail.allWorks ?? [];
+    debugPrint('[ContributorDetailScreen] Building Movie Credits. allWorks count: ${allWorks.length}');
+    if (allWorks.isEmpty) return const SizedBox.shrink();
+
+    final movieWorks = allWorks.where((w) => w.type == WorkType.movie).toList();
+    debugPrint('[ContributorDetailScreen] Found ${movieWorks.length} Movie works');
+    if (movieWorks.isEmpty) return const SizedBox.shrink();
+
+    return CreditExpansionSection(
+      works: movieWorks,
+      hideRatings: prefs.hideRatingsInDetails ?? false,
+      hidePopularity: prefs.hidePopularityInDetails ?? false,
+      onWorkTap: (work) => _onWorkTapped(work),
+      onAddToWatchlist: (work) => _onAddToWatchlist(work),
     );
   }
 
@@ -331,20 +361,21 @@ class _ContributorDetailScreenState extends ConsumerState<ContributorDetailScree
       return a.releaseDate!.compareTo(b.releaseDate!); // Upcoming: Chronological (Soonest first)
     });
     
-    final hideExtra = (prefs.hidePopularityInDetails ?? false) && (prefs.hideRatingsInDetails ?? false);
-    final sectionHeight = hideExtra ? 330.0 : 400.0;
+    final sectionHeight = 330.0;
 
-    return SizedBox(
+    return _ShelfWithArrows(
       height: sectionHeight,
-      child: ListView.builder(
+      builder: (context, controller) => ListView.builder(
+        controller: controller,
         scrollDirection: Axis.horizontal,
+        physics: const AlwaysScrollableScrollPhysics(),
         itemCount: sortedWorks.length,
         itemBuilder: (context, index) {
           final work = sortedWorks[index];
           return Padding(
             padding: EdgeInsets.only(right: index < sortedWorks.length - 1 ? 12 : 0),
             child: SizedBox(
-              width: 160,
+              width: 150,
               child: WorkWidget(
                 work: work,
                 hidePopularity: prefs.hidePopularityInDetails ?? false,
@@ -404,12 +435,12 @@ class _ContributorDetailScreenState extends ConsumerState<ContributorDetailScree
       return dateB.compareTo(dateA);
     });
     
-    final hideExtra = (prefs.hidePopularityInDetails ?? false) && (prefs.hideRatingsInDetails ?? false);
-    final sectionHeight = hideExtra ? 330.0 : 400.0;
+    final sectionHeight = 330.0;
     
-    return SizedBox(
+    return _ShelfWithArrows(
       height: sectionHeight,
-      child: ListView.builder(
+      builder: (context, controller) => ListView.builder(
+        controller: controller,
         scrollDirection: Axis.horizontal,
         physics: const AlwaysScrollableScrollPhysics(), // Ensure swiping works
         itemCount: displayItems.length,
@@ -419,7 +450,7 @@ class _ContributorDetailScreenState extends ConsumerState<ContributorDetailScree
           return Padding(
             padding: EdgeInsets.only(right: index < displayItems.length - 1 ? 12 : 0),
             child: SizedBox(
-              width: 160,
+              width: 150,
               child: item is Work 
                 ? WorkWidget(
                     work: item,
@@ -459,20 +490,21 @@ class _ContributorDetailScreenState extends ConsumerState<ContributorDetailScree
       return b.releaseDate!.compareTo(a.releaseDate!); // Hits: Reverse Chronological (Recent first)
     });
     
-    final hideExtra = (prefs.hidePopularityInDetails ?? false) && (prefs.hideRatingsInDetails ?? false);
-    final sectionHeight = hideExtra ? 330.0 : 400.0;
+    final sectionHeight = 330.0;
     
-    return SizedBox(
+    return _ShelfWithArrows(
       height: sectionHeight,
-      child: ListView.builder(
+      builder: (context, controller) => ListView.builder(
+        controller: controller,
         scrollDirection: Axis.horizontal,
+        physics: const AlwaysScrollableScrollPhysics(),
         itemCount: sortedHits.length,
         itemBuilder: (context, index) {
           final work = sortedHits[index];
           return Padding(
             padding: EdgeInsets.only(right: index < rankedWorks.length - 1 ? 12 : 0),
             child: SizedBox(
-              width: 160,
+              width: 150,
               child: WorkWidget(
                 work: work,
                 hidePopularity: prefs.hidePopularityInDetails ?? false,
@@ -743,3 +775,116 @@ class _ContributorDetailScreenState extends ConsumerState<ContributorDetailScree
     ref.invalidate(preferencesProvider);
   }
 }
+
+class _ShelfWithArrows extends StatefulWidget {
+  final Widget Function(BuildContext, ScrollController) builder;
+  final double height;
+
+  const _ShelfWithArrows({required this.builder, required this.height});
+
+  @override
+  State<_ShelfWithArrows> createState() => _ShelfWithArrowsState();
+}
+
+class _ShelfWithArrowsState extends State<_ShelfWithArrows> {
+  final ScrollController _controller = ScrollController();
+  bool _showLeftArrow = false;
+  bool _showRightArrow = true;
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _scrollListener();
+    });
+    _controller.addListener(_scrollListener);
+  }
+
+  void _scrollListener() {
+    if (!_controller.hasClients) return;
+    setState(() {
+      _showLeftArrow = _controller.offset > 10;
+      _showRightArrow = _controller.offset < _controller.position.maxScrollExtent - 10;
+    });
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  void _scroll(double pixels) {
+    _controller.animateTo(
+      _controller.offset + pixels,
+      duration: const Duration(milliseconds: 300),
+      curve: Curves.easeInOut,
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      height: widget.height,
+      child: Stack(
+        children: [
+          // The actual scrollable list via builder
+          widget.builder(context, _controller),
+
+          // Left Arrow
+          if (_showLeftArrow)
+            Positioned(
+              left: 0,
+              top: 0,
+              bottom: 0,
+              child: Center(
+                child: Container(
+                  height: 40,
+                  width: 30,
+                  decoration: BoxDecoration(
+                    color: Colors.black45,
+                    borderRadius: const BorderRadius.horizontal(right: Radius.circular(20)),
+                  ),
+                  child: Material(
+                    color: Colors.transparent,
+                    child: InkWell(
+                      borderRadius: const BorderRadius.horizontal(right: Radius.circular(20)),
+                      onTap: () => _scroll(-150),
+                      child: const Icon(Icons.chevron_left, color: Colors.white, size: 20),
+                    ),
+                  ),
+                ),
+              ),
+            ),
+
+          // Right Arrow
+          if (_showRightArrow)
+            Positioned(
+              right: 0,
+              top: 0,
+              bottom: 0,
+              child: Center(
+                child: Container(
+                  height: 40,
+                  width: 30,
+                  decoration: BoxDecoration(
+                    color: Colors.black45,
+                    borderRadius: const BorderRadius.horizontal(left: Radius.circular(20)),
+                  ),
+                  child: Material(
+                    color: Colors.transparent,
+                    child: InkWell(
+                      borderRadius: const BorderRadius.horizontal(left: Radius.circular(20)),
+                      onTap: () => _scroll(150),
+                      child: const Icon(Icons.chevron_right, color: Colors.white, size: 20),
+                    ),
+                  ),
+                ),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+}
+

@@ -15,7 +15,8 @@ class TvShowDisplayLogic {
         // Check if this is a creator credit
         final isCreator = work.contributorRoles.any((role) => 
           role.role.toLowerCase() == 'creator' ||
-          role.department?.toLowerCase() == 'creator'
+          role.department?.toLowerCase() == 'creator' ||
+          role.role.toLowerCase() == 'created by'
         );
         
         if (isCreator) {
@@ -37,6 +38,37 @@ class TvShowDisplayLogic {
     return {
       'shows': shows,
       'episodes': episodes,
+    };
+  }
+
+  /// Groups works by department then by title
+  static Map<String, List<Work>> groupWorksByDepartment(List<Work> works) {
+    final grouped = <String, List<Work>>{};
+    
+    for (final work in works) {
+      for (final role in work.contributorRoles) {
+        final dept = role.department ?? (work.type == WorkType.movie ? 'Movie' : 'TV');
+        
+        if (!grouped.containsKey(dept)) {
+          grouped[dept] = [];
+        }
+        
+        // Avoid duplicate works in the same department
+        if (!grouped[dept]!.any((w) => w.tmdbId == work.tmdbId && w.type == work.type)) {
+          grouped[dept]!.add(work);
+        }
+      }
+    }
+    
+    // Sort departments by priority if needed, or alphabetically
+    return grouped;
+  }
+
+  /// Separates works into TV and Movie pools
+  static Map<String, List<Work>> separateCreditsByMediaType(List<Work> works) {
+    return {
+      'tv': works.where((w) => w.type == WorkType.tvShow || w.type == WorkType.tvEpisode).toList(),
+      'movie': works.where((w) => w.type == WorkType.movie).toList(),
     };
   }
 

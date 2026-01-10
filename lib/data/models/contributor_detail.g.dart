@@ -125,13 +125,14 @@ class WorkAdapter extends TypeAdapter<Work> {
       imdbId: fields[10] as String?,
       episodeNumber: fields[11] as int?,
       seasonNumber: fields[12] as int?,
+      status: fields[13] as String?,
     );
   }
 
   @override
   void write(BinaryWriter writer, Work obj) {
     writer
-      ..writeByte(13)
+      ..writeByte(14)
       ..writeByte(0)
       ..write(obj.tmdbId)
       ..writeByte(1)
@@ -157,7 +158,9 @@ class WorkAdapter extends TypeAdapter<Work> {
       ..writeByte(11)
       ..write(obj.episodeNumber)
       ..writeByte(12)
-      ..write(obj.seasonNumber);
+      ..write(obj.seasonNumber)
+      ..writeByte(13)
+      ..write(obj.status);
   }
 
   @override
@@ -190,6 +193,7 @@ class ContributorDetailAdapter extends TypeAdapter<ContributorDetail> {
       upcomingWorks: (fields[5] as List).cast<Work>(),
       latestReleases: (fields[6] as List).cast<Work>(),
       biggestHits: (fields[7] as List).cast<Work>(),
+      allWorks: (fields[9] as List?)?.cast<Work>(),
       lastUpdated: fields[8] as DateTime?,
     );
   }
@@ -197,7 +201,7 @@ class ContributorDetailAdapter extends TypeAdapter<ContributorDetail> {
   @override
   void write(BinaryWriter writer, ContributorDetail obj) {
     writer
-      ..writeByte(9)
+      ..writeByte(10)
       ..writeByte(0)
       ..write(obj.tmdbId)
       ..writeByte(1)
@@ -215,7 +219,9 @@ class ContributorDetailAdapter extends TypeAdapter<ContributorDetail> {
       ..writeByte(7)
       ..write(obj.biggestHits)
       ..writeByte(8)
-      ..write(obj.lastUpdated);
+      ..write(obj.lastUpdated)
+      ..writeByte(9)
+      ..write(obj.allWorks);
   }
 
   @override

@@ -134,6 +134,9 @@ class Work {
   @HiveField(12)
   final int? seasonNumber;
 
+  @HiveField(13)
+  final String? status;
+
   Work({
     required this.tmdbId,
     required this.title,
@@ -148,6 +151,7 @@ class Work {
     this.imdbId,
     this.episodeNumber,
     this.seasonNumber,
+    this.status,
   });
 
   @override
@@ -197,6 +201,9 @@ class ContributorDetail {
   @HiveField(8)
   final DateTime? lastUpdated;
 
+  @HiveField(9)
+  final List<Work>? allWorks;
+
   ContributorDetail({
     required this.tmdbId,
     required this.name,
@@ -206,6 +213,7 @@ class ContributorDetail {
     this.upcomingWorks = const [],
     this.latestReleases = const [],
     this.biggestHits = const [],
+    this.allWorks,
     this.lastUpdated,
   });
 }

@@ -65,7 +65,7 @@ class Preferences extends HiveObject {
   bool? notifyPersonTvEpisodes;
 
   @HiveField(19)
-  bool useDarkMode;
+  bool? useDarkMode;
 
   @HiveField(20)
   bool? hidePopularityInDetails;

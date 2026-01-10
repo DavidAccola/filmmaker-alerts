@@ -331,6 +331,14 @@ class ContributorLogic {
     for (final credit in allCredits) {
       if (credit == null || credit['id'] == null) continue;
       final id = credit['id'] as int;
+      final title = credit['title'] ?? credit['name'] ?? 'Unknown';
+      final status = credit['status'] as String?;
+      final releaseDate = credit['release_date'] ?? credit['first_air_date'] ?? credit['air_date'];
+      
+      if (title.toString().toLowerCase().contains('far cry')) {
+        debugPrint('[DEBUG] Far Cry credit found: id=$id, status=$status, releaseDate=$releaseDate');
+      }
+
       final mediaType = credit['media_type'] ?? (contributor.type == ContributorType.movie ? 'movie' : 'tv');
       final isEpisode = credit['episode_number'] != null;
       final key = '${mediaType}_${id}_$isEpisode';
@@ -385,14 +393,29 @@ class ContributorLogic {
         imdbId: first['external_ids']?['imdb_id'] ?? first['imdb_id'] as String?,
         seasonNumber: first['season_number'] as int?,
         episodeNumber: first['episode_number'] as int?,
+        status: first['status'] as String?,
       ));
     }
 
     final List<Work> allWorks = allWorksSet.toList();
 
-    // Separate upcoming vs past/present
-    final upcoming = allWorks.where((w) => w.releaseDate != null && w.releaseDate!.isAfter(now)).toList();
-    final past = allWorks.where((w) => w.releaseDate != null && !w.releaseDate!.isAfter(now)).toList();
+    // Requirements: Things in status of Planned or without release date go to Upcoming.
+    // Also including In Production and Post Production for consistency with "Upcoming"
+    final upcomingPoolStatuses = {'planned', 'in production', 'post production', 'rumored'};
+    
+    final upcoming = allWorks.where((w) {
+      final status = w.status?.toLowerCase() ?? '';
+      if (upcomingPoolStatuses.contains(status)) return true;
+      if (w.releaseDate == null && w.type != WorkType.tvEpisode) return true;
+      return w.releaseDate != null && w.releaseDate!.isAfter(now);
+    }).toList();
+
+    final past = allWorks.where((w) {
+      final status = w.status?.toLowerCase() ?? '';
+      if (upcomingPoolStatuses.contains(status)) return false;
+      if (w.releaseDate == null) return false;
+      return !w.releaseDate!.isAfter(now);
+    }).toList();
     
     // Use WorkSortingLogic to sort and limit
     var sortedUpcoming = WorkSortingLogic.sortUpcomingWorksChronologically(upcoming);
@@ -401,10 +424,16 @@ class ContributorLogic {
     // Filter out works that don't have both rating and popularity
     // ENHANCEMENT: Also filter out TV Episodes from Hits to avoid cluttering with 
     // every single directed episode when the show itself is a hit.
-    final worksWithMetrics = allWorks.where((work) => 
-      work.tmdbRating != null && work.popularity != null && work.type != WorkType.tvEpisode
-    ).toList();
+    // CRITICAL: Exclude Upcoming works from being ranked as Biggest Hits.
+    final worksWithMetrics = allWorks.where((work) {
+      final isUpcoming = upcoming.contains(work);
+      return !isUpcoming && work.tmdbRating != null && work.popularity != null && work.type != WorkType.tvEpisode;
+    }).toList();
+    
+    debugPrint('[ContributorLogic] Hits Pool: ${worksWithMetrics.length} works (Total allWorks: ${allWorks.length})');
     var sortedHits = WorkSortingLogic.rankBiggestHits(worksWithMetrics);
+
+    List<Work> finalAllWorks = allWorks;
 
     // ENHANCEMENT: Fetch latest episodes for top TV shows to enable grouping
     if (contributor.type == ContributorType.person) {
@@ -415,9 +444,12 @@ class ContributorLogic {
       ].toSet().take(10).toList(); // Include hits and increase limit
 
       if (relevantTvShows.isNotEmpty) {
-        debugPrint('[ContributorLogic] Enriched detail: Fetching episodes for ${relevantTvShows.length} shows');
+        debugPrint('[ContributorLogic] Enrichment: Fetching episodes for ${relevantTvShows.length} shows');
         for (final show in relevantTvShows) {
           try {
+            if (show.title.toLowerCase().contains('flag means death')) {
+              debugPrint('[DEBUG] Processing "Our Flag Means Death" for episodes');
+            }
             // First get show details to find seasons
             final details = await _tmdbService.getTvDetailsWithEpisodes(show.tmdbId);
             final List<Map<String, dynamic>> episodesToProcess = [];
@@ -434,30 +466,30 @@ class ContributorLogic {
 
             if (isDirectorOnShow && details['seasons'] != null) {
               final seasons = details['seasons'] as List;
-              // Get the most recent regular season
-              final regularSeasons = seasons.where((s) => (s['season_number'] ?? 0) > 0).toList();
-              if (regularSeasons.isNotEmpty) {
-                final lastSeason = regularSeasons.last;
-                final lastSeasonNum = lastSeason['season_number'] as int;
+              for (final season in seasons) {
+                final seasonNum = season['season_number'] as int? ?? 0;
+                if (seasonNum == 0) continue; // Skip specials usually
                 
-                debugPrint('[ContributorLogic] Fetching full season $lastSeasonNum for show ${show.title}');
-                final seasonDetails = await _tmdbService.getTvSeasonDetails(show.tmdbId, lastSeasonNum);
-                final seasonEpisodes = seasonDetails['episodes'] as List? ?? [];
-                
-                for (final epData in seasonEpisodes) {
-                  // Only add if not already in episodesToProcess (deduplicate by id)
-                  if (!episodesToProcess.any((e) => e['id'] == epData['id'])) {
-                    // Check if the contributor specifically directed THIS episode
-                    final epCrew = epData['crew'] as List? ?? [];
-                    final didDirectThisEpisode = epCrew.any((c) => 
-                      (c['id'] == contributor.tmdbId || c['name'] == contributor.name) &&
-                      (c['job']?.toString().toLowerCase() == 'director')
-                    );
-                    
-                    if (didDirectThisEpisode) {
-                      episodesToProcess.add(Map<String, dynamic>.from(epData));
+                debugPrint('[ContributorLogic] Fetching season $seasonNum for show ${show.title}');
+                try {
+                  final seasonDetails = await _tmdbService.getTvSeasonDetails(show.tmdbId, seasonNum);
+                  final seasonEpisodes = seasonDetails['episodes'] as List? ?? [];
+                  
+                  for (final epData in seasonEpisodes) {
+                    if (!episodesToProcess.any((e) => e['id'] == epData['id'])) {
+                      final epCrew = epData['crew'] as List? ?? [];
+                      final didDirectThisEpisode = epCrew.any((c) => 
+                        (c['id'] == contributor.tmdbId || c['name'] == contributor.name) &&
+                        (c['job']?.toString().toLowerCase() == 'director')
+                      );
+                      
+                      if (didDirectThisEpisode) {
+                        episodesToProcess.add(Map<String, dynamic>.from(epData));
+                      }
                     }
                   }
+                } catch (e) {
+                  debugPrint('[ContributorLogic] Error fetching season $seasonNum: $e');
                 }
               }
             }
@@ -530,6 +562,8 @@ class ContributorLogic {
           return true;
         }).toList();
         debugPrint('[ContributorLogic] Enrichment: filteredWorks count = ${filteredWorks.length}');
+        
+        finalAllWorks = filteredWorks;
 
         final upcomingEnriched = filteredWorks.where((w) {
           if (w.type == WorkType.tvShow && showsWithEpisodes.contains(w.title)) return false;
@@ -545,9 +579,15 @@ class ContributorLogic {
         sortedLatest = WorkSortingLogic.sortLatestReleasesReverseChronologically(pastEnriched);
         
         // For hits: Get top 100 hits. Sort by date for display.
-        final topHits = WorkSortingLogic.rankBiggestHits(filteredWorks);
+        // For hits: Get top 100 hits. Sort by date for display.
+        // Must exclude upcoming works from hits and creator shows fallback
+        final nonUpcomingFilteredWorks = filteredWorks.where((w) {
+          return !sortedUpcoming.any((u) => u.tmdbId == w.tmdbId && u.type == w.type);
+        }).toList();
+
+        final topHits = WorkSortingLogic.rankBiggestHits(nonUpcomingFilteredWorks);
         // Ensure ALL creator shows are in the pool if they weren't matched as hits (fallback)
-        final creatorShows = filteredWorks.where((w) {
+        final creatorShows = nonUpcomingFilteredWorks.where((w) {
           return w.type == WorkType.tvShow && w.contributorRoles.any((r) => 
             r.role.toLowerCase() == 'creator' || r.department?.toLowerCase() == 'creator'
           );
@@ -555,7 +595,7 @@ class ContributorLogic {
 
         // Merge hits and creator shows, uniquely
         final mergedHits = <Work>{...topHits, ...creatorShows}.toList();
-        debugPrint('[ContributorLogic] Final mergedHits count = ${mergedHits.length}');
+        debugPrint('[ContributorLogic] Enrichment: Final mergedHits count = ${mergedHits.length}');
 
         sortedHits = List<Work>.from(mergedHits)..sort((a, b) {
           if (a.releaseDate == null && b.releaseDate == null) return 0;
@@ -563,7 +603,38 @@ class ContributorLogic {
           if (b.releaseDate == null) return -1;
           return b.releaseDate!.compareTo(a.releaseDate!);
         });
+
+        // Update upcomingEnriched and pastEnriched logic to be as robust as the initial one
+        final upcomingPoolStatuses = {'planned', 'in production', 'post production', 'rumored'};
+        final finalUpcoming = filteredWorks.where((w) {
+          final status = w.status?.toLowerCase() ?? '';
+          if (upcomingPoolStatuses.contains(status)) return true;
+          if (w.releaseDate == null && w.type != WorkType.tvEpisode) return true;
+          return w.releaseDate != null && w.releaseDate!.isAfter(now);
+        }).toList();
+        
+        final finalPast = filteredWorks.where((w) {
+          final status = w.status?.toLowerCase() ?? '';
+          if (upcomingPoolStatuses.contains(status)) return false;
+          if (w.releaseDate == null) return false;
+          return !w.releaseDate!.isAfter(now);
+        }).toList();
+
+        sortedUpcoming = WorkSortingLogic.sortUpcomingWorksChronologically(finalUpcoming);
+        sortedLatest = WorkSortingLogic.sortLatestReleasesReverseChronologically(finalPast);
+        
+        debugPrint('[DEBUG] Enrichment Complete for ${contributor.name}: upcoming=${finalUpcoming.length}, past=${finalPast.length}');
+        for (var w in finalUpcoming) {
+          if (w.title.toLowerCase().contains('far cry')) {
+            debugPrint('[DEBUG] Enrichment: "Far Cry" correctly placed in UPCOMING. Status: ${w.status}, Date: ${w.releaseDate}');
+          }
+        }
       }
+    }
+
+    debugPrint('[ContributorLogic] Final Detail Construction: allWorks=${finalAllWorks.length}, upcoming=${sortedUpcoming.length}, hits=${sortedHits.length}');
+    if (finalAllWorks.isEmpty) {
+      debugPrint('[DEBUG] WARNING: finalAllWorks is EMPTY for ${contributor.name}');
     }
 
     final detail = ContributorDetail(
@@ -575,6 +646,7 @@ class ContributorLogic {
       upcomingWorks: sortedUpcoming,
       latestReleases: sortedLatest,
       biggestHits: sortedHits,
+      allWorks: finalAllWorks,
       lastUpdated: now,
     );
 

@@ -135,6 +135,9 @@ class Contributor extends HiveObject {
   @HiveField(14)
   String? nextEpisodeDate;
 
+  @HiveField(15)
+  String? imdbId;
+
   Contributor({
     required this.tmdbId,
     required this.name,
@@ -151,5 +154,6 @@ class Contributor extends HiveObject {
     this.showStatus,
     this.totalSeasons,
     this.nextEpisodeDate,
+    this.imdbId,
   });
 }

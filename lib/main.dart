@@ -8,6 +8,8 @@ import 'package:workmanager/workmanager.dart';
 import 'package:window_manager/window_manager.dart';
 import 'core/constants.dart';
 import 'data/models/contributor.dart';
+import 'data/models/contributor_detail.dart';
+import 'data/models/movie_detail.dart';
 import 'data/models/movie_cache_entry.dart';
 import 'data/models/tv_cache.dart';
 import 'data/models/notification_history.dart';
@@ -68,12 +70,28 @@ void main() async {
   Hive.registerAdapter(MovieCacheEntryAdapter());
   Hive.registerAdapter(TvShowCacheEntryAdapter());
   Hive.registerAdapter(TvEpisodeCacheEntryAdapter());
+  
+  // Register new contributor details adapters
+  Hive.registerAdapter(WorkTypeAdapter());
+  Hive.registerAdapter(ReleaseTypeAdapter());
+  Hive.registerAdapter(StreamingTypeAdapter());
+  Hive.registerAdapter(ContributorRoleAdapter());
+  Hive.registerAdapter(StreamingOptionAdapter());
+  Hive.registerAdapter(WorkAdapter());
+  Hive.registerAdapter(ContributorDetailAdapter());
+  Hive.registerAdapter(CastMemberAdapter());
+  Hive.registerAdapter(CrewMemberAdapter());
+  Hive.registerAdapter(MovieDetailAdapter());
 
   // 4. Open Boxes
   await Hive.openBox<Contributor>(AppConstants.contributorsBox);
   await Hive.openBox<Preferences>(AppConstants.preferencesBox);
   await Hive.openBox<NotificationHistoryEntry>(AppConstants.historyBox);
   await Hive.openBox<MovieCacheEntry>(AppConstants.movieCacheBox);
+  
+  // Open new boxes for contributor details
+  await Hive.openBox<ContributorDetail>(AppConstants.contributorDetailsBox);
+  await Hive.openBox<MovieDetail>(AppConstants.movieDetailsBox);
 
   // 5. Initialize Riverpod Container
   final container = ProviderContainer();

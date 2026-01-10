@@ -6,6 +6,8 @@ import 'package:filmmaker_alerts/data/repositories/preferences_repository.dart';
 import 'package:filmmaker_alerts/data/repositories/history_repository.dart';
 import 'package:filmmaker_alerts/data/repositories/movie_cache_repository.dart';
 import 'package:filmmaker_alerts/data/repositories/tv_cache_repository.dart';
+import 'package:filmmaker_alerts/data/repositories/contributor_detail_repository.dart';
+import 'package:filmmaker_alerts/data/repositories/movie_detail_repository.dart';
 import 'package:filmmaker_alerts/data/services/notification_service.dart';
 
 @GenerateMocks([
@@ -16,6 +18,8 @@ import 'package:filmmaker_alerts/data/services/notification_service.dart';
   HistoryRepository,
   MovieCacheRepository,
   TvCacheRepository,
+  ContributorDetailRepository,
+  MovieDetailRepository,
   NotificationService,
 ])
 void main() {}

@@ -264,7 +264,9 @@ class _SearchResultsScreenState extends ConsumerState<SearchResultsScreen> {
                         width: 50,
                         height: 75,
                         decoration: BoxDecoration(
-                          color: theme.colorScheme.surfaceContainerHighest,
+                          color: contributor.type == ContributorType.company 
+                              ? Colors.white 
+                              : theme.colorScheme.surfaceContainerHighest,
                           borderRadius: BorderRadius.circular(4.0),
                         ),
                         clipBehavior: Clip.antiAlias,

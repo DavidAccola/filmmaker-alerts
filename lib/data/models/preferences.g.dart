@@ -36,13 +36,17 @@ class PreferencesAdapter extends TypeAdapter<Preferences> {
       movieDetailsPreference: fields[16] as String?,
       defaultTvNotificationPrefs: fields[17] as TvNotificationPreferences?,
       notifyPersonTvEpisodes: fields[18] as bool?,
+      useDarkMode: (fields[19] as bool?) ?? false,
+      hidePopularityInDetails: fields[20] as bool?,
+      hideRatingsInDetails: fields[21] as bool?,
+      streamingCountry: fields[22] as String?,
     );
   }
 
   @override
   void write(BinaryWriter writer, Preferences obj) {
     writer
-      ..writeByte(19)
+      ..writeByte(23)
       ..writeByte(0)
       ..write(obj.notifyTheatre)
       ..writeByte(1)
@@ -80,7 +84,15 @@ class PreferencesAdapter extends TypeAdapter<Preferences> {
       ..writeByte(17)
       ..write(obj.defaultTvNotificationPrefs)
       ..writeByte(18)
-      ..write(obj.notifyPersonTvEpisodes);
+      ..write(obj.notifyPersonTvEpisodes)
+      ..writeByte(19)
+      ..write(obj.useDarkMode)
+      ..writeByte(20)
+      ..write(obj.hidePopularityInDetails)
+      ..writeByte(21)
+      ..write(obj.hideRatingsInDetails)
+      ..writeByte(22)
+      ..write(obj.streamingCountry);
   }
 
   @override

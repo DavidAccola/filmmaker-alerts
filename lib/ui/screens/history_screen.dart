@@ -8,6 +8,7 @@ import '../../data/models/notification_history.dart';
 import '../../providers/providers.dart';
 import '../common/snackbar_utils.dart';
 import '../common/tmdb_attribution.dart';
+import '../common/external_navigation_utils.dart';
 import '../../utils/debug_logger.dart';
 
 class HistoryScreen extends ConsumerWidget {
@@ -857,40 +858,17 @@ class HistoryScreen extends ConsumerWidget {
       isTV = entry.notificationEvents.any((e) => e.releaseType.toLowerCase() == 'tv');
     }
     
-    final typePath = isTV ? 'tv' : 'movie';
-    final url = 'https://www.themoviedb.org/$typePath/$tmdbId';
-    
-    final uri = Uri.parse(url);
-    if (await canLaunchUrl(uri)) {
-      await launchUrl(uri, mode: LaunchMode.externalApplication);
-    } else {
-      if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Could not open TMDB page')),
-        );
-      }
-    }
+    await ExternalNavigationUtils.launchTmdbTitle(
+      context,
+      tmdbId: tmdbId,
+      isTV: isTV,
+    );
   }
 
   Future<void> _launchImdbUrl(BuildContext context, String imdbId) async {
-    if (imdbId.isNotEmpty) {
-      final url = 'https://www.imdb.com/title/$imdbId/';
-      final uri = Uri.parse(url);
-      if (await canLaunchUrl(uri)) {
-        await launchUrl(uri, mode: LaunchMode.externalApplication);
-      } else {
-        if (context.mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('Could not open IMDb page')),
-          );
-        }
-      }
-    } else {
-      if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('IMDb ID not available for this movie')),
-        );
-      }
-    }
+    await ExternalNavigationUtils.launchImdbTitle(
+      context,
+      imdbId: imdbId,
+    );
   }
 }

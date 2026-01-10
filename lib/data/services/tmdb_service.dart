@@ -118,6 +118,14 @@ class TmdbService {
   }
 
   // --- Details & Credits ---
+  Future<Map<String, dynamic>> getPersonDetails(int id) async {
+    final endpoint = '/person/$id';
+    final params = {'append_to_response': 'external_ids'};
+    _logApiCall(endpoint, params);
+    final response = await _dio.get(endpoint, queryParameters: params);
+    return response.data;
+  }
+
   Future<Map<String, dynamic>> getPersonCombinedCredits(int id) async {
     final endpoint = '/person/$id/combined_credits';
     _logApiCall(endpoint);

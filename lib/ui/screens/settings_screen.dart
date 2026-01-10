@@ -81,6 +81,8 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                     const SizedBox(height: 24),
                     _buildSearchSection(context, ref, prefs),
                     const SizedBox(height: 24),
+                    _buildStreamingSection(context, ref, prefs),
+                    const SizedBox(height: 24),
                     _buildMaintenanceSection(context, ref, prefs),
                     if (_showDebug) ...[
                       const SizedBox(height: 24),
@@ -194,6 +196,110 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
         ],
       ),
     );
+  }
+
+  Widget _buildStreamingSection(BuildContext context, WidgetRef ref, Preferences prefs) {
+    final countryCode = prefs.streamingCountry ?? 'US';
+    final countryName = _getCountryName(countryCode);
+
+    return _buildCard(
+      context,
+      title: 'Streaming Options',
+      icon: Icons.ondemand_video_outlined,
+      child: Column(
+        children: [
+          ListTile(
+            leading: const Icon(Icons.public),
+            title: const Text('Streaming Country'),
+            subtitle: Text(countryName),
+            trailing: const Icon(Icons.chevron_right),
+            dense: true,
+            onTap: () => _showCountrySelectionDialog(context, ref, prefs),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            'Select your country to see streaming availability from JustWatch',
+            style: Theme.of(context).textTheme.bodySmall?.copyWith(
+              color: Theme.of(context).colorScheme.onSurfaceVariant,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _showCountrySelectionDialog(BuildContext context, WidgetRef ref, Preferences prefs) {
+    final countries = _getAvailableCountries();
+    final currentCountry = prefs.streamingCountry ?? 'US';
+
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Select Streaming Country'),
+        content: SizedBox(
+          width: double.maxFinite,
+          child: ListView.builder(
+            itemCount: countries.length,
+            itemBuilder: (context, index) {
+              final entry = countries.entries.elementAt(index);
+              final code = entry.key;
+              final name = entry.value;
+
+              return RadioListTile<String>(
+                title: Text(name),
+                value: code,
+                groupValue: currentCountry,
+                onChanged: (value) {
+                  Navigator.of(context).pop();
+                  if (value != null) {
+                    _updatePrefs(ref, prefs, streamingCountry: value);
+                  }
+                },
+              );
+            },
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(),
+            child: const Text('Cancel'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  String _getCountryName(String countryCode) {
+    final countries = _getAvailableCountries();
+    return countries[countryCode] ?? countryCode;
+  }
+
+  Map<String, String> _getAvailableCountries() {
+    // Common countries supported by JustWatch
+    return {
+      'US': 'United States',
+      'GB': 'United Kingdom',
+      'CA': 'Canada',
+      'AU': 'Australia',
+      'DE': 'Germany',
+      'FR': 'France',
+      'IT': 'Italy',
+      'ES': 'Spain',
+      'NL': 'Netherlands',
+      'SE': 'Sweden',
+      'NO': 'Norway',
+      'DK': 'Denmark',
+      'FI': 'Finland',
+      'PL': 'Poland',
+      'BR': 'Brazil',
+      'MX': 'Mexico',
+      'JP': 'Japan',
+      'IN': 'India',
+      'KR': 'South Korea',
+      'SG': 'Singapore',
+      'NZ': 'New Zealand',
+      'ZA': 'South Africa',
+    };
   }
 
   Widget _buildDebugSection(BuildContext context, WidgetRef ref, Preferences prefs) {
@@ -315,6 +421,31 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
             trailing: const Icon(Icons.chevron_right),
             dense: true,
             onTap: () => _showMovieDetailsDialog(context, ref, prefs),
+          ),
+          const Divider(),
+          ListTile(
+            leading: const Icon(Icons.refresh_outlined),
+            title: const Text('Refresh Contributor Details'),
+            subtitle: const Text('Force a full refresh of all filmmaker credits and hits'),
+            dense: true,
+            onTap: () async {
+              try {
+                final logic = ref.read(contributorLogicProvider);
+                await logic.clearAllContributorDetails();
+                
+                if (context.mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(content: Text('Detail cache cleared. Entering a contributor screen will now fetch fresh data.')),
+                  );
+                }
+              } catch (e) {
+                if (context.mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(content: Text('Error clearing cache: $e')),
+                  );
+                }
+              }
+            },
           ),
           const Divider(),
           ListTile(
@@ -595,6 +726,9 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     TvNotificationPreferences? defaultTvNotificationPrefs,
     bool? notifyPersonTvEpisodes,
     bool? useDarkMode,
+    bool? hidePopularityInDetails,
+    bool? hideRatingsInDetails,
+    String? streamingCountry,
   }) async {
     debugPrint('[SettingsScreen] _updatePrefs called with notifyTV: $notifyTV');
     debugPrint('[SettingsScreen] Current preferences notifyTV: ${current.notifyTV}');
@@ -619,6 +753,9 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
       defaultTvNotificationPrefs: defaultTvNotificationPrefs ?? current.defaultTvNotificationPrefs,
       notifyPersonTvEpisodes: notifyPersonTvEpisodes ?? current.notifyPersonTvEpisodes,
       useDarkMode: useDarkMode ?? current.useDarkMode,
+      hidePopularityInDetails: hidePopularityInDetails ?? current.hidePopularityInDetails,
+      hideRatingsInDetails: hideRatingsInDetails ?? current.hideRatingsInDetails,
+      streamingCountry: streamingCountry ?? current.streamingCountry,
     );
 
     debugPrint('[SettingsScreen] New preferences notifyTV: ${newPrefs.notifyTV}');

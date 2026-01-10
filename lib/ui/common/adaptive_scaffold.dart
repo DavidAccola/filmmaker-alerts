@@ -5,6 +5,7 @@ class AdaptiveScaffold extends StatelessWidget {
   final int selectedIndex;
   final ValueChanged<int> onDestinationSelected;
   final List<NavigationDestination> destinations;
+  final Widget? trailing;
 
   const AdaptiveScaffold({
     super.key,
@@ -12,6 +13,7 @@ class AdaptiveScaffold extends StatelessWidget {
     required this.selectedIndex,
     required this.onDestinationSelected,
     required this.destinations,
+    this.trailing,
   });
 
   @override
@@ -45,6 +47,7 @@ class AdaptiveScaffold extends StatelessWidget {
                       label: Text(d.label),
                     );
                   }).toList(),
+                  trailing: trailing,
                 ),
                 const VerticalDivider(thickness: 1, width: 1),
                 Expanded(child: body),

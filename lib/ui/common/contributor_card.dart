@@ -303,7 +303,9 @@ class _ContributorCardState extends State<ContributorCard> {
                       key: ValueKey('${widget.contributor.tmdbId}_${mainImagePath ?? 'placeholder'}_$_keyCounter'),
                       width: 90,
                       height: double.infinity,
-                      color: theme.colorScheme.surfaceContainerHighest, // Background for 'contain' fit
+                      color: widget.contributor.type == ContributorType.company 
+                          ? Colors.white 
+                          : theme.colorScheme.surfaceContainerHighest, // Background for 'contain' fit
                       child: mainImagePath != null
                           ? CachedNetworkImage(
                               imageUrl: 'https://image.tmdb.org/t/p/w200$mainImagePath',

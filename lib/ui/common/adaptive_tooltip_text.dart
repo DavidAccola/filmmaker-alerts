@@ -58,7 +58,9 @@ class AdaptiveTooltipText extends StatelessWidget {
       textAlign: textAlign ?? TextAlign.start,
     )..layout(maxWidth: width);
 
-    final bool isTruncated = textPainter.didExceedMaxLines;
+    // More robust truncation check
+    final bool isTruncated = textPainter.didExceedMaxLines || 
+                           (maxLines == 1 && textPainter.width >= width);
 
     final Widget textWidget = Text.rich(
       span,
@@ -71,7 +73,7 @@ class AdaptiveTooltipText extends StatelessWidget {
     if (isTruncated) {
       return Tooltip(
         message: customTooltip ?? span.toPlainText(),
-        waitDuration: const Duration(milliseconds: 250),
+        waitDuration: const Duration(milliseconds: 200),
         child: textWidget,
       );
     }

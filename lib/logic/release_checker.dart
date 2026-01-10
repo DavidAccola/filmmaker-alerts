@@ -12,7 +12,11 @@ import '../data/repositories/tv_cache_repository.dart';
 import '../data/services/tmdb_service.dart';
 import '../core/tmdb_mapping.dart';
 import '../data/models/tv_cache.dart';
+import '../data/models/contributor_detail.dart';
+import '../data/repositories/contributor_detail_repository.dart';
 import 'tv_efficiency_upgrade.dart';
+import 'work_sorting_logic.dart';
+import 'tv_show_display_logic.dart';
 
 class ReleaseChecker {
   final TmdbService _tmdbService;
@@ -21,6 +25,7 @@ class ReleaseChecker {
   final HistoryRepository _historyRepository;
   final MovieCacheRepository _movieCacheRepository;
   final TvCacheRepository _tvCacheRepository;
+  final ContributorDetailRepository? _contributorDetailRepository;
   
   // TV Efficiency Optimization
   late final TvEfficiencyUpgrade _tvEfficiency;
@@ -37,8 +42,9 @@ class ReleaseChecker {
     this._preferencesRepository,
     this._historyRepository,
     this._movieCacheRepository,
-    this._tvCacheRepository,
-  ) {
+    this._tvCacheRepository, {
+    ContributorDetailRepository? contributorDetailRepository,
+  }) : _contributorDetailRepository = contributorDetailRepository {
     _tvEfficiency = TvEfficiencyUpgrade(_tmdbService);
   }
 
@@ -154,9 +160,23 @@ class ReleaseChecker {
         
         // Fetch Credits based on type
         if (contributor.type == ContributorType.person) {
+          // Fetch person details to get IMDB ID
+          final personDetails = await _tmdbService.getPersonDetails(contributor.tmdbId);
+          final imdbId = personDetails['external_ids']?['imdb_id'];
+          
+          // Update contributor with IMDB ID if not already set
+          if (imdbId != null && imdbId.isNotEmpty && (contributor.imdbId == null || contributor.imdbId!.isEmpty)) {
+            contributor.imdbId = imdbId;
+            await _contributorRepository.updateContributor(contributor);
+            debugPrint('[ReleaseChecker] DEBUG: ${contributor.name} - Stored IMDB ID: $imdbId');
+          }
+          
           final data = await _tmdbService.getPersonCombinedCredits(contributor.tmdbId);
           credits = [...(data['cast'] ?? []), ...(data['crew'] ?? [])];
           debugPrint('[ReleaseChecker] DEBUG: ${contributor.name} - Fetched ${credits.length} total credits (${(data['cast'] ?? []).length} cast, ${(data['crew'] ?? []).length} crew)');
+          
+          // Update contributor detail with all fetched credits
+          await _updateContributorDetail(contributor, credits);
           
           // Debug: Log TV credits
           final tvCredits = credits.where((c) => c['media_type'] == 'tv').toList();
@@ -169,10 +189,21 @@ class ReleaseChecker {
           final movies = await _tmdbService.getCompanyCredits(contributor.tmdbId, 'movie', since: startDateStr);
           final tv = await _tmdbService.getCompanyCredits(contributor.tmdbId, 'tv', since: startDateStr);
           credits = [...(movies['results'] ?? []), ...(tv['results'] ?? [])];
+          
+          // For companies, also fetch top works to ensure the detail screen is well-populated
+          final topWorksResponse = await _tmdbService.getCompanyTopWorks(contributor.tmdbId);
+          final topWorks = topWorksResponse['results'] as List? ?? [];
+          
+          // Combine check-window credits with top works for the detail update
+          final detailCredits = [...credits, ...topWorks];
+          await _updateContributorDetail(contributor, detailCredits);
         } else if (contributor.type == ContributorType.movie) {
              // Treat the movie itself as the credit
              credits = [await _tmdbService.getMovieDetails(contributor.tmdbId)];
              debugPrint('[ReleaseChecker] Movie ${contributor.name} details: ${credits.first}');
+             
+             // Update detail for the movie itself
+             await _updateContributorDetail(contributor, credits);
         }
 
         // --- GROUPING & OPTIMIZATION ---
@@ -526,6 +557,29 @@ class ReleaseChecker {
         }
         
         debugPrint('[ReleaseChecker] DEBUG: Got TV details for "${tvShow.name}": ${showDetails.keys.toList()}');
+        
+        // Update contributor detail for the TV Show itself
+        final List<Map<String, dynamic>> showCredits = [];
+        if (showDetails['next_episode_to_air'] != null) {
+          final nextEp = Map<String, dynamic>.from(showDetails['next_episode_to_air']);
+          nextEp['media_type'] = 'tv';
+          // Format title to include show name and episode code
+          nextEp['name'] = '${showDetails['name']} - S${nextEp['season_number'].toString().padLeft(2, '0')}E${nextEp['episode_number'].toString().padLeft(2, '0')} - ${nextEp['name']}';
+          showCredits.add(nextEp);
+        }
+        if (showDetails['last_episode_to_air'] != null) {
+          final lastEp = Map<String, dynamic>.from(showDetails['last_episode_to_air']);
+          lastEp['media_type'] = 'tv';
+          lastEp['name'] = '${showDetails['name']} - S${lastEp['season_number'].toString().padLeft(2, '0')}E${lastEp['episode_number'].toString().padLeft(2, '0')} - ${lastEp['name']}';
+          showCredits.add(lastEp);
+        }
+        
+        // Also add the show itself as a Work so it can show up in hits/releases
+        final showAsWork = Map<String, dynamic>.from(showDetails);
+        showAsWork['media_type'] = 'tv';
+        showCredits.add(showAsWork);
+        
+        await _updateContributorDetail(tvShow, showCredits);
         
         // Cache the show details
         await _tvCacheRepository.addOrUpdateShow(TvShowCacheEntry(
@@ -1479,5 +1533,180 @@ class ReleaseChecker {
     } else {
       return 'Regular Episode';
     }
+  }
+
+  /// Private helper to update cached contributor details
+  Future<void> _updateContributorDetail(Contributor contributor, List<dynamic> allCredits) async {
+    if (_contributorDetailRepository == null) {
+      debugPrint('[ReleaseChecker] ContributorDetailRepository is null, skipping detail update for ${contributor.name}');
+      return;
+    }
+
+    debugPrint('[ReleaseChecker] Updating contributor detail for ${contributor.name} (${contributor.tmdbId}) with ${allCredits.length} credits');
+
+    final now = DateTime.now();
+    final List<Work> allWorks = [];
+    
+    // Group credits by ID to combine roles (e.g. Director and Writer on same film)
+    final Map<int, List<dynamic>> groupedCredits = {};
+    for (final credit in allCredits) {
+      if (credit == null || credit['id'] == null) continue;
+      final id = credit['id'] as int;
+      groupedCredits.putIfAbsent(id, () => []).add(credit);
+    }
+
+    for (final entry in groupedCredits.entries) {
+      final id = entry.key;
+      final credits = entry.value;
+      final first = credits.first;
+      
+      final mediaType = first['media_type'] as String?;
+      
+      // Determine work type
+      WorkType workType;
+      if (mediaType == 'tv') {
+        // Check if it's an episode (has episode_number)
+        if (first['episode_number'] != null) {
+          workType = WorkType.tvEpisode;
+        } else {
+          workType = WorkType.tvShow;
+        }
+      } else {
+        workType = WorkType.movie;
+      }
+      
+      // Release dates can be under various keys depending on API endpoint
+      final releaseDateStr = (first['release_date'] ?? first['first_air_date'] ?? first['air_date']) as String?;
+      DateTime? releaseDate;
+      if (releaseDateStr != null && releaseDateStr.isNotEmpty) {
+        // Only take the YYYY-MM-DD part
+        final datePart = releaseDateStr.length >= 10 ? releaseDateStr.substring(0, 10) : releaseDateStr;
+        releaseDate = DateTime.tryParse(datePart);
+      }
+
+      final roles = credits.map((c) => ContributorRole(
+        contributorId: contributor.tmdbId,
+        contributorName: contributor.name,
+        role: (c['job'] ?? c['character'] ?? (contributor.type == ContributorType.movie ? 'Movie' : (c['media_type'] == 'tv' ? 'TV Show' : 'Cast/Crew'))) as String,
+        department: c['department'] as String?,
+        character: c['character'] as String?,
+      )).toList();
+
+      allWorks.add(Work(
+        tmdbId: id,
+        title: (first['title'] ?? first['name'] ?? 'Unknown') as String,
+        posterPath: first['poster_path'] ?? first['still_path'] as String?,
+        releaseDate: releaseDate,
+        type: workType,
+        tmdbRating: (first['vote_average'] as num?)?.toDouble(),
+        popularity: (first['popularity'] as num?)?.toDouble(),
+        contributorRoles: roles,
+        imdbId: first['external_ids']?['imdb_id'] ?? first['imdb_id'] as String?,
+        seasonNumber: first['season_number'] as int?,
+        episodeNumber: first['episode_number'] as int?,
+      ));
+    }
+
+    // Separate upcoming vs past/present
+    // For "upcoming", we want future dates
+    final upcoming = allWorks.where((w) => w.releaseDate != null && w.releaseDate!.isAfter(now)).toList();
+    // For "latest", we want past or present dates
+    final past = allWorks.where((w) => w.releaseDate != null && !w.releaseDate!.isAfter(now)).toList();
+    
+    // Use WorkSortingLogic to sort and limit
+    var sortedUpcoming = WorkSortingLogic.sortUpcomingWorksChronologically(upcoming);
+    var sortedLatest = WorkSortingLogic.sortLatestReleasesReverseChronologically(past);
+    var sortedHits = WorkSortingLogic.rankBiggestHits(allWorks);
+
+    // ENHANCEMENT: Fetch latest episodes for top TV shows to enable grouping
+    if (contributor.type == ContributorType.person) {
+      final List<Work> relevantTvShows = [
+        ...sortedUpcoming.where((w) => w.type == WorkType.tvShow),
+        ...sortedLatest.where((w) => w.type == WorkType.tvShow),
+        ...sortedHits.where((w) => w.type == WorkType.tvShow),
+      ].toSet().take(10).toList();
+
+      if (relevantTvShows.isNotEmpty) {
+        debugPrint('[ReleaseChecker] Enriched detail: Fetching latest episodes for ${relevantTvShows.length} shows');
+        for (final show in relevantTvShows) {
+          try {
+            final details = await _tmdbService.getTvDetailsWithEpisodes(show.tmdbId);
+            final List<Map<String, dynamic>> episodes = [];
+            if (details['next_episode_to_air'] != null) episodes.add(Map<String, dynamic>.from(details['next_episode_to_air']));
+            if (details['last_episode_to_air'] != null) episodes.add(Map<String, dynamic>.from(details['last_episode_to_air']));
+
+            for (final ep in episodes) {
+              final airDateStr = ep['air_date'] as String?;
+              DateTime? airDate;
+              if (airDateStr != null && airDateStr.isNotEmpty) {
+                airDate = DateTime.tryParse(airDateStr);
+              }
+
+              allWorks.add(Work(
+                tmdbId: ep['id'],
+                title: '${show.title} - S${ep['season_number'].toString().padLeft(2, '0')}E${ep['episode_number'].toString().padLeft(2, '0')} - ${ep['name']}',
+                posterPath: ep['still_path'] ?? show.posterPath,
+                releaseDate: airDate,
+                type: WorkType.tvEpisode,
+                tmdbRating: (ep['vote_average'] as num?)?.toDouble(),
+                popularity: show.popularity,
+                contributorRoles: show.contributorRoles,
+                imdbId: show.imdbId,
+                seasonNumber: ep['season_number'],
+                episodeNumber: ep['episode_number'],
+              ));
+            }
+          } catch (e) {
+            debugPrint('[ReleaseChecker] Error fetching episodes for show ${show.title}: $e');
+          }
+        }
+
+        // Re-sort everything after adding episodes and filter out duplicates
+        final allWorksEnriched = List<Work>.from(allWorks);
+        
+        // Logical de-duplication: If we have episodes for a show, remove the generic show entry from history/hits
+        final Set<String> showsWithEpisodes = allWorksEnriched
+            .where((w) => w.type == WorkType.tvEpisode)
+            .map((w) => TvShowDisplayLogic.extractShowTitle(w.title))
+            .toSet();
+        
+        final filteredWorks = allWorksEnriched.where((w) {
+          if (w.type == WorkType.tvShow) {
+            return !showsWithEpisodes.contains(w.title);
+          }
+          return true;
+        }).toList();
+
+        final upcomingEnriched = filteredWorks.where((w) => w.releaseDate != null && w.releaseDate!.isAfter(now)).toList();
+        final pastEnriched = filteredWorks.where((w) => w.releaseDate != null && !w.releaseDate!.isAfter(now)).toList();
+        
+        sortedUpcoming = WorkSortingLogic.sortUpcomingWorksChronologically(upcomingEnriched);
+        sortedLatest = WorkSortingLogic.sortLatestReleasesReverseChronologically(pastEnriched);
+        
+        // For hits: Get top hits FIRST, then filter and sort by date
+        final topHits = WorkSortingLogic.rankBiggestHits(filteredWorks);
+        sortedHits = List<Work>.from(topHits)..sort((a, b) {
+          if (a.releaseDate == null && b.releaseDate == null) return 0;
+          if (a.releaseDate == null) return 1;
+          if (b.releaseDate == null) return -1;
+          return b.releaseDate!.compareTo(a.releaseDate!);
+        });
+      }
+    }
+
+    final detail = ContributorDetail(
+      tmdbId: contributor.tmdbId,
+      name: contributor.name,
+      profilePath: contributor.profilePath,
+      imdbId: contributor.imdbId,
+      type: contributor.type,
+      upcomingWorks: sortedUpcoming,
+      latestReleases: sortedLatest,
+      biggestHits: sortedHits,
+      lastUpdated: now,
+    );
+
+    await _contributorDetailRepository!.cacheContributorDetail(detail);
+    debugPrint('[ReleaseChecker] Successfully cached contributor detail for ${contributor.name}');
   }
 }

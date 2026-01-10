@@ -12,6 +12,7 @@ import 'add_contributor_screen.dart';
 import 'history_screen.dart';
 import 'home_screen.dart';
 import 'debug_screen.dart';
+import 'settings_screen.dart';
 import 'package:flutter_phoenix/flutter_phoenix.dart';
 import 'package:flutter/foundation.dart';
 
@@ -29,6 +30,7 @@ class _MainScreenState extends ConsumerState<MainScreen> with WindowListener {
     HomeScreen(),
     HistoryScreen(),
     DebugScreen(),
+    SettingsScreen(),
   ];
 
   @override
@@ -146,7 +148,6 @@ class _MainScreenState extends ConsumerState<MainScreen> with WindowListener {
                   notifyForDepartments: selectedDepts,
                   availableDepartments: availableRoles,
                   knownFor: contributor.knownFor,
-                  allRolesSelected: allSelected,
                 );
 
                 await logic.updateContributorRoles(enrichedForUpdate, selectedDepts);
@@ -226,6 +227,11 @@ class _MainScreenState extends ConsumerState<MainScreen> with WindowListener {
               icon: Icon(Icons.bug_report_outlined),
               selectedIcon: Icon(Icons.bug_report),
               label: 'Debug',
+            ),
+            NavigationDestination(
+              icon: Icon(Icons.settings_outlined),
+              selectedIcon: Icon(Icons.settings),
+              label: 'Settings',
             ),
           ],
           body: _screens[selectedIndex],

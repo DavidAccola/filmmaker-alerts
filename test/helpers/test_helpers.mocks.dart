@@ -7,22 +7,28 @@ import 'dart:async' as _i5;
 
 import 'package:dio/dio.dart' as _i2;
 import 'package:filmmaker_alerts/data/models/contributor.dart' as _i7;
+import 'package:filmmaker_alerts/data/models/contributor_detail.dart' as _i16;
 import 'package:filmmaker_alerts/data/models/movie_cache_entry.dart' as _i12;
+import 'package:filmmaker_alerts/data/models/movie_detail.dart' as _i18;
 import 'package:filmmaker_alerts/data/models/notification_history.dart' as _i10;
 import 'package:filmmaker_alerts/data/models/preferences.dart' as _i3;
 import 'package:filmmaker_alerts/data/models/tv_cache.dart' as _i14;
+import 'package:filmmaker_alerts/data/repositories/contributor_detail_repository.dart'
+    as _i15;
 import 'package:filmmaker_alerts/data/repositories/contributor_repository.dart'
     as _i6;
 import 'package:filmmaker_alerts/data/repositories/history_repository.dart'
     as _i9;
 import 'package:filmmaker_alerts/data/repositories/movie_cache_repository.dart'
     as _i11;
+import 'package:filmmaker_alerts/data/repositories/movie_detail_repository.dart'
+    as _i17;
 import 'package:filmmaker_alerts/data/repositories/preferences_repository.dart'
     as _i8;
 import 'package:filmmaker_alerts/data/repositories/tv_cache_repository.dart'
     as _i13;
 import 'package:filmmaker_alerts/data/services/notification_service.dart'
-    as _i15;
+    as _i19;
 import 'package:filmmaker_alerts/data/services/tmdb_service.dart' as _i4;
 import 'package:mockito/mockito.dart' as _i1;
 
@@ -258,6 +264,17 @@ class MockTmdbService extends _i1.Mock implements _i4.TmdbService {
       ) as _i5.Future<Map<String, dynamic>>);
 
   @override
+  _i5.Future<Map<String, dynamic>> getPersonDetails(int? id) =>
+      (super.noSuchMethod(
+        Invocation.method(
+          #getPersonDetails,
+          [id],
+        ),
+        returnValue:
+            _i5.Future<Map<String, dynamic>>.value(<String, dynamic>{}),
+      ) as _i5.Future<Map<String, dynamic>>);
+
+  @override
   _i5.Future<Map<String, dynamic>> getPersonCombinedCredits(int? id) =>
       (super.noSuchMethod(
         Invocation.method(
@@ -340,6 +357,70 @@ class MockTmdbService extends _i1.Mock implements _i4.TmdbService {
         returnValue:
             _i5.Future<Map<String, dynamic>>.value(<String, dynamic>{}),
       ) as _i5.Future<Map<String, dynamic>>);
+
+  @override
+  _i5.Future<Map<String, dynamic>> getTvDetailsBasic(int? id) =>
+      (super.noSuchMethod(
+        Invocation.method(
+          #getTvDetailsBasic,
+          [id],
+        ),
+        returnValue:
+            _i5.Future<Map<String, dynamic>>.value(<String, dynamic>{}),
+      ) as _i5.Future<Map<String, dynamic>>);
+
+  @override
+  _i5.Future<Map<String, dynamic>> getTvDetailsWithEpisodes(int? id) =>
+      (super.noSuchMethod(
+        Invocation.method(
+          #getTvDetailsWithEpisodes,
+          [id],
+        ),
+        returnValue:
+            _i5.Future<Map<String, dynamic>>.value(<String, dynamic>{}),
+      ) as _i5.Future<Map<String, dynamic>>);
+
+  @override
+  _i5.Future<Map<String, dynamic>> getTvDetailsOptimized(int? id) =>
+      (super.noSuchMethod(
+        Invocation.method(
+          #getTvDetailsOptimized,
+          [id],
+        ),
+        returnValue:
+            _i5.Future<Map<String, dynamic>>.value(<String, dynamic>{}),
+      ) as _i5.Future<Map<String, dynamic>>);
+
+  @override
+  _i5.Future<List<_i4.TvShowCandidate>> filterTvShowCandidates(
+          List<int>? showIds) =>
+      (super.noSuchMethod(
+        Invocation.method(
+          #filterTvShowCandidates,
+          [showIds],
+        ),
+        returnValue: _i5.Future<List<_i4.TvShowCandidate>>.value(
+            <_i4.TvShowCandidate>[]),
+      ) as _i5.Future<List<_i4.TvShowCandidate>>);
+
+  @override
+  _i5.Future<List<Map<String, dynamic>>> getTvNewEpisodesEfficient(
+    int? showId,
+    String? startDate,
+    String? endDate,
+  ) =>
+      (super.noSuchMethod(
+        Invocation.method(
+          #getTvNewEpisodesEfficient,
+          [
+            showId,
+            startDate,
+            endDate,
+          ],
+        ),
+        returnValue: _i5.Future<List<Map<String, dynamic>>>.value(
+            <Map<String, dynamic>>[]),
+      ) as _i5.Future<List<Map<String, dynamic>>>);
 
   @override
   _i5.Future<Map<String, dynamic>> getTvSeasonDetails(
@@ -1483,11 +1564,184 @@ class MockTvCacheRepository extends _i1.Mock implements _i13.TvCacheRepository {
       ) as _i5.Future<void>);
 }
 
+/// A class which mocks [ContributorDetailRepository].
+///
+/// See the documentation for Mockito's code generation for more information.
+class MockContributorDetailRepository extends _i1.Mock
+    implements _i15.ContributorDetailRepository {
+  MockContributorDetailRepository() {
+    _i1.throwOnMissingStub(this);
+  }
+
+  @override
+  _i16.ContributorDetail? getContributorDetail(int? tmdbId) =>
+      (super.noSuchMethod(Invocation.method(
+        #getContributorDetail,
+        [tmdbId],
+      )) as _i16.ContributorDetail?);
+
+  @override
+  _i5.Future<void> cacheContributorDetail(_i16.ContributorDetail? detail) =>
+      (super.noSuchMethod(
+        Invocation.method(
+          #cacheContributorDetail,
+          [detail],
+        ),
+        returnValue: _i5.Future<void>.value(),
+        returnValueForMissingStub: _i5.Future<void>.value(),
+      ) as _i5.Future<void>);
+
+  @override
+  bool isCached(int? tmdbId) => (super.noSuchMethod(
+        Invocation.method(
+          #isCached,
+          [tmdbId],
+        ),
+        returnValue: false,
+      ) as bool);
+
+  @override
+  _i5.Future<void> clearOldCache() => (super.noSuchMethod(
+        Invocation.method(
+          #clearOldCache,
+          [],
+        ),
+        returnValue: _i5.Future<void>.value(),
+        returnValueForMissingStub: _i5.Future<void>.value(),
+      ) as _i5.Future<void>);
+
+  @override
+  List<_i16.ContributorDetail> getAllCachedDetails() => (super.noSuchMethod(
+        Invocation.method(
+          #getAllCachedDetails,
+          [],
+        ),
+        returnValue: <_i16.ContributorDetail>[],
+      ) as List<_i16.ContributorDetail>);
+
+  @override
+  List<_i16.ContributorDetail> getCachedDetailsForContributors(
+          List<int>? tmdbIds) =>
+      (super.noSuchMethod(
+        Invocation.method(
+          #getCachedDetailsForContributors,
+          [tmdbIds],
+        ),
+        returnValue: <_i16.ContributorDetail>[],
+      ) as List<_i16.ContributorDetail>);
+
+  @override
+  _i5.Future<void> deleteContributorDetail(int? tmdbId) => (super.noSuchMethod(
+        Invocation.method(
+          #deleteContributorDetail,
+          [tmdbId],
+        ),
+        returnValue: _i5.Future<void>.value(),
+        returnValueForMissingStub: _i5.Future<void>.value(),
+      ) as _i5.Future<void>);
+
+  @override
+  _i5.Future<void> clearAllCache() => (super.noSuchMethod(
+        Invocation.method(
+          #clearAllCache,
+          [],
+        ),
+        returnValue: _i5.Future<void>.value(),
+        returnValueForMissingStub: _i5.Future<void>.value(),
+      ) as _i5.Future<void>);
+}
+
+/// A class which mocks [MovieDetailRepository].
+///
+/// See the documentation for Mockito's code generation for more information.
+class MockMovieDetailRepository extends _i1.Mock
+    implements _i17.MovieDetailRepository {
+  MockMovieDetailRepository() {
+    _i1.throwOnMissingStub(this);
+  }
+
+  @override
+  _i18.MovieDetail? getMovieDetail(int? tmdbId) =>
+      (super.noSuchMethod(Invocation.method(
+        #getMovieDetail,
+        [tmdbId],
+      )) as _i18.MovieDetail?);
+
+  @override
+  _i5.Future<void> cacheMovieDetail(_i18.MovieDetail? detail) =>
+      (super.noSuchMethod(
+        Invocation.method(
+          #cacheMovieDetail,
+          [detail],
+        ),
+        returnValue: _i5.Future<void>.value(),
+        returnValueForMissingStub: _i5.Future<void>.value(),
+      ) as _i5.Future<void>);
+
+  @override
+  bool isCached(int? tmdbId) => (super.noSuchMethod(
+        Invocation.method(
+          #isCached,
+          [tmdbId],
+        ),
+        returnValue: false,
+      ) as bool);
+
+  @override
+  _i5.Future<void> clearOldCache() => (super.noSuchMethod(
+        Invocation.method(
+          #clearOldCache,
+          [],
+        ),
+        returnValue: _i5.Future<void>.value(),
+        returnValueForMissingStub: _i5.Future<void>.value(),
+      ) as _i5.Future<void>);
+
+  @override
+  List<_i18.MovieDetail> getAllCachedDetails() => (super.noSuchMethod(
+        Invocation.method(
+          #getAllCachedDetails,
+          [],
+        ),
+        returnValue: <_i18.MovieDetail>[],
+      ) as List<_i18.MovieDetail>);
+
+  @override
+  List<_i18.MovieDetail> getCachedDetailsForMovies(List<int>? tmdbIds) =>
+      (super.noSuchMethod(
+        Invocation.method(
+          #getCachedDetailsForMovies,
+          [tmdbIds],
+        ),
+        returnValue: <_i18.MovieDetail>[],
+      ) as List<_i18.MovieDetail>);
+
+  @override
+  _i5.Future<void> deleteMovieDetail(int? tmdbId) => (super.noSuchMethod(
+        Invocation.method(
+          #deleteMovieDetail,
+          [tmdbId],
+        ),
+        returnValue: _i5.Future<void>.value(),
+        returnValueForMissingStub: _i5.Future<void>.value(),
+      ) as _i5.Future<void>);
+
+  @override
+  _i5.Future<void> clearAllCache() => (super.noSuchMethod(
+        Invocation.method(
+          #clearAllCache,
+          [],
+        ),
+        returnValue: _i5.Future<void>.value(),
+        returnValueForMissingStub: _i5.Future<void>.value(),
+      ) as _i5.Future<void>);
+}
+
 /// A class which mocks [NotificationService].
 ///
 /// See the documentation for Mockito's code generation for more information.
 class MockNotificationService extends _i1.Mock
-    implements _i15.NotificationService {
+    implements _i19.NotificationService {
   MockNotificationService() {
     _i1.throwOnMissingStub(this);
   }

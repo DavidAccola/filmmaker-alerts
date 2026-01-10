@@ -9,7 +9,11 @@ import '../common/department_selection_dialog.dart';
 import '../common/snackbar_utils.dart';
 import '../common/tmdb_attribution.dart';
 import 'add_contributor_screen.dart';
+import 'history_screen.dart';
+import 'debug_screen.dart';
 import 'settings_screen.dart';
+import 'contributor_detail_screen.dart';
+import 'movie_detail_screen.dart';
 
 class HomeScreen extends ConsumerStatefulWidget {
   const HomeScreen({super.key});
@@ -28,6 +32,30 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     _scrollController.dispose();
     super.dispose();
   }
+
+  void _navigateToDetail(Contributor contributor) {
+    if (contributor.type == ContributorType.person ||
+        contributor.type == ContributorType.company ||
+        contributor.type == ContributorType.collection) {
+      Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (context) => ContributorDetailScreen(contributor: contributor),
+        ),
+      );
+    } else if (contributor.type == ContributorType.movie) {
+      Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (context) => MovieDetailScreen(
+            movieId: contributor.tmdbId,
+            movieTitle: contributor.name,
+          ),
+        ),
+      );
+    }
+  }
+
 
   @override
   Widget build(BuildContext context) {
@@ -136,11 +164,6 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
             loading: () => const SizedBox.shrink(),
             error: (_, __) => const SizedBox.shrink(),
           ),
-          IconButton(
-            icon: const Icon(Icons.settings),
-            tooltip: 'App Settings',
-            onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const SettingsScreen())),
-          ),
         ],
       ),
       body: contributorsAsync.when(
@@ -220,7 +243,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                                       ? _newContributorKey 
                                       : ValueKey(contributor.tmdbId),
                                   contributor: contributor,
-                                  onTap: () {},
+                                  onTap: () => _navigateToDetail(contributor),
                                   onRemove: () => _removeContributor(context, ref, contributor),
                                   onEditRoles: () => _editRoles(context, ref, contributor),
                                 );
@@ -241,7 +264,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                                       ? _newContributorKey 
                                       : ValueKey(contributor.tmdbId),
                                   contributor: contributor,
-                                  onTap: () {},
+                                  onTap: () => _navigateToDetail(contributor),
                                   onRemove: () => _removeContributor(context, ref, contributor),
                                   onEditRoles: () => _editRoles(context, ref, contributor),
                                 ),
@@ -279,7 +302,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                                   ? _newContributorKey 
                                   : ValueKey(contributor.tmdbId),
                               contributor: contributor,
-                              onTap: () {},
+                              onTap: () => _navigateToDetail(contributor),
                               onRemove: () => _removeContributor(context, ref, contributor),
                               onEditRoles: () => _editRoles(context, ref, contributor),
                             );
@@ -310,7 +333,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                             ? _newContributorKey 
                             : ValueKey(contributor.tmdbId),
                         contributor: contributor,
-                        onTap: () {},
+                        onTap: () => _navigateToDetail(contributor),
                         onRemove: () => _removeContributor(context, ref, contributor),
                         onEditRoles: () => _editRoles(context, ref, contributor),
                       ),

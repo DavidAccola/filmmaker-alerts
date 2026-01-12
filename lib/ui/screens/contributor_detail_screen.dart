@@ -14,6 +14,7 @@ import '../common/tv_show_credits_widget.dart';
 import '../common/credit_expansion_section.dart';
 import '../common/external_navigation_utils.dart';
 import '../common/grouped_tv_show_widget.dart';
+import 'package:collection/collection.dart';
 import '../../core/tmdb_mapping.dart';
 
 class ContributorDetailScreen extends ConsumerStatefulWidget {
@@ -30,6 +31,15 @@ class ContributorDetailScreen extends ConsumerStatefulWidget {
 
 class _ContributorDetailScreenState extends ConsumerState<ContributorDetailScreen> {
   @override
+  void initState() {
+    super.initState();
+    // Force a fresh check on screen load to ensure categorization is up to date
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      ref.read(contributorLogicProvider).refreshContributorDetail(widget.contributor);
+    });
+  }
+
+  @override
   Widget build(BuildContext context) {
     final prefsAsync = ref.watch(preferencesProvider);
     final detailAsync = ref.watch(contributorDetailProvider(widget.contributor.tmdbId));
@@ -43,18 +53,11 @@ class _ContributorDetailScreenState extends ConsumerState<ContributorDetailScree
               icon: const Icon(Icons.display_settings),
               tooltip: 'Display Settings',
               onSelected: (value) {
-                if (value == 'toggle_popularity') {
-                  _updatePreference('hidePopularityInDetails', !(prefs.hidePopularityInDetails ?? false));
-                } else if (value == 'toggle_ratings') {
+                if (value == 'toggle_ratings') {
                   _updatePreference('hideRatingsInDetails', !(prefs.hideRatingsInDetails ?? false));
                 }
               },
               itemBuilder: (context) => [
-                CheckedPopupMenuItem(
-                  value: 'toggle_popularity',
-                  checked: !(prefs.hidePopularityInDetails ?? false),
-                  child: const Text('Show Popularity'),
-                ),
                 CheckedPopupMenuItem(
                   value: 'toggle_ratings',
                   checked: !(prefs.hideRatingsInDetails ?? false),
@@ -99,11 +102,6 @@ class _ContributorDetailScreenState extends ConsumerState<ContributorDetailScree
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  // Shows Created Section (Full Row)
-                  _buildTvShowCreatorSection(prefs, detail),
-                  
-                  const SizedBox(height: 16),
-                  
                   const SizedBox(height: 16),
                   
                   // Upcoming Works Section
@@ -133,21 +131,13 @@ class _ContributorDetailScreenState extends ConsumerState<ContributorDetailScree
 
                   const SizedBox(height: 16),
 
-                  // Television Credits Section
-                  _buildSection(
-                    title: 'Television Credits',
-                    icon: Icons.tv,
-                    child: _buildTvCreditsSection(prefs, detail),
-                  ),
+                  // Television Credits Section (integrates Shows Created)
+                  _buildTvCreditsSection(prefs, detail),
 
                   const SizedBox(height: 16),
 
                   // Movie Credits Section
-                  _buildSection(
-                    title: 'Movie Credits',
-                    icon: Icons.movie,
-                    child: _buildMovieCreditsSection(prefs, detail),
-                  ),
+                  _buildMovieCreditsSection(prefs, detail),
                   
                   const SizedBox(height: 24),
                   
@@ -292,7 +282,6 @@ class _ContributorDetailScreenState extends ConsumerState<ContributorDetailScree
                     width: 150,
                     child: TvShowCreditsWidget(
                       show: show,
-                      hidePopularity: prefs.hidePopularityInDetails ?? false,
                       hideRatings: prefs.hideRatingsInDetails ?? false,
                       onTap: () => _onWorkTapped(show),
                       onAddToWatchlist: () => _onAddToWatchlist(show),
@@ -310,17 +299,16 @@ class _ContributorDetailScreenState extends ConsumerState<ContributorDetailScree
   Widget _buildTvCreditsSection(Preferences prefs, ContributorDetail? detail) {
     if (detail == null) return const SizedBox.shrink();
     final allWorks = detail.allWorks ?? [];
-    debugPrint('[ContributorDetailScreen] Building TV Credits. allWorks count: ${allWorks.length}');
     if (allWorks.isEmpty) return const SizedBox.shrink();
 
     final tvWorks = allWorks.where((w) => w.type == WorkType.tvShow || w.type == WorkType.tvEpisode).toList();
-    debugPrint('[ContributorDetailScreen] Found ${tvWorks.length} TV works');
     if (tvWorks.isEmpty) return const SizedBox.shrink();
 
     return CreditExpansionSection(
+      title: 'Television Credits',
+      icon: Icons.tv,
       works: tvWorks,
       hideRatings: prefs.hideRatingsInDetails ?? false,
-      hidePopularity: prefs.hidePopularityInDetails ?? false,
       onWorkTap: (work) => _onWorkTapped(work),
       onAddToWatchlist: (work) => _onAddToWatchlist(work),
     );
@@ -337,9 +325,10 @@ class _ContributorDetailScreenState extends ConsumerState<ContributorDetailScree
     if (movieWorks.isEmpty) return const SizedBox.shrink();
 
     return CreditExpansionSection(
+      title: 'Movie Credits',
+      icon: Icons.movie,
       works: movieWorks,
       hideRatings: prefs.hideRatingsInDetails ?? false,
-      hidePopularity: prefs.hidePopularityInDetails ?? false,
       onWorkTap: (work) => _onWorkTapped(work),
       onAddToWatchlist: (work) => _onAddToWatchlist(work),
     );
@@ -378,7 +367,6 @@ class _ContributorDetailScreenState extends ConsumerState<ContributorDetailScree
               width: 150,
               child: WorkWidget(
                 work: work,
-                hidePopularity: prefs.hidePopularityInDetails ?? false,
                 hideRatings: prefs.hideRatingsInDetails ?? false,
                 onTap: () => _onWorkTapped(work),
                 onAddToWatchlist: () => _onAddToWatchlist(work),
@@ -454,18 +442,18 @@ class _ContributorDetailScreenState extends ConsumerState<ContributorDetailScree
               child: item is Work 
                 ? WorkWidget(
                     work: item,
-                    hidePopularity: prefs.hidePopularityInDetails ?? false,
                     hideRatings: prefs.hideRatingsInDetails ?? false,
                     onTap: () => _onWorkTapped(item),
                     onAddToWatchlist: () => _onAddToWatchlist(item),
+                    applyAgeStyling: true,
                   )
                 : GroupedTvShowWidget(
                     showTitle: item['title'],
                     episodes: item['episodes'],
-                    hidePopularity: prefs.hidePopularityInDetails ?? false,
                     hideRatings: prefs.hideRatingsInDetails ?? false,
                     onTap: () => _onWorkTapped(item['episodes'].first), // Tap show = tap latest ep for now
                     onEpisodeWatchlist: (ep) => _onAddToWatchlist(ep),
+                    applyAgeStyling: true,
                   ),
             ),
           );
@@ -482,13 +470,8 @@ class _ContributorDetailScreenState extends ConsumerState<ContributorDetailScree
       return _buildPlaceholderContent('Biggest hits will appear here');
     }
     
+    // rankBiggestHits already returns works sorted by hit score (descending)
     final rankedWorks = WorkSortingLogic.rankBiggestHits(biggestHits);
-    final sortedHits = List<Work>.from(rankedWorks)..sort((a, b) {
-      if (a.releaseDate == null && b.releaseDate == null) return 0;
-      if (a.releaseDate == null) return 1;
-      if (b.releaseDate == null) return -1;
-      return b.releaseDate!.compareTo(a.releaseDate!); // Hits: Reverse Chronological (Recent first)
-    });
     
     final sectionHeight = 330.0;
     
@@ -498,16 +481,15 @@ class _ContributorDetailScreenState extends ConsumerState<ContributorDetailScree
         controller: controller,
         scrollDirection: Axis.horizontal,
         physics: const AlwaysScrollableScrollPhysics(),
-        itemCount: sortedHits.length,
+        itemCount: rankedWorks.length,
         itemBuilder: (context, index) {
-          final work = sortedHits[index];
+          final work = rankedWorks[index];
           return Padding(
             padding: EdgeInsets.only(right: index < rankedWorks.length - 1 ? 12 : 0),
             child: SizedBox(
               width: 150,
               child: WorkWidget(
                 work: work,
-                hidePopularity: prefs.hidePopularityInDetails ?? false,
                 hideRatings: prefs.hideRatingsInDetails ?? false,
                 onTap: () => _onWorkTapped(work),
                 onAddToWatchlist: () => _onAddToWatchlist(work),
@@ -887,4 +869,3 @@ class _ShelfWithArrowsState extends State<_ShelfWithArrows> {
     );
   }
 }
-

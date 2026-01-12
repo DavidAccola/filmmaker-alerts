@@ -5,269 +5,282 @@ import '../../data/models/contributor_detail.dart';
 import '../../logic/work_sorting_logic.dart';
 import 'adaptive_tooltip_text.dart';
 
-class WorkWidget extends StatelessWidget {
+class WorkWidget extends StatefulWidget {
   final Work work;
-  final bool hidePopularity;
   final bool hideRatings;
   final VoidCallback? onTap;
   final VoidCallback? onAddToWatchlist;
+  final bool applyAgeStyling;
 
   const WorkWidget({
     super.key,
     required this.work,
-    this.hidePopularity = false,
     this.hideRatings = false,
     this.onTap,
     this.onAddToWatchlist,
+    this.applyAgeStyling = false,
   });
+
+  @override
+  State<WorkWidget> createState() => _WorkWidgetState();
+}
+
+class _WorkWidgetState extends State<WorkWidget> {
+  bool _isHovered = false;
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final work = widget.work;
     
-    return Card(
-      clipBehavior: Clip.antiAlias,
-      child: InkWell(
-        onTap: onTap,
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            // Poster image with Type Icon
-            // Poster image area
-            SizedBox(
-              height: 230,
-              width: double.infinity,
-              child: Stack(
-                fit: StackFit.expand,
-                children: [
-                  // Fallback white background for transparent posters (logos)
-                  Container(color: Colors.white),
-                  work.posterPath != null
-                      ? CachedNetworkImage(
-                          imageUrl: 'https://image.tmdb.org/t/p/w300${work.posterPath}',
-                          fit: BoxFit.cover,
-                          placeholder: (context, url) => Container(
-                            color: theme.colorScheme.surfaceContainerHighest,
-                            child: const Center(
-                              child: CircularProgressIndicator(),
-                            ),
-                          ),
-                          errorWidget: (context, url, error) => Container(
-                            color: theme.colorScheme.surfaceContainerHighest,
-                            child: const Center(
-                              child: Icon(Icons.movie, size: 40),
-                            ),
-                          ),
-                        )
-                      : Container(
-                          color: theme.colorScheme.surfaceContainerHighest,
-                          child: const Center(
-                            child: Icon(Icons.movie, size: 40),
-                          ),
-                        ),
-                  
-                  // Bottom Gradient Overlay for readability
-                  Positioned(
-                    bottom: 0,
-                    left: 0,
-                    right: 0,
-                    height: 60,
-                    child: Container(
-                      decoration: BoxDecoration(
-                        gradient: LinearGradient(
-                          begin: Alignment.bottomCenter,
-                          end: Alignment.topCenter,
-                          colors: [
-                            Colors.black.withOpacity(0.8),
-                            Colors.transparent,
-                          ],
-                        ),
-                      ),
-                    ),
-                  ),
+    // Check if work is more than 3 years old
+    bool isOld = false;
+    if (widget.applyAgeStyling && work.releaseDate != null) {
+      final threeYearsAgo = DateTime.now().subtract(const Duration(days: 365 * 3));
+      isOld = work.releaseDate!.isBefore(threeYearsAgo);
+    }
 
-                  // Ratings and Popularity in Bottom-Left
-                  Positioned(
-                    bottom: 8,
-                    left: 8,
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
-                      decoration: BoxDecoration(
-                        color: Colors.black.withOpacity(0.5),
-                        borderRadius: BorderRadius.circular(4),
-                      ),
-                      child: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          if (!hideRatings && work.tmdbRating != null && !(work.tmdbRating == 0.0 && work.releaseDate != null && work.releaseDate!.isAfter(DateTime.now())))
-                            Row(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                const Icon(
-                                  Icons.star,
-                                  size: 14,
-                                  color: Colors.amber,
-                                ),
-                                const SizedBox(width: 2),
-                                Text(
-                                  work.tmdbRating!.toStringAsFixed(1),
-                                  style: theme.textTheme.labelSmall?.copyWith(
-                                    color: Colors.white,
-                                    fontWeight: FontWeight.bold,
-                                  ),
-                                ),
-                              ],
-                            ),
-                            const SizedBox(width: 8),
-                          if (!hidePopularity && work.popularity != null && !(work.popularity == 0.0 && work.releaseDate != null && work.releaseDate!.isAfter(DateTime.now())))
-                            Row(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                Icon(
-                                  Icons.trending_up,
-                                  size: 14,
-                                  color: theme.colorScheme.primaryContainer,
-                                ),
-                                const SizedBox(width: 2),
-                                Text(
-                                  work.popularity!.toInt().toString(),
-                                  style: theme.textTheme.labelSmall?.copyWith(
-                                    color: Colors.white,
-                                    fontWeight: FontWeight.bold,
-                                  ),
-                                ),
-                              ],
-                            ),
-                        ],
-                      ),
-                    ),
-                  ),
+    // Apply grayscale if old and not hovered
+    final bool applyGrayscale = isOld && !_isHovered;
 
-                  // Media Type Icon in Bottom-Right
-                  Positioned(
-                    bottom: 8,
-                    right: 8,
-                    child: Container(
-                      padding: const EdgeInsets.all(4),
-                      decoration: BoxDecoration(
-                        color: Colors.black.withOpacity(0.5),
-                        borderRadius: BorderRadius.circular(4),
-                      ),
-                      child: Icon(
-                        work.type == WorkType.movie ? Icons.movie : Icons.tv,
-                        size: 16,
-                        color: Colors.white,
-                      ),
-                    ),
-                  ),
-                ],
+    Widget poster = work.posterPath != null
+        ? CachedNetworkImage(
+            imageUrl: 'https://image.tmdb.org/t/p/w300${work.posterPath}',
+            fit: BoxFit.cover,
+            placeholder: (context, url) => Container(
+              color: theme.colorScheme.surfaceContainerHighest,
+              child: const Center(
+                child: CircularProgressIndicator(),
               ),
             ),
-            
-            // Work information
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 10.0, vertical: 8.0),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  // Title Area with consistent height for up to 2 lines
-                  SizedBox(
-                    height: 32, // Sufficient for 2 lines of labelsmall/titleSmall
-                    child: AdaptiveTooltipText(
-                      work.title,
-                      style: theme.textTheme.titleSmall?.copyWith(
-                        fontWeight: FontWeight.bold,
-                        height: 1.1,
-                        fontSize: 12,
+            errorWidget: (context, url, error) => Container(
+              color: theme.colorScheme.surfaceContainerHighest,
+              child: const Center(
+                child: Icon(Icons.movie, size: 40),
+              ),
+            ),
+          )
+        : Container(
+            color: theme.colorScheme.surfaceContainerHighest,
+            child: const Center(
+              child: Icon(Icons.movie, size: 40),
+            ),
+          );
+
+    if (applyGrayscale) {
+      poster = ColorFiltered(
+        colorFilter: const ColorFilter.matrix([
+          0.2126, 0.7152, 0.0722, 0, 0,
+          0.2126, 0.7152, 0.0722, 0, 0,
+          0.2126, 0.7152, 0.0722, 0, 0,
+          0,      0,      0,      1, 0,
+        ]),
+        child: poster,
+      );
+    }
+
+    return MouseRegion(
+      onEnter: (_) => setState(() => _isHovered = true),
+      onExit: (_) => setState(() => _isHovered = false),
+      child: Card(
+        clipBehavior: Clip.antiAlias,
+        child: InkWell(
+          onTap: widget.onTap,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // Poster image area
+              SizedBox(
+                height: 230,
+                width: double.infinity,
+                child: Stack(
+                  fit: StackFit.expand,
+                  children: [
+                    // Fallback white background for transparent posters (logos)
+                    Container(color: Colors.white),
+                    poster,
+                    
+                    // Bottom Gradient Overlay for readability
+                    Positioned(
+                      bottom: 0,
+                      left: 0,
+                      right: 0,
+                      height: 60,
+                      child: Container(
+                        decoration: BoxDecoration(
+                          gradient: LinearGradient(
+                            begin: Alignment.bottomCenter,
+                            end: Alignment.topCenter,
+                            colors: [
+                              Colors.black.withOpacity(0.8),
+                              Colors.transparent,
+                            ],
+                          ),
+                        ),
                       ),
-                      maxLines: 2,
                     ),
-                  ),
-                  
-                  const SizedBox(height: 2),
-                  
-                  // Release date and Watchlist button Row
-                  Row(
-                    children: [
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
+  
+                    // Ratings in Bottom-Left
+                    Positioned(
+                      bottom: 8,
+                      left: 8,
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
+                        decoration: BoxDecoration(
+                          color: Colors.black.withOpacity(0.5),
+                          borderRadius: BorderRadius.circular(4),
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
                           children: [
-                            if (work.releaseDate != null)
-                              Text(
-                                _formatReleaseDate(work.releaseDate!),
-                                style: theme.textTheme.bodySmall?.copyWith(
-                                  color: theme.colorScheme.onSurfaceVariant,
-                                  fontSize: 10,
-                                ),
-                              ),
-                            
-                            // Release type indicator
-                            if (work.releaseType != null)
-                              Padding(
-                                padding: const EdgeInsets.only(top: 1),
-                                child: _buildReleaseTypeChip(context, work.releaseType!),
+                            if (!widget.hideRatings && work.tmdbRating != null && work.voteCount != null && work.voteCount! > 0 && !(work.tmdbRating == 0.0 && work.releaseDate != null && work.releaseDate!.isAfter(DateTime.now())))
+                              Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  const Icon(
+                                    Icons.star,
+                                    size: 14,
+                                    color: Colors.amber,
+                                  ),
+                                  const SizedBox(width: 2),
+                                  Text(
+                                    '${work.tmdbRating!.toStringAsFixed(1)} (${_formatVoteCount(work.voteCount!)})',
+                                    style: theme.textTheme.labelSmall?.copyWith(
+                                      color: Colors.white,
+                                      fontWeight: FontWeight.bold,
+                                    ),
+                                  ),
+                                ],
                               ),
                           ],
                         ),
                       ),
-                      
-                      // Watchlist button
-                      if (onAddToWatchlist != null)
-                        IconButton(
-                          onPressed: onAddToWatchlist,
-                          icon: const Icon(Icons.add_circle_outline),
-                          iconSize: 20,
-                          padding: EdgeInsets.zero,
-                          constraints: const BoxConstraints(
-                            minWidth: 28,
-                            minHeight: 28,
-                          ),
-                          tooltip: 'Add to Watchlist',
-                          color: theme.colorScheme.primary,
+                    ),
+  
+                    // Media Type Icon in Bottom-Right
+                    Positioned(
+                      bottom: 8,
+                      right: 8,
+                      child: Container(
+                        padding: const EdgeInsets.all(4),
+                        decoration: BoxDecoration(
+                          color: Colors.black.withOpacity(0.5),
+                          borderRadius: BorderRadius.circular(4),
                         ),
-                    ],
-                  ),
-                  
-                  // Roles Row (Truncated with tooltip)
-                  if (work.contributorRoles.isNotEmpty)
-                    Padding(
-                      padding: const EdgeInsets.only(top: 2),
-                      child: AdaptiveTooltipText(
-                        WorkSortingLogic.sortRoles(work.contributorRoles).map((r) => r.role).join(', '),
-                        style: theme.textTheme.labelSmall?.copyWith(
-                          fontSize: 10,
-                          color: theme.colorScheme.secondary,
-                          fontWeight: FontWeight.w500,
+                        child: Icon(
+                          work.type == WorkType.movie ? Icons.movie : Icons.tv,
+                          size: 16,
+                          color: Colors.white,
                         ),
-                        maxLines: 1,
                       ),
                     ),
-                ],
+                  ],
+                ),
               ),
-            ),
-          ],
+              
+              // Work information
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 10.0, vertical: 8.0),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    // Title Area with consistent height for up to 2 lines
+                    SizedBox(
+                      height: 32,
+                      child: AdaptiveTooltipText(
+                        work.title,
+                        style: theme.textTheme.titleSmall?.copyWith(
+                          fontWeight: FontWeight.bold,
+                          height: 1.1,
+                          fontSize: 12,
+                        ),
+                        maxLines: 2,
+                      ),
+                    ),
+                    
+                    const SizedBox(height: 2),
+                    
+                    // Release date and Watchlist button Row
+                    Row(
+                      children: [
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              if (work.releaseDate != null)
+                                Text(
+                                  _formatReleaseDate(work.releaseDate!),
+                                  style: theme.textTheme.bodySmall?.copyWith(
+                                    color: theme.colorScheme.onSurfaceVariant,
+                                    fontSize: 10,
+                                  ),
+                                ),
+                              
+                              if (work.releaseType != null)
+                                Padding(
+                                  padding: const EdgeInsets.only(top: 1),
+                                  child: _buildReleaseTypeChip(context, work.releaseType!),
+                                ),
+                            ],
+                          ),
+                        ),
+                        
+                        if (widget.onAddToWatchlist != null)
+                          IconButton(
+                            onPressed: widget.onAddToWatchlist,
+                            icon: const Icon(Icons.add_circle_outline),
+                            iconSize: 20,
+                            padding: EdgeInsets.zero,
+                            constraints: const BoxConstraints(
+                              minWidth: 28,
+                              minHeight: 28,
+                            ),
+                            tooltip: 'Add to Watchlist',
+                            color: theme.colorScheme.primary,
+                          ),
+                      ],
+                    ),
+                    
+                    if (work.contributorRoles.isNotEmpty)
+                      Padding(
+                        padding: const EdgeInsets.only(top: 2),
+                        child: AdaptiveTooltipText(
+                          WorkSortingLogic.sortRoles(work.contributorRoles).map((r) => r.role).join(', '),
+                          style: theme.textTheme.labelSmall?.copyWith(
+                            fontSize: 10,
+                            color: theme.colorScheme.secondary,
+                            fontWeight: FontWeight.w500,
+                          ),
+                          maxLines: 1,
+                        ),
+                      ),
+                  ],
+                ),
+              ),
+            ],
+          ),
         ),
       ),
     );
   }
 
   String _formatReleaseDate(DateTime date) {
+    final now = DateTime.now();
+    final twoYearsAgo = now.subtract(const Duration(days: 365 * 2));
+    if (date.isBefore(twoYearsAgo)) {
+      return date.year.toString();
+    }
+    if (date.year == now.year) {
+      return DateFormat('MMM d').format(date);
+    }
     return DateFormat('MMM d, yyyy').format(date);
   }
 
-  String _getReleaseEmoji(ReleaseType? type) {
-    if (work.type == WorkType.tvEpisode || work.type == WorkType.tvShow) return '';
-    if (type == null) return '🗓️';
-    switch (type) {
-      case ReleaseType.theatrical:
-        return '🍿';
-      case ReleaseType.streaming:
-      case ReleaseType.digital:
-        return '💻';
-      case ReleaseType.physical:
-        return '📀';
+  String _formatVoteCount(int count) {
+    if (count >= 1000) {
+      return '${(count / 1000).toStringAsFixed(count >= 10000 ? 0 : 1)}K';
     }
+    return count.toString();
   }
 
   Widget _buildReleaseTypeChip(BuildContext context, ReleaseType releaseType) {

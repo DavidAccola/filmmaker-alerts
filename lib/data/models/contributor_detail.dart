@@ -136,6 +136,12 @@ class Work {
 
   @HiveField(13)
   final String? status;
+  
+  @HiveField(14)
+  final DateTime? endDate;
+  
+  @HiveField(15)
+  final int? voteCount;
 
   Work({
     required this.tmdbId,
@@ -152,6 +158,8 @@ class Work {
     this.episodeNumber,
     this.seasonNumber,
     this.status,
+    this.endDate,
+    this.voteCount,
   });
 
   @override
@@ -170,6 +178,44 @@ class Work {
       type.hashCode ^
       (seasonNumber ?? 0).hashCode ^
       (episodeNumber ?? 0).hashCode;
+
+  Work copyWith({
+    int? tmdbId,
+    String? title,
+    String? posterPath,
+    DateTime? releaseDate,
+    WorkType? type,
+    double? tmdbRating,
+    double? popularity,
+    ReleaseType? releaseType,
+    List<ContributorRole>? contributorRoles,
+    List<StreamingOption>? streamingOptions,
+    String? imdbId,
+    int? episodeNumber,
+    int? seasonNumber,
+    String? status,
+    DateTime? endDate,
+    int? voteCount,
+  }) {
+    return Work(
+      tmdbId: tmdbId ?? this.tmdbId,
+      title: title ?? this.title,
+      posterPath: posterPath ?? this.posterPath,
+      releaseDate: releaseDate ?? this.releaseDate,
+      type: type ?? this.type,
+      tmdbRating: tmdbRating ?? this.tmdbRating,
+      popularity: popularity ?? this.popularity,
+      releaseType: releaseType ?? this.releaseType,
+      contributorRoles: contributorRoles ?? this.contributorRoles,
+      streamingOptions: streamingOptions ?? this.streamingOptions,
+      imdbId: imdbId ?? this.imdbId,
+      episodeNumber: episodeNumber ?? this.episodeNumber,
+      seasonNumber: seasonNumber ?? this.seasonNumber,
+      status: status ?? this.status,
+      endDate: endDate ?? this.endDate,
+      voteCount: voteCount ?? this.voteCount,
+    );
+  }
 }
 
 @HiveType(typeId: 26)

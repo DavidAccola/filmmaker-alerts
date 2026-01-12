@@ -9,19 +9,19 @@ import 'adaptive_tooltip_text.dart';
 class GroupedTvShowWidget extends StatefulWidget {
   final String showTitle;
   final List<Work> episodes;
-  final bool hidePopularity;
   final bool hideRatings;
   final VoidCallback? onTap;
   final void Function(Work)? onEpisodeWatchlist;
+  final bool applyAgeStyling;
 
   const GroupedTvShowWidget({
     super.key,
     required this.showTitle,
     required this.episodes,
-    this.hidePopularity = false,
     this.hideRatings = false,
     this.onTap,
     this.onEpisodeWatchlist,
+    this.applyAgeStyling = false,
   });
 
   @override
@@ -36,6 +36,19 @@ class _GroupedTvShowWidgetState extends State<GroupedTvShowWidget> {
     final theme = Theme.of(context);
     final firstEpisode = widget.episodes.last;
     final latestEpisode = widget.episodes.first;
+
+    // Check if show is more than 3 years old
+    bool isOld = false;
+    if (widget.applyAgeStyling && latestEpisode.releaseDate != null) {
+      // Use Jan 1st of the current year for a "year-based" 3-year logic if preferred, 
+      // but sticking to precise 3 years as requested.
+      final now = DateTime.now();
+      final threeYearsAgo = now.subtract(const Duration(days: 365 * 3));
+      isOld = latestEpisode.releaseDate!.isBefore(threeYearsAgo);
+    }
+
+    // Apply grayscale if old and not hovered
+    final bool applyGrayscale = isOld && !_isHovered;
 
     return MouseRegion(
       onEnter: (_) => setState(() => _isHovered = true),
@@ -54,7 +67,7 @@ class _GroupedTvShowWidgetState extends State<GroupedTvShowWidget> {
                 child: Stack(
                   fit: StackFit.expand,
                   children: [
-                    _buildPoster(theme, latestEpisode),
+                    _buildPoster(theme, latestEpisode, applyGrayscale),
 
                     // Bottom Gradient Overlay
                     Positioned(
@@ -76,7 +89,7 @@ class _GroupedTvShowWidgetState extends State<GroupedTvShowWidget> {
                       ),
                     ),
 
-                    // Ratings and Popularity in Bottom-Left
+                    // Ratings in Bottom-Left
                     Positioned(
                       bottom: 8,
                       left: 8,
@@ -89,7 +102,7 @@ class _GroupedTvShowWidgetState extends State<GroupedTvShowWidget> {
                         child: Row(
                           mainAxisSize: MainAxisSize.min,
                           children: [
-                            if (!widget.hideRatings && latestEpisode.tmdbRating != null && !(latestEpisode.tmdbRating == 0.0 && latestEpisode.releaseDate != null && latestEpisode.releaseDate!.isAfter(DateTime.now())))
+                            if (!widget.hideRatings && latestEpisode.tmdbRating != null && latestEpisode.voteCount != null && latestEpisode.voteCount! > 0 && !(latestEpisode.tmdbRating == 0.0 && latestEpisode.releaseDate != null && latestEpisode.releaseDate!.isAfter(DateTime.now())))
                               Row(
                                 mainAxisSize: MainAxisSize.min,
                                 children: [
@@ -101,26 +114,6 @@ class _GroupedTvShowWidgetState extends State<GroupedTvShowWidget> {
                                   const SizedBox(width: 2),
                                   Text(
                                     latestEpisode.tmdbRating!.toStringAsFixed(1),
-                                    style: theme.textTheme.labelSmall?.copyWith(
-                                      color: Colors.white,
-                                      fontWeight: FontWeight.bold,
-                                    ),
-                                  ),
-                                ],
-                              ),
-                              const SizedBox(width: 8),
-                            if (!widget.hidePopularity && latestEpisode.popularity != null && !(latestEpisode.popularity == 0.0 && latestEpisode.releaseDate != null && latestEpisode.releaseDate!.isAfter(DateTime.now())))
-                              Row(
-                                mainAxisSize: MainAxisSize.min,
-                                children: [
-                                  Icon(
-                                    Icons.trending_up,
-                                    size: 14,
-                                    color: theme.colorScheme.primaryContainer,
-                                  ),
-                                  const SizedBox(width: 2),
-                                  Text(
-                                    latestEpisode.popularity!.toInt().toString(),
                                     style: theme.textTheme.labelSmall?.copyWith(
                                       color: Colors.white,
                                       fontWeight: FontWeight.bold,
@@ -244,7 +237,18 @@ class _GroupedTvShowWidgetState extends State<GroupedTvShowWidget> {
                       children: [
                         Expanded(
                           child: Text(
-                            'Latest: ${DateFormat('MMM d').format(latestEpisode.releaseDate!)}',
+                            () {
+                              final date = latestEpisode.releaseDate!;
+                              final now = DateTime.now();
+                              final twoYearsAgo = now.subtract(const Duration(days: 365 * 2));
+                              if (date.isBefore(twoYearsAgo)) {
+                                return 'Latest: ${date.year}';
+                              }
+                              if (date.year == now.year) {
+                                return 'Latest: ${DateFormat('MMM d').format(date)}';
+                              }
+                              return 'Latest: ${DateFormat('MMM d, yyyy').format(date)}';
+                            }(),
                             style: theme.textTheme.bodySmall?.copyWith(
                               color: theme.colorScheme.onSurfaceVariant,
                               fontSize: 10,
@@ -290,9 +294,10 @@ class _GroupedTvShowWidgetState extends State<GroupedTvShowWidget> {
     );
   }
 
-  Widget _buildPoster(ThemeData theme, Work work) {
+  Widget _buildPoster(ThemeData theme, Work work, bool applyGrayscale) {
+    Widget image;
     if (work.posterPath != null) {
-      return Stack(
+      image = Stack(
         fit: StackFit.expand,
         children: [
           Container(color: Colors.white),
@@ -304,8 +309,22 @@ class _GroupedTvShowWidgetState extends State<GroupedTvShowWidget> {
           ),
         ],
       );
+    } else {
+      image = _buildPlaceholder(theme);
     }
-    return _buildPlaceholder(theme);
+
+    if (applyGrayscale) {
+      return ColorFiltered(
+        colorFilter: const ColorFilter.matrix([
+          0.2126, 0.7152, 0.0722, 0, 0,
+          0.2126, 0.7152, 0.0722, 0, 0,
+          0.2126, 0.7152, 0.0722, 0, 0,
+          0,      0,      0,      1, 0,
+        ]),
+        child: image,
+      );
+    }
+    return image;
   }
 
   Widget _buildPlaceholder(ThemeData theme) {

@@ -126,13 +126,15 @@ class WorkAdapter extends TypeAdapter<Work> {
       episodeNumber: fields[11] as int?,
       seasonNumber: fields[12] as int?,
       status: fields[13] as String?,
+      endDate: fields[14] as DateTime?,
+      voteCount: fields[15] as int?,
     );
   }
 
   @override
   void write(BinaryWriter writer, Work obj) {
     writer
-      ..writeByte(14)
+      ..writeByte(16)
       ..writeByte(0)
       ..write(obj.tmdbId)
       ..writeByte(1)
@@ -160,7 +162,11 @@ class WorkAdapter extends TypeAdapter<Work> {
       ..writeByte(12)
       ..write(obj.seasonNumber)
       ..writeByte(13)
-      ..write(obj.status);
+      ..write(obj.status)
+      ..writeByte(14)
+      ..write(obj.endDate)
+      ..writeByte(15)
+      ..write(obj.voteCount);
   }
 
   @override

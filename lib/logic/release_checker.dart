@@ -1600,6 +1600,7 @@ class ReleaseChecker {
         type: workType,
         tmdbRating: (first['vote_average'] as num?)?.toDouble(),
         popularity: (first['popularity'] as num?)?.toDouble(),
+        voteCount: first['vote_count'] as int?,
         contributorRoles: roles,
         imdbId: first['external_ids']?['imdb_id'] ?? first['imdb_id'] as String?,
         seasonNumber: first['season_number'] as int?,
@@ -1644,11 +1645,12 @@ class ReleaseChecker {
 
               allWorks.add(Work(
                 tmdbId: ep['id'],
-                title: '${show.title} - S${ep['season_number'].toString().padLeft(2, '0')}E${ep['episode_number'].toString().padLeft(2, '0')} - ${ep['name']}',
-                posterPath: ep['still_path'] ?? show.posterPath,
+                title: '${show.title} - S${ ep['season_number'].toString().padLeft(2, '0')}E${ep['episode_number'].toString().padLeft(2, '0')} - ${ep['name']}',
+                posterPath: show.posterPath ?? ep['still_path'],
                 releaseDate: airDate,
                 type: WorkType.tvEpisode,
                 tmdbRating: (ep['vote_average'] as num?)?.toDouble(),
+                voteCount: ep['vote_count'] as int?,
                 popularity: show.popularity,
                 contributorRoles: show.contributorRoles,
                 imdbId: show.imdbId,

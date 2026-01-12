@@ -45,23 +45,65 @@ class WorkSortingLogic {
     return worksWithDates.take(100).toList();
   }
 
-  /// Ranks works by biggest hits using combination of rating and popularity.
-  /// Returns top 10 works based on the ranking algorithm.
+  /// Ranks works by biggest hits using Bayesian weighted rating and popularity percentile.
+  /// Returns top 100 works based on the ranking algorithm.
+  /// Filters out low-quality content like featurettes and works with few votes.
   /// **Validates: Requirements 4.1**
   static List<Work> rankBiggestHits(List<Work> works) {
     final List<Work> sortedWorks = List.from(works);
     
-    // Filter out works that don't have both rating and popularity
-    // ENHANCEMENT: Also filter out TV Episodes from Hits to avoid cluttering with 
-    // every single directed episode when the show itself is a hit.
-    final worksWithMetrics = sortedWorks.where((work) => 
-      work.tmdbRating != null && work.popularity != null && work.type != WorkType.tvEpisode
-    ).toList();
+    // Filter criteria for quality content:
+    // 1. Must have both rating and popularity
+    // 2. Must not be a TV episode (shows are preferred)
+    // 3. Filter out featurettes, behind-the-scenes, and other low-value content
+    final worksWithMetrics = sortedWorks.where((work) {
+      // Basic metrics check
+      if (work.tmdbRating == null || work.popularity == null) return false;
+      if (work.type == WorkType.tvEpisode) return false;
+      
+      // Filter out works with 0 rating (likely no votes or unreleased)
+      if (work.tmdbRating! <= 0.0) return false;
+      
+      // Filter out low-quality content by title keywords
+      final titleLower = work.title.toLowerCase();
+      final badKeywords = [
+        'featurette',
+        'behind the scenes',
+        'making of',
+        'deleted scene',
+        'gag reel',
+        'blooper',
+        'interview',
+        'promo',
+        'trailer',
+      ];
+      
+      for (final keyword in badKeywords) {
+        if (titleLower.contains(keyword)) {
+          return false;
+        }
+      }
+      
+      return true;
+    }).toList();
     
-    // Sort by combined score (rating + normalized popularity)
+    if (worksWithMetrics.isEmpty) return [];
+    
+    // Calculate mean rating across all works for Bayesian average
+    final meanRating = worksWithMetrics
+        .map((w) => w.tmdbRating ?? 0.0)
+        .reduce((a, b) => a + b) / worksWithMetrics.length;
+    
+    // Calculate popularity percentiles
+    final popularities = worksWithMetrics
+        .map((w) => w.popularity!)
+        .toList()
+      ..sort();
+    
+    // Sort by combined score (Bayesian rating + popularity percentile + role importance)
     worksWithMetrics.sort((a, b) {
-      final scoreA = _calculateHitScore(a);
-      final scoreB = _calculateHitScore(b);
+      final scoreA = _calculateHitScore(a, meanRating, popularities);
+      final scoreB = _calculateHitScore(b, meanRating, popularities);
       return scoreB.compareTo(scoreA); // Descending order (highest first)
     });
     
@@ -69,22 +111,111 @@ class WorkSortingLogic {
     return worksWithMetrics.take(100).toList();
   }
 
-  /// Calculates a combined hit score based on rating and popularity.
-  /// Rating is weighted more heavily than popularity.
-  static double _calculateHitScore(Work work) {
+  /// Calculates a combined hit score using:
+  /// - Bayesian weighted rating (like IMDb)
+  /// - Popularity percentile (0-100)
+  /// - Role importance boost
+  /// - Recency bias (slight boost for newer works)
+  static double _calculateHitScore(Work work, double meanRating, List<double> allPopularities) {
     if (work.tmdbRating == null || work.popularity == null) {
       return 0.0;
     }
     
-    // Normalize rating (0-10 scale) and popularity (log scale to handle wide range)
-    final normalizedRating = work.tmdbRating! / 10.0; // 0.0 to 1.0
-    final normalizedPopularity = _normalizePopularity(work.popularity!);
+    // Bayesian weighted rating (like IMDb's Top 250)
+    // Formula: weighted_rating = (v/(v+m)) × R + (m/(v+m)) × C
+    // where:
+    // - R = average rating for the work (vote_average)
+    // - v = number of votes for the work (vote_count)
+    // - m = minimum votes required to be listed (we use 50 as a reasonable threshold)
+    // - C = mean vote across all works
+    const minVotesRequired = 50.0;
+    final voteCount = (work.voteCount ?? 0).toDouble();
+    final rating = work.tmdbRating!;
     
-    // Weight rating more heavily (70%) than popularity (30%)
-    return (normalizedRating * 0.7) + (normalizedPopularity * 0.3);
+    final bayesianRating = voteCount == 0
+        ? rating * 0.5 // Penalize works with no vote count data
+        : (voteCount / (voteCount + minVotesRequired)) * rating +
+          (minVotesRequired / (voteCount + minVotesRequired)) * meanRating;
+    
+    // Normalize to 0-1 scale
+    final normalizedRating = bayesianRating / 10.0;
+    
+    // Calculate popularity percentile (0-100)
+    final popularityPercentile = _calculatePercentile(work.popularity!, allPopularities) / 100.0;
+    
+    // Calculate recency bias (0.0 to 1.0)
+    // Recent works (last 5 years) get a boost, older works gradually decay
+    double recencyMultiplier = 1.0;
+    if (work.releaseDate != null) {
+      final now = DateTime.now();
+      final yearsSinceRelease = now.difference(work.releaseDate!).inDays / 365.25;
+      
+      if (yearsSinceRelease < 0) {
+        // Future releases get no boost
+        recencyMultiplier = 1.0;
+      } else if (yearsSinceRelease <= 5) {
+        // Recent works (0-5 years): full boost
+        recencyMultiplier = 1.0 + (0.15 * (5 - yearsSinceRelease) / 5); // Up to 15% boost
+      } else if (yearsSinceRelease <= 15) {
+        // Moderately old (5-15 years): gradual decay
+        recencyMultiplier = 1.0 - (0.1 * (yearsSinceRelease - 5) / 10); // Down to 90%
+      } else {
+        // Very old (15+ years): significant decay
+        recencyMultiplier = 0.9 - (0.2 * math.min((yearsSinceRelease - 15) / 20, 1.0)); // Down to 70%
+      }
+    }
+    
+    // Check for major creative roles (Creator, Director, Writer get a boost)
+    double roleBoost = 1.0;
+    final hasCreatorRole = work.contributorRoles.any((r) => 
+      r.role.toLowerCase().contains('creator') || 
+      r.department?.toLowerCase() == 'creator'
+    );
+    final hasDirectorRole = work.contributorRoles.any((r) => 
+      r.role.toLowerCase().contains('director') || 
+      r.department?.toLowerCase() == 'directing'
+    );
+    final hasWriterRole = work.contributorRoles.any((r) => 
+      r.role.toLowerCase().contains('writer') || 
+      r.role.toLowerCase().contains('screenplay') ||
+      r.department?.toLowerCase() == 'writing'
+    );
+    
+    if (hasCreatorRole) roleBoost = 1.3; // 30% boost for creators
+    else if (hasDirectorRole) roleBoost = 1.2; // 20% boost for directors
+    else if (hasWriterRole) roleBoost = 1.1; // 10% boost for writers
+    
+    // Improved weighting: 
+    // - Bayesian Rating: 60% (quality matters most, and now properly weighted by votes)
+    // - Popularity Percentile: 30% (reach/impact, now more meaningful)
+    // - Recency multiplier applied to final score
+    // - Role boost: multiplier
+    final baseScore = (normalizedRating * 0.6) + (popularityPercentile * 0.3);
+    return baseScore * roleBoost * recencyMultiplier;
+  }
+
+  /// Calculates the percentile rank of a value within a sorted list.
+  /// Returns a value between 0 and 100.
+  static double _calculatePercentile(double value, List<double> sortedValues) {
+    if (sortedValues.isEmpty) return 0.0;
+    
+    // Find the position of the value in the sorted list
+    int position = 0;
+    for (int i = 0; i < sortedValues.length; i++) {
+      if (sortedValues[i] <= value) {
+        position = i + 1;
+      } else {
+        break;
+      }
+    }
+    
+    // Calculate percentile: (position / total count) × 100
+    return (position / sortedValues.length) * 100.0;
   }
 
   /// Normalizes popularity using logarithmic scaling to handle wide range of values.
+  /// NOTE: This method is deprecated in favor of percentile-based popularity ranking.
+  @deprecated
   static double _normalizePopularity(double popularity) {
     if (popularity <= 0) return 0.0;
     

@@ -47,8 +47,20 @@ class TvShowDisplayLogic {
     
     for (final work in works) {
       for (final role in work.contributorRoles) {
-        final dept = role.department ?? (work.type == WorkType.movie ? 'Movie' : 'TV');
+        String dept;
+        if (role.department != null && role.department!.isNotEmpty) {
+          dept = role.department!;
+        } else if (role.character != null && role.character!.isNotEmpty) {
+          dept = 'Cast';
+        } else {
+          // Fallback for roles without department or character
+          dept = 'General';
+        }
         
+        if (dept == 'Creator' && work.type == WorkType.tvEpisode) {
+          continue; // Don't show individual episodes in Creator section
+        }
+
         if (!grouped.containsKey(dept)) {
           grouped[dept] = [];
         }
@@ -58,6 +70,39 @@ class TvShowDisplayLogic {
           grouped[dept]!.add(work);
         }
       }
+    }
+
+    // Special handling for Production: Collapse excessive episodes into show-level entries
+    if (grouped.containsKey('Production')) {
+      final productionWorks = grouped['Production']!;
+      final Map<String, List<Work>> progGrouped = {};
+      final List<Work> keptWorks = [];
+
+      // Group by show title
+      for (var w in productionWorks) {
+        String showTitle = w.type == WorkType.tvEpisode ? extractShowTitle(w.title) : w.title;
+        progGrouped.putIfAbsent(showTitle, () => []).add(w);
+      }
+
+      for (var entry in progGrouped.entries) {
+        final works = entry.value;
+        final showWork = works.firstWhere((w) => w.type == WorkType.tvShow, orElse: () => works.first);
+        final hasShowLevel = works.any((w) => w.type == WorkType.tvShow);
+        
+        // If we have a show-level credit, or lots of episodes (>3), just show the show-level one
+        if (hasShowLevel || works.length > 3) {
+           keptWorks.add(showWork.type == WorkType.tvShow ? showWork : showWork.copyWith(
+             type: WorkType.tvShow, // Synthesize show level if needed
+             title: entry.key,
+             seasonNumber: null,
+             episodeNumber: null,
+           )); 
+        } else {
+           // Otherwise keep the individual episodes
+           keptWorks.addAll(works);
+        }
+      }
+      grouped['Production'] = keptWorks;
     }
     
     // Sort departments by priority if needed, or alphabetically

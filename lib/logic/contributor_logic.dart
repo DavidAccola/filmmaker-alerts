@@ -56,6 +56,7 @@ class ContributorLogic {
           depts.add(role);
         }
       }
+
       return depts.toList()..sort();
     } else if (contributor.type == ContributorType.company) {
       return ['Production'];
@@ -67,6 +68,42 @@ class ContributorLogic {
       return ['TV Show'];
     }
     return [];
+  }
+
+  /// Forces a refresh of the detailed credit information for a single contributor
+  Future<void> refreshContributorDetail(Contributor contributor) async {
+    debugPrint('[ContributorLogic] Forcing refresh of details for ${contributor.name}');
+    List<dynamic> credits = [];
+    if (contributor.type == ContributorType.person) {
+      final data = await _tmdbService.getPersonCombinedCredits(contributor.tmdbId);
+      credits = [...(data['cast'] ?? []), ...(data['crew'] ?? [])];
+    } else if (contributor.type == ContributorType.company) {
+      final data = await _tmdbService.getCompanyTopWorks(contributor.tmdbId);
+      credits = data['results'] ?? [];
+    } else if (contributor.type == ContributorType.movie) {
+      credits = [await _tmdbService.getMovieDetails(contributor.tmdbId)];
+    } else if (contributor.type == ContributorType.tvShow) {
+      final data = await _tmdbService.getTvDetails(contributor.tmdbId);
+      final List<Map<String, dynamic>> showCredits = [];
+      if (data['next_episode_to_air'] != null) {
+        final nextEp = Map<String, dynamic>.from(data['next_episode_to_air']);
+        nextEp['media_type'] = 'tv';
+        nextEp['name'] = '${data['name']} - S${nextEp['season_number'].toString().padLeft(2, '0')}E${nextEp['episode_number'].toString().padLeft(2, '0')} - ${nextEp['name']}';
+        showCredits.add(nextEp);
+      }
+      if (data['last_episode_to_air'] != null) {
+        final lastEp = Map<String, dynamic>.from(data['last_episode_to_air']);
+        lastEp['media_type'] = 'tv';
+        lastEp['name'] = '${data['name']} - S${lastEp['season_number'].toString().padLeft(2, '0')}E${lastEp['episode_number'].toString().padLeft(2, '0')} - ${lastEp['name']}';
+        showCredits.add(lastEp);
+      }
+      final showAsWork = Map<String, dynamic>.from(data);
+      showAsWork['media_type'] = 'tv';
+      showCredits.add(showAsWork);
+      credits = showCredits;
+    }
+    
+    await updateContributorDetail(contributor, credits);
   }
 
   /// Enriches a sparse contributor and adds it to the repository.
@@ -335,10 +372,7 @@ class ContributorLogic {
       final status = credit['status'] as String?;
       final releaseDate = credit['release_date'] ?? credit['first_air_date'] ?? credit['air_date'];
       
-      if (title.toString().toLowerCase().contains('far cry')) {
-        debugPrint('[DEBUG] Far Cry credit found: id=$id, status=$status, releaseDate=$releaseDate');
-      }
-
+      
       final mediaType = credit['media_type'] ?? (contributor.type == ContributorType.movie ? 'movie' : 'tv');
       final isEpisode = credit['episode_number'] != null;
       final key = '${mediaType}_${id}_$isEpisode';
@@ -351,18 +385,6 @@ class ContributorLogic {
       final id = first['id'] as int;
       
       final mediaType = first['media_type'] as String?;
-      
-      // Determine work type
-      WorkType workType;
-      if (mediaType == 'tv') {
-        if (first['episode_number'] != null) {
-          workType = WorkType.tvEpisode;
-        } else {
-          workType = WorkType.tvShow;
-        }
-      } else {
-        workType = WorkType.movie;
-      }
       
       // Release dates can be under various keys depending on API endpoint
       final releaseDateStr = (first['release_date'] ?? first['first_air_date'] ?? first['air_date']) as String?;
@@ -381,20 +403,69 @@ class ContributorLogic {
         character: c['character'] as String?,
       )).toList();
 
-      allWorksSet.add(Work(
-        tmdbId: id,
-        title: (first['title'] ?? first['name'] ?? 'Unknown') as String,
-        posterPath: first['poster_path'] ?? first['still_path'] as String?,
-        releaseDate: releaseDate,
-        type: workType,
-        tmdbRating: (first['vote_average'] as num?)?.toDouble(),
-        popularity: (first['popularity'] as num?)?.toDouble(),
-        contributorRoles: roles,
-        imdbId: first['external_ids']?['imdb_id'] ?? first['imdb_id'] as String?,
-        seasonNumber: first['season_number'] as int?,
-        episodeNumber: first['episode_number'] as int?,
-        status: first['status'] as String?,
-      ));
+      if (mediaType == 'tv') {
+        // Always ensure we have a "Show" object for TV credits to store show-level metadata (endDate, status)
+        final showWork = Work(
+          tmdbId: id,
+          title: (first['name'] ?? first['title'] ?? 'Unknown') as String,
+          posterPath: first['poster_path'] ?? first['still_path'] as String?,
+          releaseDate: releaseDate,
+          type: WorkType.tvShow,
+          tmdbRating: (first['vote_average'] as num?)?.toDouble(),
+          popularity: (first['popularity'] as num?)?.toDouble(),
+          voteCount: first['vote_count'] as int?,
+          contributorRoles: roles,
+          imdbId: first['external_ids']?['imdb_id'] ?? first['imdb_id'] as String?,
+          status: first['status'] as String?,
+        );
+        allWorksSet.add(showWork);
+
+        // Also add all unique episodes found in the credits group
+        final Set<String> seenEpisodes = {};
+        for (final credit in credits) {
+          final episodeNum = credit['episode_number'] as int?;
+          final seasonNum = credit['season_number'] as int?;
+          final episodeTitle = (credit['title'] ?? credit['name'] ?? 'Unknown') as String;
+          
+          if (episodeNum != null) {
+            final epKey = '${seasonNum}_${episodeNum}_$episodeTitle';
+            if (!seenEpisodes.contains(epKey)) {
+              seenEpisodes.add(epKey);
+              
+              allWorksSet.add(Work(
+                tmdbId: id,
+                title: episodeTitle,
+                posterPath: credit['still_path'] ?? credit['poster_path'] ?? first['poster_path'] as String?,
+                releaseDate: _parseDate(credit['release_date'] ?? credit['first_air_date'] ?? credit['air_date']),
+                type: WorkType.tvEpisode,
+                tmdbRating: (credit['vote_average'] as num?)?.toDouble(),
+                popularity: (credit['popularity'] as num?)?.toDouble(),
+                voteCount: credit['vote_count'] as int?,
+                contributorRoles: roles,
+                imdbId: credit['external_ids']?['imdb_id'] ?? credit['imdb_id'] as String?,
+                seasonNumber: seasonNum,
+                episodeNumber: episodeNum,
+                status: credit['status'] as String?,
+              ));
+            }
+          }
+        }
+      } else {
+        // Movie Logic
+        allWorksSet.add(Work(
+          tmdbId: id,
+          title: (first['title'] ?? first['name'] ?? 'Unknown') as String,
+          posterPath: first['poster_path'] ?? first['still_path'] as String?,
+          releaseDate: releaseDate,
+          type: WorkType.movie,
+          tmdbRating: (first['vote_average'] as num?)?.toDouble(),
+          popularity: (first['popularity'] as num?)?.toDouble(),
+          voteCount: first['vote_count'] as int?,
+          contributorRoles: roles,
+          imdbId: first['external_ids']?['imdb_id'] ?? first['imdb_id'] as String?,
+          status: first['status'] as String?,
+        ));
+      }
     }
 
     final List<Work> allWorks = allWorksSet.toList();
@@ -437,22 +508,60 @@ class ContributorLogic {
 
     // ENHANCEMENT: Fetch latest episodes for top TV shows to enable grouping
     if (contributor.type == ContributorType.person) {
+      // Collect IDs of shows that have episodes in sortedLatest
+      final latestShowTitles = sortedLatest
+          .where((w) => w.type == WorkType.tvEpisode)
+          .map((w) => w.title)
+          .toSet();
+          
+      final showsForLatestEpisodes = allWorks.where((w) => 
+        w.type == WorkType.tvShow && latestShowTitles.contains(w.title)
+      ).toList();
+
       final List<Work> relevantTvShows = [
         ...sortedUpcoming.where((w) => w.type == WorkType.tvShow),
         ...sortedLatest.where((w) => w.type == WorkType.tvShow),
         ...sortedHits.where((w) => w.type == WorkType.tvShow),
-      ].toSet().take(10).toList(); // Include hits and increase limit
+        ...showsForLatestEpisodes,
+      ].toSet().take(20).toList(); // Increased limit to 20 for more thorough Latest Releases coverage
 
       if (relevantTvShows.isNotEmpty) {
         debugPrint('[ContributorLogic] Enrichment: Fetching episodes for ${relevantTvShows.length} shows');
         for (final show in relevantTvShows) {
           try {
+            if (show.title.toLowerCase().contains('far cry')) {
+              debugPrint('[DEBUG] Enrichment: Processing "Far Cry" (ID: ${show.tmdbId}). Current Status in Work object: ${show.status}');
+            }
             if (show.title.toLowerCase().contains('flag means death')) {
               debugPrint('[DEBUG] Processing "Our Flag Means Death" for episodes');
             }
             // First get show details to find seasons
             final details = await _tmdbService.getTvDetailsWithEpisodes(show.tmdbId);
             final List<Map<String, dynamic>> episodesToProcess = [];
+            
+            // Update the show object with end date and status if we have it
+            final showStatus = details['status'] as String?;
+            final lastAirDateStr = details['last_air_date'] as String?;
+            DateTime? showEndDate;
+            
+            if (lastAirDateStr != null && lastAirDateStr.isNotEmpty) {
+               // Only treat as "Ended" if the status says so
+               final lowerStatus = showStatus?.toLowerCase() ?? '';
+               if (lowerStatus == 'ended' || lowerStatus == 'canceled') {
+                 showEndDate = DateTime.tryParse(lastAirDateStr);
+               }
+            }
+
+            final showIndex = allWorks.indexWhere((w) => w.tmdbId == show.tmdbId && w.type == WorkType.tvShow);
+            if (showIndex != -1) {
+              allWorks[showIndex] = allWorks[showIndex].copyWith(
+                endDate: showEndDate,
+                status: showStatus,
+              );
+              if (show.title.contains('Legion') || show.title.contains('Fargo')) {
+                debugPrint('[DEBUG] Updated ${show.title} with status=$showStatus, endDate=$showEndDate in allWorks');
+              }
+            }
             
             // 1. Add next/last episodes as priority
             if (details['next_episode_to_air'] != null) episodesToProcess.add(Map<String, dynamic>.from(details['next_episode_to_air']));
@@ -463,8 +572,17 @@ class ContributorLogic {
             final isDirectorOnShow = show.contributorRoles.any((r) => 
                r.role.toLowerCase() == 'director' || r.department?.toLowerCase() == 'directing'
             );
-
-            if (isDirectorOnShow && details['seasons'] != null) {
+            final isWriterOnShow = show.contributorRoles.any((r) => 
+               r.role.toLowerCase().contains('writer') || r.department?.toLowerCase() == 'writing' || r.role.toLowerCase().contains('screenplay')
+            );
+            
+            if (show.title.contains('Legion')) {
+              debugPrint('[DEBUG Legion] isDirectorOnShow: $isDirectorOnShow, isWriterOnShow: $isWriterOnShow');
+              debugPrint('[DEBUG Legion] Show roles: ${show.contributorRoles.map((r) => '${r.role}/${r.department}').toList()}');
+            }
+            
+            // If they are EITHER, we should check episodes to be granular
+            if ((isDirectorOnShow || isWriterOnShow) && details['seasons'] != null) {
               final seasons = details['seasons'] as List;
               for (final season in seasons) {
                 final seasonNum = season['season_number'] as int? ?? 0;
@@ -475,16 +593,37 @@ class ContributorLogic {
                   final seasonDetails = await _tmdbService.getTvSeasonDetails(show.tmdbId, seasonNum);
                   final seasonEpisodes = seasonDetails['episodes'] as List? ?? [];
                   
+                  if (show.title.contains('Legion')) {
+                    debugPrint('[DEBUG Legion] Season $seasonNum has ${seasonEpisodes.length} episodes');
+                  }
+                  
                   for (final epData in seasonEpisodes) {
                     if (!episodesToProcess.any((e) => e['id'] == epData['id'])) {
                       final epCrew = epData['crew'] as List? ?? [];
-                      final didDirectThisEpisode = epCrew.any((c) => 
-                        (c['id'] == contributor.tmdbId || c['name'] == contributor.name) &&
-                        (c['job']?.toString().toLowerCase() == 'director')
-                      );
+                      final myCrewCredits = epCrew.where((c) => c['id'] == contributor.tmdbId || c['name'] == contributor.name).toList();
+
+                      bool didDirect = false;
+                      bool didWrite = false;
                       
-                      if (didDirectThisEpisode) {
-                        episodesToProcess.add(Map<String, dynamic>.from(epData));
+                      for (final c in myCrewCredits) {
+                        final job = c['job']?.toString().toLowerCase() ?? '';
+                        if (job == 'director') didDirect = true;
+                        if (['writer', 'screenplay', 'teleplay', 'story with', 'story by'].contains(job)) didWrite = true;
+                      }
+                      
+                      if (show.title.contains('Legion') && (didDirect || didWrite)) {
+                        debugPrint('[DEBUG Legion] Episode ${epData['name']}: didDirect=$didDirect, didWrite=$didWrite');
+                        debugPrint('[DEBUG Legion]   Crew jobs: ${myCrewCredits.map((c) => c['job']).toList()}');
+                      }
+                      
+                      if (didDirect || didWrite) {
+                         // Attach roles to the raw map so we can read them later
+                         final epMap = Map<String, dynamic>.from(epData);
+                         epMap['__derived_roles'] = <String>[];
+                         if (didDirect) (epMap['__derived_roles'] as List).add('Director');
+                         if (didWrite) (epMap['__derived_roles'] as List).add('Writer');
+                         
+                         episodesToProcess.add(epMap);
                       }
                     }
                   }
@@ -494,6 +633,10 @@ class ContributorLogic {
               }
             }
 
+            if (show.title.contains('Legion')) {
+              debugPrint('[DEBUG Legion] Total episodes to process: ${episodesToProcess.length}');
+            }
+            
             for (final ep in episodesToProcess) {
               final airDateStr = ep['air_date'] as String?;
               DateTime? airDate;
@@ -506,20 +649,29 @@ class ContributorLogic {
               if (allWorks.any((w) => w.type == WorkType.tvEpisode && w.tmdbId == epId)) {
                 continue;
               }
-            allWorks.add(Work(
+              
+              final derivedRoles = ep['__derived_roles'] as List<dynamic>?;
+              if (show.title.contains('Legion') && derivedRoles != null) {
+                debugPrint('[DEBUG Legion] Episode ${ep['name']} __derived_roles: $derivedRoles');
+              }
+              
+              allWorks.add(Work(
                 tmdbId: epId,
                 title: '${show.title} - S${ep['season_number'].toString().padLeft(2, '0')}E${ep['episode_number'].toString().padLeft(2, '0')} - ${ep['name']}',
-                posterPath: ep['still_path'] ?? show.posterPath,
-                releaseDate: airDate, // This line was intended to be 'releaseDate: airDate,'
+                posterPath: show.posterPath ?? ep['still_path'],
+                releaseDate: airDate,
                 type: WorkType.tvEpisode,
                 tmdbRating: (ep['vote_average'] as num?)?.toDouble(),
+                voteCount: ep['vote_count'] as int?,
                 popularity: show.popularity,
-                contributorRoles: isDirectorOnShow ? [ContributorRole(
-                  contributorId: contributor.tmdbId,
-                  contributorName: contributor.name,
-                  role: 'Director',
-                  department: 'Directing',
-                )] : show.contributorRoles,
+                contributorRoles: derivedRoles?.map((r) {
+                  return ContributorRole(
+                    contributorId: contributor.tmdbId,
+                    contributorName: contributor.name,
+                    role: r.toString(),
+                    department: r.toString() == 'Director' ? 'Directing' : 'Writing',
+                  );
+                }).toList() ?? [],
                 imdbId: show.imdbId,
                 seasonNumber: ep['season_number'],
                 episodeNumber: ep['episode_number'],
@@ -528,11 +680,24 @@ class ContributorLogic {
           } catch (e) {
             debugPrint('[ContributorLogic] Error fetching episodes for show ${show.title}: $e');
           }
+          
+          if (show.title.contains('Legion')) {
+            final legionCount = allWorks.where((w) => w.title.contains('Legion')).length;
+            debugPrint('[DEBUG Legion] After episode processing, allWorks has $legionCount Legion entries');
+          }
         }
 
         // Re-sort everything after adding episodes and filter out duplicates
         final allWorksEnriched = List<Work>.from(allWorks);
         debugPrint('[ContributorLogic] Enrichment: allWorksEnriched count = ${allWorksEnriched.length}');
+        
+        final legionEnrichedCount = allWorksEnriched.where((w) => w.title.contains('Legion')).length;
+        debugPrint('[DEBUG Legion] allWorksEnriched has $legionEnrichedCount Legion entries');
+        final legionEpisodes = allWorksEnriched.where((w) => w.title.contains('Legion') && w.type == WorkType.tvEpisode).toList();
+        debugPrint('[DEBUG Legion] Legion episodes: ${legionEpisodes.length}');
+        for (var ep in legionEpisodes.take(3)) {
+          debugPrint('[DEBUG Legion]   - ${ep.title}, roles: ${ep.contributorRoles.map((r) => r.role).toList()}');
+        }
         
         // Logical de-duplication: If we have episodes for a show, remove the generic show entry from history/hits
         final Set<String> showsWithEpisodes = allWorksEnriched
@@ -565,18 +730,48 @@ class ContributorLogic {
         
         finalAllWorks = filteredWorks;
 
+        // Requirements: Things in status of Planned or without release date go to Upcoming.
+        // Also including In Production and Post Production for consistency with "Upcoming"
+        final upcomingPoolStatuses = {'planned', 'in production', 'post production', 'rumored'};
+
         final upcomingEnriched = filteredWorks.where((w) {
           if (w.type == WorkType.tvShow && showsWithEpisodes.contains(w.title)) return false;
-          return w.releaseDate != null && w.releaseDate!.isAfter(now);
+          
+          final status = w.status?.toLowerCase() ?? '';
+          if (upcomingPoolStatuses.contains(status)) {
+            if (w.title.toLowerCase().contains('far cry')) debugPrint('[DEBUG] Far Cry flagged as upcoming via Status: $status');
+            return true;
+          }
+          if (w.releaseDate == null && w.type != WorkType.tvEpisode) {
+            if (w.title.toLowerCase().contains('far cry')) debugPrint('[DEBUG] Far Cry flagged as upcoming via Null Date');
+            return true;
+          }
+          final isFuture = w.releaseDate != null && w.releaseDate!.isAfter(now);
+          if (isFuture && w.title.toLowerCase().contains('far cry')) debugPrint('[DEBUG] Far Cry flagged as upcoming via Future Date');
+          return isFuture;
         }).toList();
 
         final pastEnriched = filteredWorks.where((w) {
           if (w.type == WorkType.tvShow && showsWithEpisodes.contains(w.title)) return false;
-          return w.releaseDate != null && !w.releaseDate!.isAfter(now);
+          
+          final status = w.status?.toLowerCase() ?? '';
+          if (upcomingPoolStatuses.contains(status)) return false;
+          if (w.releaseDate == null) return false;
+          return !w.releaseDate!.isAfter(now);
         }).toList();
         
         sortedUpcoming = WorkSortingLogic.sortUpcomingWorksChronologically(upcomingEnriched);
         sortedLatest = WorkSortingLogic.sortLatestReleasesReverseChronologically(pastEnriched);
+        
+        debugPrint('[DEBUG] Enrichment Complete for ${contributor.name}: upcoming=${upcomingEnriched.length}, past=${pastEnriched.length}');
+        for (var w in filteredWorks) {
+          if (w.title.toLowerCase().contains('far cry')) {
+             debugPrint('[DEBUG] AFTER Enrichment "Far Cry": Status=${w.status}, Date=${w.releaseDate}, Type=${w.type}');
+             final isUp = upcomingEnriched.contains(w);
+             final isPast = pastEnriched.contains(w);
+             debugPrint('[DEBUG] "Far Cry" classification: IsUpcoming=$isUp, IsPast=$isPast');
+          }
+        }
         
         // For hits: Get top 100 hits. Sort by date for display.
         // For hits: Get top 100 hits. Sort by date for display.
@@ -588,9 +783,14 @@ class ContributorLogic {
         final topHits = WorkSortingLogic.rankBiggestHits(nonUpcomingFilteredWorks);
         // Ensure ALL creator shows are in the pool if they weren't matched as hits (fallback)
         final creatorShows = nonUpcomingFilteredWorks.where((w) {
-          return w.type == WorkType.tvShow && w.contributorRoles.any((r) => 
-            r.role.toLowerCase() == 'creator' || r.department?.toLowerCase() == 'creator'
-          );
+          final isCreator = w.type == WorkType.tvShow && w.contributorRoles.any((r) {
+            final matches = r.role.toLowerCase() == 'creator' || r.department?.toLowerCase() == 'creator';
+            if (matches) {
+              debugPrint('[DEBUG] Creator check matched for "${w.title}". Role: "${r.role}", Dept: "${r.department}"');
+            }
+            return matches;
+          });
+          return isCreator;
         }).toList();
 
         // Merge hits and creator shows, uniquely
@@ -604,31 +804,6 @@ class ContributorLogic {
           return b.releaseDate!.compareTo(a.releaseDate!);
         });
 
-        // Update upcomingEnriched and pastEnriched logic to be as robust as the initial one
-        final upcomingPoolStatuses = {'planned', 'in production', 'post production', 'rumored'};
-        final finalUpcoming = filteredWorks.where((w) {
-          final status = w.status?.toLowerCase() ?? '';
-          if (upcomingPoolStatuses.contains(status)) return true;
-          if (w.releaseDate == null && w.type != WorkType.tvEpisode) return true;
-          return w.releaseDate != null && w.releaseDate!.isAfter(now);
-        }).toList();
-        
-        final finalPast = filteredWorks.where((w) {
-          final status = w.status?.toLowerCase() ?? '';
-          if (upcomingPoolStatuses.contains(status)) return false;
-          if (w.releaseDate == null) return false;
-          return !w.releaseDate!.isAfter(now);
-        }).toList();
-
-        sortedUpcoming = WorkSortingLogic.sortUpcomingWorksChronologically(finalUpcoming);
-        sortedLatest = WorkSortingLogic.sortLatestReleasesReverseChronologically(finalPast);
-        
-        debugPrint('[DEBUG] Enrichment Complete for ${contributor.name}: upcoming=${finalUpcoming.length}, past=${finalPast.length}');
-        for (var w in finalUpcoming) {
-          if (w.title.toLowerCase().contains('far cry')) {
-            debugPrint('[DEBUG] Enrichment: "Far Cry" correctly placed in UPCOMING. Status: ${w.status}, Date: ${w.releaseDate}');
-          }
-        }
       }
     }
 
@@ -652,5 +827,11 @@ class ContributorLogic {
 
     await _contributorDetailRepository!.cacheContributorDetail(detail);
     debugPrint('[ContributorLogic] Successfully cached contributor detail for ${contributor.name}');
+  }
+
+  DateTime? _parseDate(dynamic dateStr) {
+    if (dateStr == null || dateStr is! String || dateStr.isEmpty) return null;
+    final datePart = dateStr.length >= 10 ? dateStr.substring(0, 10) : dateStr;
+    return DateTime.tryParse(datePart);
   }
 }

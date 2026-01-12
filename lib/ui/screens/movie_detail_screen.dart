@@ -189,11 +189,11 @@ class _MovieDetailScreenState extends ConsumerState<MovieDetailScreen> {
                     // Rating and popularity
                     Row(
                       children: [
-                        if (!(prefs.hideRatingsInDetails ?? false) && movieDetail.tmdbRating != null)
+                        if (!(prefs.hideRatingsInDetails ?? false) && movieDetail.tmdbRating != null && movieDetail.voteCount != null && movieDetail.voteCount! > 0)
                           Row(
                             mainAxisSize: MainAxisSize.min,
                             children: [
-                              Icon(
+                              const Icon(
                                 Icons.star,
                                 size: 16,
                                 color: Colors.amber,
@@ -201,29 +201,6 @@ class _MovieDetailScreenState extends ConsumerState<MovieDetailScreen> {
                               const SizedBox(width: 4),
                               Text(
                                 movieDetail.tmdbRating!.toStringAsFixed(1),
-                                style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                                  fontWeight: FontWeight.w600,
-                                ),
-                              ),
-                            ],
-                          ),
-                        
-                        if (!(prefs.hideRatingsInDetails ?? false) && movieDetail.tmdbRating != null &&
-                            !(prefs.hidePopularityInDetails ?? false) && movieDetail.popularity != null)
-                          const SizedBox(width: 12),
-                        
-                        if (!(prefs.hidePopularityInDetails ?? false) && movieDetail.popularity != null)
-                          Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              Icon(
-                                Icons.trending_up,
-                                size: 16,
-                                color: Theme.of(context).colorScheme.primary,
-                              ),
-                              const SizedBox(width: 4),
-                              Text(
-                                movieDetail.popularity!.toInt().toString(),
                                 style: Theme.of(context).textTheme.bodySmall?.copyWith(
                                   fontWeight: FontWeight.w600,
                                 ),

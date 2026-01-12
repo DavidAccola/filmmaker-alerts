@@ -8,7 +8,6 @@ import 'adaptive_tooltip_text.dart';
 /// Widget for displaying TV show creator credits
 class TvShowCreditsWidget extends StatelessWidget {
   final Work show;
-  final bool hidePopularity;
   final bool hideRatings;
   final VoidCallback? onTap;
   final VoidCallback? onAddToWatchlist;
@@ -16,7 +15,6 @@ class TvShowCreditsWidget extends StatelessWidget {
   const TvShowCreditsWidget({
     super.key,
     required this.show,
-    this.hidePopularity = false,
     this.hideRatings = false,
     this.onTap,
     this.onAddToWatchlist,
@@ -86,7 +84,7 @@ class TvShowCreditsWidget extends StatelessWidget {
                     ),
                   ),
 
-                  // Ratings and Popularity in Bottom-Left
+                  // Ratings in Bottom-Left
                   Positioned(
                     bottom: 8,
                     left: 8,
@@ -99,7 +97,7 @@ class TvShowCreditsWidget extends StatelessWidget {
                       child: Row(
                         mainAxisSize: MainAxisSize.min,
                         children: [
-                          if (!hideRatings && show.tmdbRating != null && !(show.tmdbRating == 0.0 && show.releaseDate != null && show.releaseDate!.isAfter(DateTime.now())))
+                          if (!hideRatings && show.tmdbRating != null && show.voteCount != null && show.voteCount! > 0 && !(show.tmdbRating == 0.0 && show.releaseDate != null && show.releaseDate!.isAfter(DateTime.now())))
                             Row(
                               mainAxisSize: MainAxisSize.min,
                               children: [
@@ -111,26 +109,6 @@ class TvShowCreditsWidget extends StatelessWidget {
                                 const SizedBox(width: 2),
                                 Text(
                                   show.tmdbRating!.toStringAsFixed(1),
-                                  style: theme.textTheme.labelSmall?.copyWith(
-                                    color: Colors.white,
-                                    fontWeight: FontWeight.bold,
-                                  ),
-                                ),
-                              ],
-                            ),
-                            const SizedBox(width: 8),
-                          if (!hidePopularity && show.popularity != null && !(show.popularity == 0.0 && show.releaseDate != null && show.releaseDate!.isAfter(DateTime.now())))
-                            Row(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                Icon(
-                                  Icons.trending_up,
-                                  size: 14,
-                                  color: theme.colorScheme.primaryContainer,
-                                ),
-                                const SizedBox(width: 2),
-                                Text(
-                                  show.popularity!.toInt().toString(),
                                   style: theme.textTheme.labelSmall?.copyWith(
                                     color: Colors.white,
                                     fontWeight: FontWeight.bold,

@@ -98,10 +98,13 @@ class MovieDetail {
   @HiveField(10)
   final String? imdbId;
 
-  @HiveField(11)
+  @HiveField(12)
   final List<StreamingOption> streamingOptions;
 
-  @HiveField(12)
+  @HiveField(13)
+  final int? voteCount;
+
+  @HiveField(14)
   final DateTime? lastUpdated;
 
   MovieDetail({
@@ -117,6 +120,7 @@ class MovieDetail {
     this.crew = const [],
     this.imdbId,
     this.streamingOptions = const [],
+    this.voteCount,
     this.lastUpdated,
   });
 }

@@ -14,14 +14,14 @@ class AppConstants {
     'Director',
     'Writer',
     'Production',
-    'Actor',
+    'Crew',
     'Art',
     'Camera',
     'Costume & Makeup',
-    'Crew',
     'Editing',
     'Lighting',
     'Sound',
     'Visual Effects',
+    'Actor',
   ];
 }

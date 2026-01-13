@@ -191,29 +191,31 @@ class SystemTrayService with TrayListener {
 
   Future<void> closeApp() async {
     debugPrint('[SystemTray] closeApp() called');
-    debugPrint('[SystemTray] _isInitialized: $_isInitialized');
     
-    if (_isInitialized) {
-      try {
+    try {
+      if (_isInitialized) {
         debugPrint('[SystemTray] Cleaning up tray manager');
         trayManager.removeListener(this);
         await trayManager.destroy();
-        
-        debugPrint('[SystemTray] Disabling preventClose');
-        await windowManager.setPreventClose(false);
-        
-        debugPrint('[SystemTray] Closing application');
-        await windowManager.close();
-        debugPrint('[SystemTray] Application closed');
-      } catch (e) {
-        debugPrint('[SystemTray] Error closing app: $e');
-        debugPrint('[SystemTray] Stack trace: ${StackTrace.current}');
-        // Force exit if window manager fails
-        debugPrint('[SystemTray] Force exiting application');
-        exit(0);
       }
-    } else {
-      debugPrint('[SystemTray] Not initialized, force exiting');
+      
+      debugPrint('[SystemTray] Disabling preventClose and triggering close');
+      await windowManager.setPreventClose(false);
+      
+      // Attempt a graceful close
+      await windowManager.close();
+      debugPrint('[SystemTray] Graceful close command sent');
+      
+      // Fallback: If the app hasn't closed after a short delay (e.g. 2 seconds),
+      // something might be hanging, so force it.
+      Future.delayed(const Duration(seconds: 2), () {
+        debugPrint('[SystemTray] Graceful close timeout reached, forcing exit');
+        exit(0);
+      });
+      
+    } catch (e) {
+      debugPrint('[SystemTray] Error closing app: $e');
+      debugPrint('[SystemTray] Force exiting application');
       exit(0);
     }
   }

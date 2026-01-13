@@ -4,6 +4,13 @@ import 'package:intl/intl.dart';
 import '../../data/models/contributor_detail.dart';
 import '../../logic/work_sorting_logic.dart';
 import 'adaptive_tooltip_text.dart';
+import '../../logic/tv_show_display_logic.dart';
+
+enum WatchlistButtonPosition {
+  bottomRight,
+  topLeft,
+  center,
+}
 
 class WorkWidget extends StatefulWidget {
   final Work work;
@@ -11,6 +18,14 @@ class WorkWidget extends StatefulWidget {
   final VoidCallback? onTap;
   final VoidCallback? onAddToWatchlist;
   final bool applyAgeStyling;
+  final bool showDate;
+  final bool showRating;
+  final bool useShortDateFormat;
+  final bool showDateInPoster;
+  final bool showWatchlistOnHover;
+  final WatchlistButtonPosition watchlistButtonPosition;
+  final String? hoverTitle;
+  final String? titleOverride; // Used to show Show Title instead of full Episode Title
 
   const WorkWidget({
     super.key,
@@ -19,6 +34,14 @@ class WorkWidget extends StatefulWidget {
     this.onTap,
     this.onAddToWatchlist,
     this.applyAgeStyling = false,
+    this.showDate = true,
+    this.showRating = true,
+    this.useShortDateFormat = false,
+    this.showDateInPoster = false,
+    this.showWatchlistOnHover = false,
+    this.watchlistButtonPosition = WatchlistButtonPosition.bottomRight,
+    this.hoverTitle,
+    this.titleOverride,
   });
 
   @override
@@ -120,21 +143,39 @@ class _WorkWidgetState extends State<WorkWidget> {
                       ),
                     ),
   
-                    // Ratings in Bottom-Left
-                    Positioned(
-                      bottom: 8,
-                      left: 8,
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
-                        decoration: BoxDecoration(
-                          color: Colors.black.withOpacity(0.5),
-                          borderRadius: BorderRadius.circular(4),
-                        ),
-                        child: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            if (!widget.hideRatings && work.tmdbRating != null && work.voteCount != null && work.voteCount! > 0 && !(work.tmdbRating == 0.0 && work.releaseDate != null && work.releaseDate!.isAfter(DateTime.now())))
-                              Row(
+                    // Date or Rating in Bottom-Left
+                    if ((widget.showDateInPoster) || (!widget.showDateInPoster && widget.showRating && !widget.hideRatings && work.tmdbRating != null && work.voteCount != null && work.voteCount! > 0))
+                      Positioned(
+                        bottom: 8,
+                        left: 8,
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
+                          decoration: BoxDecoration(
+                            color: Colors.black.withOpacity(0.5),
+                            borderRadius: BorderRadius.circular(4),
+                          ),
+                          child: widget.showDateInPoster 
+                            ? (work.releaseDate != null 
+                                ? Text(
+                                    _formatReleaseDate(work.releaseDate!),
+                                    style: theme.textTheme.labelSmall?.copyWith(
+                                      color: Colors.white,
+                                      fontWeight: FontWeight.bold,
+                                      fontSize: 10,
+                                    ),
+                                  )
+                                : const Tooltip(
+                                    message: 'To be announced',
+                                    child: Text(
+                                      'TBA',
+                                      style: TextStyle(
+                                        color: Colors.white,
+                                        fontWeight: FontWeight.bold,
+                                        fontSize: 10,
+                                      ),
+                                    ),
+                                  ))
+                            : Row(
                                 mainAxisSize: MainAxisSize.min,
                                 children: [
                                   const Icon(
@@ -152,10 +193,8 @@ class _WorkWidgetState extends State<WorkWidget> {
                                   ),
                                 ],
                               ),
-                          ],
                         ),
                       ),
-                    ),
   
                     // Media Type Icon in Bottom-Right
                     Positioned(
@@ -174,10 +213,74 @@ class _WorkWidgetState extends State<WorkWidget> {
                         ),
                       ),
                     ),
+
+                    // Hover Overlay for Title
+                    if (widget.hoverTitle != null)
+                      AnimatedOpacity(
+                        opacity: _isHovered ? 1.0 : 0.0,
+                        duration: const Duration(milliseconds: 200),
+                        child: Container(
+                          color: Colors.black.withOpacity(0.7),
+                          padding: const EdgeInsets.all(8),
+                          alignment: Alignment.center,
+                          child: Text(
+                            widget.hoverTitle!,
+                            textAlign: TextAlign.center,
+                            style: theme.textTheme.labelMedium?.copyWith(
+                              color: Colors.white,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                        ),
+                      ),
+
+                    // Watchlist Button on Hover or fixed
+                    if (widget.onAddToWatchlist != null) ...[
+                      // Handle TopLeft and Center positions via if-elements
+                      if ((widget.showWatchlistOnHover && _isHovered) || (!widget.showWatchlistOnHover && widget.watchlistButtonPosition != WatchlistButtonPosition.bottomRight))
+                         if (widget.watchlistButtonPosition == WatchlistButtonPosition.topLeft)
+                            Positioned(
+                              top: 8,
+                              left: 8,
+                              child: AnimatedOpacity(
+                                opacity: _isHovered ? 1.0 : 0.0,
+                                duration: const Duration(milliseconds: 200),
+                                child: IconButton(
+                                  onPressed: widget.onAddToWatchlist,
+                                  icon: const Icon(Icons.add_circle_outline),
+                                  iconSize: 24,
+                                  padding: EdgeInsets.zero,
+                                  tooltip: 'Add to Watchlist',
+                                  color: Colors.white,
+                                  style: IconButton.styleFrom(
+                                    backgroundColor: Colors.black45,
+                                  ),
+                                ),
+                              ),
+                            )
+                         else if (widget.watchlistButtonPosition == WatchlistButtonPosition.center)
+                            Center(
+                              child: AnimatedOpacity(
+                                opacity: _isHovered ? 1.0 : 0.0,
+                                duration: const Duration(milliseconds: 200),
+                                child: IconButton(
+                                  onPressed: widget.onAddToWatchlist,
+                                  icon: const Icon(Icons.add_circle_outline),
+                                  iconSize: 32,
+                                  padding: EdgeInsets.zero,
+                                  tooltip: 'Add to Watchlist',
+                                  color: Colors.white,
+                                  style: IconButton.styleFrom(
+                                    backgroundColor: Colors.black45,
+                                  ),
+                                ),
+                              ),
+                            ),
+                    ],
                   ],
                 ),
               ),
-              
+
               // Work information
               Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 10.0, vertical: 8.0),
@@ -188,7 +291,7 @@ class _WorkWidgetState extends State<WorkWidget> {
                     SizedBox(
                       height: 32,
                       child: AdaptiveTooltipText(
-                        work.title,
+                        widget.titleOverride ?? work.title,
                         style: theme.textTheme.titleSmall?.copyWith(
                           fontWeight: FontWeight.bold,
                           height: 1.1,
@@ -207,14 +310,26 @@ class _WorkWidgetState extends State<WorkWidget> {
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                              if (work.releaseDate != null)
-                                Text(
-                                  _formatReleaseDate(work.releaseDate!),
-                                  style: theme.textTheme.bodySmall?.copyWith(
-                                    color: theme.colorScheme.onSurfaceVariant,
-                                    fontSize: 10,
+                              if (widget.showDate)
+                                if (work.releaseDate != null)
+                                  Text(
+                                    _formatReleaseDate(work.releaseDate!),
+                                    style: theme.textTheme.bodySmall?.copyWith(
+                                      color: theme.colorScheme.onSurfaceVariant,
+                                      fontSize: 10,
+                                    ),
+                                  )
+                                else
+                                  const Tooltip(
+                                    message: 'To be announced',
+                                    child: Text(
+                                      'TBA',
+                                      style: TextStyle(
+                                        fontSize: 10,
+                                        fontWeight: FontWeight.bold,
+                                      ),
+                                    ),
                                   ),
-                                ),
                               
                               if (work.releaseType != null)
                                 Padding(
@@ -225,7 +340,7 @@ class _WorkWidgetState extends State<WorkWidget> {
                           ),
                         ),
                         
-                        if (widget.onAddToWatchlist != null)
+                        if (!widget.showWatchlistOnHover && widget.watchlistButtonPosition == WatchlistButtonPosition.bottomRight && widget.onAddToWatchlist != null)
                           IconButton(
                             onPressed: widget.onAddToWatchlist,
                             icon: const Icon(Icons.add_circle_outline),
@@ -265,9 +380,17 @@ class _WorkWidgetState extends State<WorkWidget> {
   }
 
   String _formatReleaseDate(DateTime date) {
+    if (widget.useShortDateFormat) {
+      return DateFormat('MM/dd/yyyy').format(date);
+    }
     final now = DateTime.now();
-    final twoYearsAgo = now.subtract(const Duration(days: 365 * 2));
-    if (date.isBefore(twoYearsAgo)) {
+    // Requirements:
+    // > 3 years old: YYYY
+    // 2-3 years old: MMM d, yyyy
+    // This year: MMM d
+    
+    final threeYearsAgo = now.subtract(const Duration(days: 365 * 3));
+    if (date.isBefore(threeYearsAgo)) {
       return date.year.toString();
     }
     if (date.year == now.year) {

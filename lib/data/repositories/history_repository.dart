@@ -20,7 +20,7 @@ class EnrichedHistoryEntry {
 class HistoryRepository {
   Box<NotificationHistoryEntry> get _historyBox => Hive.box<NotificationHistoryEntry>(AppConstants.historyBox);
   Box<MovieCacheEntry> get _movieCacheBox => Hive.box<MovieCacheEntry>(AppConstants.movieCacheBox);
-  Box<TvShowCacheEntry> get _tvCacheBox => Hive.box<TvShowCacheEntry>('tv_shows_cache');
+  Box<TvShowCacheEntry> get _tvCacheBox => Hive.box<TvShowCacheEntry>(AppConstants.tvCacheBox);
 
   /// Get full history, sorted by most recent notification, with titles populated.
   List<EnrichedHistoryEntry> getHistory() {

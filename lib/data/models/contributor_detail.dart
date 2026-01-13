@@ -143,6 +143,9 @@ class Work {
   @HiveField(15)
   final int? voteCount;
 
+  @HiveField(16)
+  final int? showId;
+
   Work({
     required this.tmdbId,
     required this.title,
@@ -160,6 +163,7 @@ class Work {
     this.status,
     this.endDate,
     this.voteCount,
+    this.showId,
   });
 
   @override
@@ -170,14 +174,16 @@ class Work {
           tmdbId == other.tmdbId &&
           type == other.type &&
           seasonNumber == other.seasonNumber &&
-          episodeNumber == other.episodeNumber;
+          episodeNumber == other.episodeNumber &&
+          showId == other.showId;
 
   @override
   int get hashCode =>
       tmdbId.hashCode ^
       type.hashCode ^
       (seasonNumber ?? 0).hashCode ^
-      (episodeNumber ?? 0).hashCode;
+      (episodeNumber ?? 0).hashCode ^
+      (showId ?? 0).hashCode;
 
   Work copyWith({
     int? tmdbId,
@@ -196,6 +202,7 @@ class Work {
     String? status,
     DateTime? endDate,
     int? voteCount,
+    int? showId,
   }) {
     return Work(
       tmdbId: tmdbId ?? this.tmdbId,
@@ -214,6 +221,7 @@ class Work {
       status: status ?? this.status,
       endDate: endDate ?? this.endDate,
       voteCount: voteCount ?? this.voteCount,
+      showId: showId ?? this.showId,
     );
   }
 }

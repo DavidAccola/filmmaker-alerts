@@ -14,6 +14,7 @@ import 'data/models/movie_cache_entry.dart';
 import 'data/models/tv_cache.dart';
 import 'data/models/notification_history.dart';
 import 'data/models/preferences.dart';
+import 'data/models/tv_detail.dart';
 import 'ui/screens/main_screen.dart';
 import 'ui/common/rate_limit_listener.dart';
 import 'logic/background_service.dart';
@@ -82,6 +83,11 @@ void main() async {
   Hive.registerAdapter(CastMemberAdapter());
   Hive.registerAdapter(CrewMemberAdapter());
   Hive.registerAdapter(MovieDetailAdapter());
+  Hive.registerAdapter(TvShowDetailAdapter());
+  Hive.registerAdapter(TvSeasonAdapter());
+  Hive.registerAdapter(TvEpisodeDetailAdapter());
+  Hive.registerAdapter(TvSeasonDetailAdapter());
+  Hive.registerAdapter(SeasonEpisodeAdapter());
 
   // 4. Open Boxes
   await Hive.openBox<Contributor>(AppConstants.contributorsBox);
@@ -92,6 +98,9 @@ void main() async {
   // Open new boxes for contributor details
   await Hive.openBox<ContributorDetail>(AppConstants.contributorDetailsBox);
   await Hive.openBox<MovieDetail>(AppConstants.movieDetailsBox);
+  await Hive.openBox<TvShowDetail>(AppConstants.tvDetailsBox);
+  await Hive.openBox<TvEpisodeDetail>(AppConstants.tvEpisodeDetailsBox);
+  await Hive.openBox<TvSeasonDetail>(AppConstants.tvSeasonDetailsBox);
 
   // 5. Initialize Riverpod Container
   final container = ProviderContainer();

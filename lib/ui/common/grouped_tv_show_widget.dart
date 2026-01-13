@@ -13,6 +13,9 @@ class GroupedTvShowWidget extends StatefulWidget {
   final VoidCallback? onTap;
   final void Function(Work)? onEpisodeWatchlist;
   final bool applyAgeStyling;
+  final bool showDate;
+  final bool showRating;
+  final bool useShortDateFormat;
 
   const GroupedTvShowWidget({
     super.key,
@@ -22,6 +25,9 @@ class GroupedTvShowWidget extends StatefulWidget {
     this.onTap,
     this.onEpisodeWatchlist,
     this.applyAgeStyling = false,
+    this.showDate = true,
+    this.showRating = true,
+    this.useShortDateFormat = false,
   });
 
   @override
@@ -90,41 +96,36 @@ class _GroupedTvShowWidgetState extends State<GroupedTvShowWidget> {
                     ),
 
                     // Ratings in Bottom-Left
-                    Positioned(
-                      bottom: 8,
-                      left: 8,
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
-                        decoration: BoxDecoration(
-                          color: Colors.black.withOpacity(0.5),
-                          borderRadius: BorderRadius.circular(4),
-                        ),
-                        child: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            if (!widget.hideRatings && latestEpisode.tmdbRating != null && latestEpisode.voteCount != null && latestEpisode.voteCount! > 0 && !(latestEpisode.tmdbRating == 0.0 && latestEpisode.releaseDate != null && latestEpisode.releaseDate!.isAfter(DateTime.now())))
-                              Row(
-                                mainAxisSize: MainAxisSize.min,
-                                children: [
-                                  const Icon(
-                                    Icons.star,
-                                    size: 14,
-                                    color: Colors.amber,
-                                  ),
-                                  const SizedBox(width: 2),
-                                  Text(
-                                    latestEpisode.tmdbRating!.toStringAsFixed(1),
-                                    style: theme.textTheme.labelSmall?.copyWith(
-                                      color: Colors.white,
-                                      fontWeight: FontWeight.bold,
-                                    ),
-                                  ),
-                                ],
+                    if (widget.showRating && !widget.hideRatings && latestEpisode.tmdbRating != null && latestEpisode.voteCount != null && latestEpisode.voteCount! > 0 && !(latestEpisode.tmdbRating == 0.0 && latestEpisode.releaseDate != null && latestEpisode.releaseDate!.isAfter(DateTime.now())))
+                      Positioned(
+                        bottom: 8,
+                        left: 8,
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
+                          decoration: BoxDecoration(
+                            color: Colors.black.withOpacity(0.5),
+                            borderRadius: BorderRadius.circular(4),
+                          ),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              const Icon(
+                                Icons.star,
+                                size: 14,
+                                color: Colors.amber,
                               ),
-                          ],
+                              const SizedBox(width: 2),
+                              Text(
+                                latestEpisode.tmdbRating!.toStringAsFixed(1),
+                                style: theme.textTheme.labelSmall?.copyWith(
+                                  color: Colors.white,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
+                            ],
+                          ),
                         ),
                       ),
-                    ),
 
                     // Media Type Icon in Bottom-Right
                     Positioned(
@@ -235,26 +236,32 @@ class _GroupedTvShowWidgetState extends State<GroupedTvShowWidget> {
                     
                     Row(
                       children: [
-                        Expanded(
-                          child: Text(
-                            () {
-                              final date = latestEpisode.releaseDate!;
-                              final now = DateTime.now();
-                              final twoYearsAgo = now.subtract(const Duration(days: 365 * 2));
-                              if (date.isBefore(twoYearsAgo)) {
-                                return 'Latest: ${date.year}';
-                              }
-                              if (date.year == now.year) {
-                                return 'Latest: ${DateFormat('MMM d').format(date)}';
-                              }
-                              return 'Latest: ${DateFormat('MMM d, yyyy').format(date)}';
-                            }(),
-                            style: theme.textTheme.bodySmall?.copyWith(
-                              color: theme.colorScheme.onSurfaceVariant,
-                              fontSize: 10,
+                        if (widget.showDate)
+                          Expanded(
+                            child: Text(
+                              () {
+                                final date = latestEpisode.releaseDate!;
+                                final now = DateTime.now();
+                                
+                                if (widget.useShortDateFormat) {
+                                  return 'Latest: ${DateFormat('MM/dd/yyyy').format(date)}';
+                                }
+
+                                final twoYearsAgo = now.subtract(const Duration(days: 365 * 2));
+                                if (date.isBefore(twoYearsAgo)) {
+                                  return 'Latest: ${date.year}';
+                                }
+                                if (date.year == now.year) {
+                                  return 'Latest: ${DateFormat('MMM d').format(date)}';
+                                }
+                                return 'Latest: ${DateFormat('MMM d, yyyy').format(date)}';
+                              }(),
+                              style: theme.textTheme.bodySmall?.copyWith(
+                                color: theme.colorScheme.onSurfaceVariant,
+                                fontSize: 10,
+                              ),
                             ),
                           ),
-                        ),
                         if (widget.onEpisodeWatchlist != null)
                           SizedBox(
                             height: 24,

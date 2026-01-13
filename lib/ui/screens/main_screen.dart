@@ -57,28 +57,24 @@ class _MainScreenState extends ConsumerState<MainScreen> with WindowListener {
 
   @override
   void onWindowClose() async {
-    debugPrint('[MainScreen] onWindowClose() called - X button clicked!');
+    debugPrint('[MainScreen] onWindowClose() called');
     if (Platform.isWindows) {
-      debugPrint('[MainScreen] Platform is Windows, preventing close and minimizing to tray');
-      
       try {
-        // Prevent default close behavior
         bool isPreventClose = await windowManager.isPreventClose();
         debugPrint('[MainScreen] Current preventClose status: $isPreventClose');
         
-        if (!isPreventClose) {
-          debugPrint('[MainScreen] Setting preventClose to true');
-          await windowManager.setPreventClose(true);
+        if (isPreventClose) {
+          debugPrint('[MainScreen] preventClose is true, minimizing to tray instead of closing');
+          final systemTray = ref.read(systemTrayServiceProvider);
+          await systemTray.minimizeToTray();
+        } else {
+          debugPrint('[MainScreen] preventClose is false, allowing application to close');
+          // No action needed, preventClose is already false so window will close
         }
-        
-        // Minimize to tray instead of closing
-        debugPrint('[MainScreen] Getting system tray service');
-        final systemTray = ref.read(systemTrayServiceProvider);
-        debugPrint('[MainScreen] Calling minimizeToTray()');
-        await systemTray.minimizeToTray();
-        debugPrint('[MainScreen] minimizeToTray() completed');
       } catch (e) {
         debugPrint('[MainScreen] Error in onWindowClose: $e');
+        // If error occurs, default to exit as a safety measure
+        exit(0);
       }
     } else {
       debugPrint('[MainScreen] Not Windows, allowing normal close');

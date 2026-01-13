@@ -2,12 +2,15 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../data/models/contributor.dart';
 import '../data/models/contributor_detail.dart';
+import '../data/models/movie_detail.dart';
+import '../data/models/tv_detail.dart';
 import '../data/repositories/contributor_repository.dart';
 import '../data/repositories/contributor_detail_repository.dart';
 import '../data/repositories/history_repository.dart';
 import '../data/repositories/movie_cache_repository.dart';
 import '../data/repositories/movie_detail_repository.dart';
 import '../data/repositories/tv_cache_repository.dart';
+import '../data/repositories/tv_detail_repository.dart';
 import '../data/repositories/preferences_repository.dart';
 import '../data/repositories/streaming_repository.dart';
 import '../data/services/tmdb_service.dart';
@@ -19,6 +22,7 @@ import '../logic/search_logic.dart';
 import '../logic/work_sorting_logic.dart';
 import '../logic/tv_show_display_logic.dart';
 import '../logic/multiple_role_display_logic.dart';
+import '../logic/work_logic.dart';
 import '../data/services/notification_service.dart';
 import '../data/services/system_tray_service.dart';
 import '../data/models/preferences.dart';
@@ -55,6 +59,10 @@ final contributorDetailRepositoryProvider = Provider<ContributorDetailRepository
 
 final movieDetailRepositoryProvider = Provider<MovieDetailRepository>((ref) {
   return MovieDetailRepository();
+});
+
+final tvDetailRepositoryProvider = Provider<TvDetailRepository>((ref) {
+  return TvDetailRepository();
 });
 
 // --- Services ---
@@ -94,6 +102,15 @@ final contributorLogicProvider = Provider<ContributorLogic>((ref) {
     ref.watch(latestWorkLogicProvider),
     ref.watch(preferencesRepositoryProvider),
     contributorDetailRepository: ref.watch(contributorDetailRepositoryProvider),
+  );
+});
+
+final workLogicProvider = Provider<WorkLogic>((ref) {
+  return WorkLogic(
+    ref.watch(tmdbServiceProvider),
+    ref.watch(justWatchServiceProvider),
+    ref.watch(movieDetailRepositoryProvider),
+    ref.watch(tvDetailRepositoryProvider),
   );
 });
 
@@ -196,6 +213,60 @@ final contributorDetailProvider = FutureProvider.family<ContributorDetail?, int>
     debugPrint('[ContributorDetailProvider] Error fetching details on demand: $e');
     return null;
   }
+});
+
+final movieDetailProvider = FutureProvider.family<MovieDetail?, int>((ref, movieId) async {
+  final repo = ref.watch(movieDetailRepositoryProvider);
+  
+  // Check if cached and fresh
+  if (repo.isCached(movieId)) {
+    return repo.getMovieDetail(movieId);
+  }
+  
+  final logic = ref.read(workLogicProvider);
+  return await logic.fetchAndCacheMovieDetail(movieId);
+});
+
+/// TV show detail provider
+final tvShowDetailProvider = FutureProvider.family<TvShowDetail?, int>((ref, showId) async {
+  final repo = ref.watch(tvDetailRepositoryProvider);
+  if (repo.isShowCached(showId)) {
+    return repo.getTvShowDetail(showId);
+  }
+  final logic = ref.read(workLogicProvider);
+  return await logic.fetchAndCacheTvShowDetail(showId);
+});
+
+typedef EpisodeParams = ({int showId, int seasonNumber, int episodeNumber});
+typedef SeasonParams = ({int showId, int seasonNumber});
+
+/// TV season detail provider
+final tvSeasonDetailProvider = FutureProvider.family<TvSeasonDetail?, SeasonParams>((ref, params) async {
+  final repo = ref.watch(tvDetailRepositoryProvider);
+  if (repo.isSeasonCached(params.showId, params.seasonNumber)) {
+    return repo.getTvSeasonDetail(params.showId, params.seasonNumber);
+  }
+  final logic = ref.read(workLogicProvider);
+  return await logic.fetchAndCacheTvSeasonDetail(
+    showId: params.showId,
+    seasonNumber: params.seasonNumber,
+  );
+});
+
+/// TV episode detail provider
+final tvEpisodeDetailProvider = FutureProvider.family<TvEpisodeDetail?, EpisodeParams>((ref, params) async {
+  final repo = ref.watch(tvDetailRepositoryProvider);
+  
+  // We don't have a direct "isCached" for episodes by show/season/ep in the repo yet, 
+  // but we can check if the episode's TMDB ID (if we had it) is cached.
+  // For now, let's just fetch if we don't have the show's episode cached.
+  // Actually, let's just use the fetcher which handles caching.
+  final logic = ref.read(workLogicProvider);
+  return await logic.fetchAndCacheTvEpisodeDetail(
+    showId: params.showId,
+    seasonNumber: params.seasonNumber,
+    episodeNumber: params.episodeNumber,
+  );
 });
 
 // --- UI State ---

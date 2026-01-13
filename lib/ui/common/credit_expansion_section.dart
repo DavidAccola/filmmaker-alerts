@@ -102,58 +102,48 @@ class _CreditExpansionSectionState extends State<CreditExpansionSection> {
       ),
       child: Column(
         children: [
-          // Main Section Header (Collapsible)
-          Material(
-            color: theme.colorScheme.surfaceContainer,
-            child: InkWell(
-              onTap: () {
-                setState(() {
-                  _isExpanded = !_isExpanded;
-                });
-              },
-              child: Padding(
-                padding: const EdgeInsets.all(16.0),
-                child: Row(
-                  children: [
-                    if (widget.icon != null) ...[
-                      Icon(widget.icon, color: theme.colorScheme.primary),
-                      const SizedBox(width: 12),
-                    ],
-                    Expanded(
-                      child: Text(
-                        widget.title,
-                        style: theme.textTheme.titleMedium?.copyWith(
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                    ),
-                    Text(
-                      '${widget.works.length}',
-                      style: theme.textTheme.labelMedium?.copyWith(
-                        color: theme.colorScheme.onSurfaceVariant,
-                      ),
-                    ),
-                    const SizedBox(width: 8),
-                    Icon(
-                      _isExpanded ? Icons.expand_less : Icons.expand_more, 
-                      color: theme.colorScheme.onSurfaceVariant
-                    ),
-                  ],
-                ),
-              ),
-            ),
-          ),
-
-
-
           // Content
-          if (_isExpanded)
-            Padding(
-              padding: const EdgeInsets.only(bottom: 16),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  // View Toggle
+          Padding(
+            padding: const EdgeInsets.symmetric(vertical: 8),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                // Header (Icon + Title + Count) - No longer clickable for expansion, purely informational or just clickable to expand if collapsed
+                InkWell(
+                  onTap: () {
+                    setState(() {
+                      _isExpanded = !_isExpanded;
+                    });
+                  },
+                  child: Padding(
+                    padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
+                    child: Row(
+                      children: [
+                        if (widget.icon != null) ...[
+                          Icon(widget.icon, color: theme.colorScheme.primary),
+                          const SizedBox(width: 12),
+                        ],
+                        Expanded(
+                          child: Text(
+                            widget.title,
+                            style: theme.textTheme.titleMedium?.copyWith(
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                        ),
+                        Text(
+                          '${widget.works.length}',
+                          style: theme.textTheme.labelMedium?.copyWith(
+                            color: theme.colorScheme.onSurfaceVariant,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+
+                if (_isExpanded) ...[
+                  // Expanded Controls
                   Padding(
                     padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 0),
                     child: Row(
@@ -196,15 +186,56 @@ class _CreditExpansionSectionState extends State<CreditExpansionSection> {
                     }).toList()
                   else
                     _buildChronologicalList(),
+                    
+                  // Show Less Button
+                  Center(
+                    child: TextButton.icon(
+                      onPressed: () => setState(() => _isExpanded = false),
+                      icon: const Icon(Icons.expand_less),
+                      label: const Text('Show Less'),
+                    ),
+                  ),
+                ] else ...[
+                  // Collapsed State: Top 5 Chronological
+                  _buildChronologicalList(limit: 5),
+                  
+                   // Fade + Show More
+                   if (widget.works.length > 5)
+                      Stack(
+                        alignment: Alignment.center,
+                        children: [
+                          Container(
+                             height: 40,
+                             decoration: BoxDecoration(
+                               gradient: LinearGradient(
+                                 begin: Alignment.topCenter,
+                                 end: Alignment.bottomCenter,
+                                 colors: [
+                                   theme.cardColor.withOpacity(0.0),
+                                   theme.cardColor,
+                                 ],
+                               ),
+                             ),
+                          ),
+                          Center(
+                            child: TextButton.icon(
+                              onPressed: () => setState(() => _isExpanded = true),
+                              icon: const Icon(Icons.expand_more),
+                              label: Text('Show all ${widget.works.length} credits'),
+                            ),
+                          ),
+                        ],
+                      ),
                 ],
-              ),
+              ],
             ),
+          ),
         ],
       ),
     );
   }
 
-  Widget _buildChronologicalList() {
+  Widget _buildChronologicalList({int? limit}) {
     // Flatten all works
     final allWorks = widget.works;
     
@@ -244,7 +275,7 @@ class _CreditExpansionSectionState extends State<CreditExpansionSection> {
       });
 
     return Column(
-      children: sortedKeys.map((key) {
+      children: sortedKeys.take(limit ?? sortedKeys.length).map((key) {
         var work = uniqueWorks[key]!;
         final episodes = episodesMap[key] ?? [];
         
@@ -368,25 +399,69 @@ class _CreditExpansionSectionState extends State<CreditExpansionSection> {
 
 
   Widget _buildWorkItem(Work work, {bool isEpisode = false, List<Widget>? children, String? currentDepartmentFilter}) {
+    return _CreditWorkItem(
+      work: work,
+      isEpisode: isEpisode,
+      children: children,
+      currentDepartmentFilter: currentDepartmentFilter,
+      hideRatings: widget.hideRatings,
+      onWorkTap: widget.onWorkTap,
+      onAddToWatchlist: widget.onAddToWatchlist,
+    );
+  }
+
+  String _extractEpisodeTitle(String title) {
+    final parts = title.split(' - ');
+    if (parts.length >= 3) return parts.sublist(2).join(' - ');
+    if (parts.length == 2) return parts[1];
+    return title;
+  }
+}
+
+class _CreditWorkItem extends StatefulWidget {
+  final Work work;
+  final bool isEpisode;
+  final List<Widget>? children;
+  final String? currentDepartmentFilter;
+  final bool hideRatings;
+  final Function(Work)? onWorkTap;
+  final Function(Work)? onAddToWatchlist;
+
+  const _CreditWorkItem({
+    required this.work,
+    this.isEpisode = false,
+    this.children,
+    this.currentDepartmentFilter,
+    required this.hideRatings,
+    this.onWorkTap,
+    this.onAddToWatchlist,
+  });
+
+  @override
+  State<_CreditWorkItem> createState() => _CreditWorkItemState();
+}
+
+class _CreditWorkItemState extends State<_CreditWorkItem> {
+  bool _isHovered = false;
+
+  @override
+  Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    
+    final work = widget.work;
+    final isEpisode = widget.isEpisode;
+    final children = widget.children;
+    final currentDepartmentFilter = widget.currentDepartmentFilter;
+
     // Logic to sort and filter roles
     List<String> rawRoles;
     if (currentDepartmentFilter != null) {
-      // In Grouped Mode: Show only roles for this department
       rawRoles = work.contributorRoles
         .where((r) {
-            // Check mapping
-            if (currentDepartmentFilter == 'Cast' && (r.department == null || r.department!.isEmpty || r.role == 'Acting' || r.role == 'Cast')) return true;
-             // Use relaxed matching or strict? 
-             final dept = r.department ?? (work.type == WorkType.movie ? 'Movie' : 'TV'); // basic fallback
-             // We can rely on TvShowDisplayLogic logic but deeper...
-             // Simplified: if filter is 'Directing', accept 'Director', 'Directing'
+             if (currentDepartmentFilter == 'Cast' && (r.department == null || r.department!.isEmpty || r.role == 'Acting' || r.role == 'Cast')) return true;
              if (currentDepartmentFilter == 'Directing' && (r.role.contains('Director') || r.department == 'Directing')) return true;
              if (currentDepartmentFilter == 'Writing' && (r.role.contains('Writer') || r.department == 'Writing' || r.role.contains('Screenplay'))) return true;
              if (currentDepartmentFilter == 'Creator' && (r.role.contains('Creator') || r.role.contains('Created'))) return true;
              if (currentDepartmentFilter == 'Production' && (r.department == 'Production' || r.role.contains('Producer'))) return true;
-             // Default match
              return (r.department == currentDepartmentFilter);
         })
         .map((r) => r.role)
@@ -395,62 +470,8 @@ class _CreditExpansionSectionState extends State<CreditExpansionSection> {
        rawRoles = work.contributorRoles.map((r) => r.role).toList();
     }
     
-    // Remove generic "TV"/"Movie" roles if we have better ones
     rawRoles = rawRoles.where((r) => !['tv', 'movie', 'tv show', 'general'].contains(r.toLowerCase())).toList();
     
-    // Sort Roles
-    rawRoles.sort((a, b) {
-       int score(String role) {
-          final r = role.toLowerCase();
-          if (r.contains('creator') || r.contains('created')) return 0;
-          if (r.contains('director') || r.contains('directing')) return 1;
-          if (r.contains('producer') || r.contains('production')) return 2;
-          if (r.contains('writer') || r.contains('writing') || r.contains('screenplay')) return 3;
-          if (r.contains('self') || r.contains('cameo') || r.contains('host')) return 99; // Cast last
-           // Try to detect Cast names? Usually specialized
-          return 4; // Others alphabetical
-       }
-       final sa = score(a);
-       final sb = score(b);
-       if (sa != sb) return sa.compareTo(sb);
-       return a.compareTo(b);
-    });
-
-    // Separator logic for Cast
-    // If chronological (no filter), we might have Crew AND Cast.
-    // Check if we switched from score < 10 to score 99
-    final List<TextSpan> roleSpans = [];
-    bool hasCastSeparator = false;
-
-    if (rawRoles.isNotEmpty) {
-       // dedupe
-       final uniqueRoles = <String>[];
-       for(var r in rawRoles) { if(!uniqueRoles.contains(r)) uniqueRoles.add(r); }
-       
-       for (int i = 0; i < uniqueRoles.length; i++) {
-          final role = uniqueRoles[i];
-          // Check if this is a cast role (simple heuristic for now: lowest priority in our sort)
-          bool isCast = role.toLowerCase().contains('self') || role.toLowerCase().contains('cameo') || role.toLowerCase().contains('host'); // imperfect but fits known data
-          // Better: If we have multiple types and sorting put them at end...
-          // If we want a generic separator before the "Cast" block
-          
-          if (currentDepartmentFilter == null && !hasCastSeparator && i > 0) {
-             // Heuristic: If previous was Crew and this is Cast?
-             // Or just simple comma join, keeping it simple as requested: "Do a bullet... before the list of Cast roles"
-             // Let's assume the last block of roles are Cast if they aren't the standard Crew ones.
-          }
-          if (i > 0) roleSpans.add(const TextSpan(text: ', '));
-          
-          if (currentDepartmentFilter == null && !hasCastSeparator && isCast && i > 0) {
-             roleSpans.add(const TextSpan(text: '• ', style: TextStyle(fontWeight: FontWeight.bold)));
-             hasCastSeparator = true; 
-          }
-          roleSpans.add(TextSpan(text: role));
-       }
-    }
-
-    final rolesText = rawRoles.toSet().join(', '); // Fallback simple join for now to ensure safety, span logic is complex without precise Cast detection
-    // Let's refine the join:
     String finalRolesString = "";
     if (rawRoles.isNotEmpty) {
         List<String> crew = [];
@@ -470,126 +491,146 @@ class _CreditExpansionSectionState extends State<CreditExpansionSection> {
         }
     }
 
-
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        InkWell(
-          onTap: () => widget.onWorkTap?.call(work),
-          child: Padding(
-            padding: EdgeInsets.symmetric(
-              horizontal: isEpisode ? 32 : 16,  // More indentation for episodes
-              vertical: 8
-            ),
-            child: Row(
-              children: [
-                if (isEpisode)
-                  Container(
-                    width: 60,
-                    padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
-                    decoration: BoxDecoration(
-                      color: theme.colorScheme.primary.withOpacity(0.1),
-                      borderRadius: BorderRadius.circular(4),
-                    ),
-                    child: Text(
-                      'S${work.seasonNumber?.toString().padLeft(2, '0')}E${work.episodeNumber?.toString().padLeft(2, '0')}',
-                      style: theme.textTheme.labelSmall?.copyWith(
-                        color: theme.colorScheme.primary,
-                        fontWeight: FontWeight.bold,
-                        fontSize: 9,
+        MouseRegion(
+          onEnter: (_) => setState(() => _isHovered = true),
+          onExit: (_) => setState(() => _isHovered = false),
+          child: InkWell(
+            onTap: () => widget.onWorkTap?.call(work),
+            child: Padding(
+              padding: EdgeInsets.symmetric(
+                horizontal: isEpisode ? 32 : 16,
+                vertical: 8
+              ),
+              child: Row(
+                children: [
+                  if (isEpisode)
+                    Container(
+                      width: 60,
+                      padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
+                      decoration: BoxDecoration(
+                        color: theme.colorScheme.primary.withOpacity(0.1),
+                        borderRadius: BorderRadius.circular(4),
                       ),
-                      textAlign: TextAlign.center,
-                    ),
-                  )
-                else if (work.posterPath != null)
-                  ClipRRect(
-                    borderRadius: BorderRadius.circular(4),
-                    child: CachedNetworkImage(
-                      imageUrl: 'https://image.tmdb.org/t/p/w200${work.posterPath}',
+                      child: Text(
+                        'S${work.seasonNumber?.toString().padLeft(2, '0')}E${work.episodeNumber?.toString().padLeft(2, '0')}',
+                        style: theme.textTheme.labelSmall?.copyWith(
+                          color: theme.colorScheme.primary,
+                          fontWeight: FontWeight.bold,
+                          fontSize: 9,
+                        ),
+                        textAlign: TextAlign.center,
+                      ),
+                    )
+                  else
+                    SizedBox(
                       width: 32,
                       height: 48,
-                      fit: BoxFit.cover,
-                    ),
-                  )
-                else
-                  Container(
-                    width: 32,
-                    height: 48,
-                    decoration: BoxDecoration(
-                      color: theme.colorScheme.surfaceContainerHighest,
-                      borderRadius: BorderRadius.circular(4),
-                    ),
-                    child: const Icon(Icons.movie, size: 16),
-                  ),
-                
-                const SizedBox(width: 12),
-                
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        isEpisode ? _extractEpisodeTitle(work.title) : work.title,
-                        style: theme.textTheme.bodySmall?.copyWith(
-                          fontWeight: FontWeight.bold, // Bold title
-                        ),
-                        maxLines: 2,
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                      // YEAR Row (less emphasized)
-                      if (work.releaseDate != null)
-                        Text(
-                          _formatDateRange(work),
-                          style: theme.textTheme.labelSmall?.copyWith(
-                            color: theme.colorScheme.onSurfaceVariant.withOpacity(0.7),
-                            fontSize: 10,
-                          ),
-                        ),
-                      // ROLES Row (more important)
-                      if (finalRolesString.isNotEmpty && !isEpisode)
-                       Padding(
-                         padding: const EdgeInsets.only(top: 2.0),
-                         child: Text(
-                            finalRolesString,
-                            style: theme.textTheme.labelSmall?.copyWith(
-                              color: theme.colorScheme.onSurface,
-                              fontStyle: FontStyle.italic,
-                              fontSize: 11,
-                              fontWeight: FontWeight.w500,
+                      child: Stack(
+                        children: [
+                          if (work.posterPath != null)
+                            ClipRRect(
+                              borderRadius: BorderRadius.circular(4),
+                              child: CachedNetworkImage(
+                                imageUrl: 'https://image.tmdb.org/t/p/w200${work.posterPath}',
+                                width: 32,
+                                height: 48,
+                                fit: BoxFit.cover,
+                              ),
+                            )
+                          else
+                            Container(
+                              width: 32,
+                              height: 48,
+                              decoration: BoxDecoration(
+                                color: theme.colorScheme.surfaceContainerHighest,
+                                borderRadius: BorderRadius.circular(4),
+                              ),
+                              child: const Icon(Icons.movie, size: 16),
                             ),
-                            maxLines: 2,
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                       ),
-                    ],
-                  ),
-                ),
-
-                if (!widget.hideRatings && work.tmdbRating != null && work.voteCount != null && work.voteCount! > 0 && work.tmdbRating! > 0)
-                  Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 6),
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
+                          
+                          // Hover Mask + Center Watchlist Button
+                          if (widget.onAddToWatchlist != null)
+                            AnimatedOpacity(
+                              opacity: _isHovered ? 1.0 : 0.0,
+                              duration: const Duration(milliseconds: 200),
+                              child: Container(
+                                color: Colors.blue.withOpacity(0.4), // Blue highlight on hover over poster
+                                child: Center(
+                                  child: IconButton(
+                                    icon: const Icon(Icons.add_circle, size: 24, color: Colors.white),
+                                    onPressed: () => widget.onAddToWatchlist?.call(work),
+                                    padding: EdgeInsets.zero,
+                                    constraints: const BoxConstraints(),
+                                    tooltip: 'Add to Watchlist',
+                                  ),
+                                ),
+                              ),
+                            ),
+                        ],
+                      ),
+                    ),
+                  
+                  const SizedBox(width: 12),
+                  
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        const Icon(Icons.star, size: 12, color: Colors.amber),
-                        const SizedBox(width: 2),
                         Text(
-                          work.tmdbRating!.toStringAsFixed(1),
-                          style: theme.textTheme.labelSmall,
+                          isEpisode ? _extractEpisodeTitle(work.title) : work.title,
+                          style: theme.textTheme.bodySmall?.copyWith(
+                            fontWeight: FontWeight.bold,
+                          ),
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
                         ),
+                        if (work.releaseDate != null)
+                          Text(
+                            _formatDateRange(work),
+                            style: theme.textTheme.labelSmall?.copyWith(
+                              color: theme.colorScheme.onSurfaceVariant.withOpacity(0.7),
+                              fontSize: 10,
+                            ),
+                          ),
+                        if (finalRolesString.isNotEmpty && !isEpisode)
+                         Padding(
+                           padding: const EdgeInsets.only(top: 2.0),
+                           child: Text(
+                              finalRolesString,
+                              style: theme.textTheme.labelSmall?.copyWith(
+                                color: theme.colorScheme.onSurface,
+                                fontStyle: FontStyle.italic,
+                                fontSize: 11,
+                                fontWeight: FontWeight.w500,
+                              ),
+                              maxLines: 2,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                         ),
                       ],
                     ),
                   ),
 
-                if (widget.onAddToWatchlist != null)
-                  IconButton(
-                    icon: const Icon(Icons.add_circle_outline, size: 18),
-                    onPressed: () => widget.onAddToWatchlist?.call(work),
-                    padding: EdgeInsets.zero,
-                    constraints: const BoxConstraints(minWidth: 40),
-                    tooltip: 'Add to Watchlist',
-                  ),
-              ],
+                  if (!widget.hideRatings && work.tmdbRating != null && work.voteCount != null && work.voteCount! > 0 && work.tmdbRating! > 0)
+                    Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 6),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          const Icon(Icons.star, size: 12, color: Colors.amber),
+                          const SizedBox(width: 2),
+                          Text(
+                            work.tmdbRating!.toStringAsFixed(1),
+                            style: theme.textTheme.labelSmall,
+                          ),
+                        ],
+                      ),
+                    ),
+                ],
+              ),
             ),
           ),
         ),
@@ -608,23 +649,13 @@ class _CreditExpansionSectionState extends State<CreditExpansionSection> {
   
   String _formatDateRange(Work work) {
     if (work.releaseDate == null) return '';
-    
     final startYear = DateFormat('yyyy').format(work.releaseDate!);
-    
-    // Debug logging for specific shows
-    if (work.title.contains('Legion') || work.title.contains('Fargo')) {
-      debugPrint('[DEBUG UI] ${work.title}: type=${work.type}, releaseDate=${work.releaseDate}, endDate=${work.endDate}');
-    }
-    
-    // For TV shows with an end date, show range
     if (work.type == WorkType.tvShow && work.endDate != null) {
       final endYear = DateFormat('yyyy').format(work.endDate!);
-      // Only show range if years are different
       if (startYear != endYear) {
         return '$startYear-$endYear';
       }
     }
-    
     return startYear;
   }
 }

@@ -1,6 +1,7 @@
 import 'package:hive/hive.dart';
 
 import '../models/tv_cache.dart';
+import '../../core/constants.dart';
 
 class TvCacheRepository {
   static const String _tvShowsBoxName = 'tv_shows_cache';
@@ -10,8 +11,8 @@ class TvCacheRepository {
   late Box<TvEpisodeCacheEntry> _tvEpisodesBox;
 
   Future<void> init() async {
-    _tvShowsBox = await Hive.openBox<TvShowCacheEntry>(_tvShowsBoxName);
-    _tvEpisodesBox = await Hive.openBox<TvEpisodeCacheEntry>(_tvEpisodesBoxName);
+    _tvShowsBox = await Hive.openBox<TvShowCacheEntry>(AppConstants.tvCacheBox);
+    _tvEpisodesBox = await Hive.openBox<TvEpisodeCacheEntry>(AppConstants.tvEpisodesCacheBox);
   }
 
   // TV Show methods

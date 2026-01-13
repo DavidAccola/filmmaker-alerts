@@ -9,6 +9,9 @@ import '../../providers/providers.dart';
 import '../common/snackbar_utils.dart';
 import '../common/tmdb_attribution.dart';
 import '../common/external_navigation_utils.dart';
+import 'movie_detail_screen.dart';
+import 'tv_show_detail_screen.dart';
+import 'tv_episode_detail_screen.dart';
 import '../../utils/debug_logger.dart';
 
 class HistoryScreen extends ConsumerWidget {
@@ -225,20 +228,9 @@ class HistoryScreen extends ConsumerWidget {
                                 hasImdbId = imdbId != null && imdbId.isNotEmpty;
                               }
                               
-                              // Determine primary provider (poster/title click)
-                              String primaryProvider;
-                              String primaryTooltip;
-                              VoidCallback primaryAction;
-                              
-                              if (movieDetailsPreference == 'imdb' && hasImdbId) {
-                                primaryProvider = 'imdb';
-                                primaryTooltip = 'View on IMDb';
-                                primaryAction = () => _launchImdbUrl(context, imdbId!);
-                              } else {
-                                primaryProvider = 'tmdb';
-                                primaryTooltip = 'View on TMDB';
-                                primaryAction = () => _launchTmdbUrl(context, entry);
-                              }
+                              // Determine primary action (poster/title click) - ALWAYS INTERNAL NOW
+                              String primaryTooltip = 'View Details';
+                              VoidCallback primaryAction = () => _navigateToInternalDetail(context, entry, item.title);
                               
                               return Tooltip(
                                 message: primaryTooltip,
@@ -340,8 +332,9 @@ class HistoryScreen extends ConsumerWidget {
                                             primaryTooltip = 'View on IMDb';
                                             primaryAction = () => _launchImdbUrl(context, imdbId!);
                                           } else {
-                                            primaryTooltip = 'View on TMDB';
-                                            primaryAction = () => _launchTmdbUrl(context, entry);
+                                            // Title link also goes to internal detail
+                                            primaryTooltip = 'View Details';
+                                            primaryAction = () => _navigateToInternalDetail(context, entry, item.title);
                                           }
                                           
                                           return Tooltip(
@@ -845,18 +838,57 @@ class HistoryScreen extends ConsumerWidget {
     }
   }
 
+  Future<void> _navigateToInternalDetail(BuildContext context, NotificationHistoryEntry entry, String title) async {
+    final mediaType = entry.mediaType;
+    final isTV = mediaType == 'tv';
+
+    if (isTV) {
+      // Check if it's a specific episode or a show-level notification
+      final isEpisode = entry.tvNotificationType == 'episode' || 
+                        entry.tvNotificationType == 'season_finale' || 
+                        entry.tvNotificationType == 'season_premiere' ||
+                        entry.tvNotificationType == 'special';
+      
+      if (isEpisode && entry.seasonNumber != null && entry.episodeNumber != null) {
+        Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (context) => TvEpisodeDetailScreen(
+              showId: entry.tmdbId,
+              seasonNumber: entry.seasonNumber!,
+              episodeNumber: entry.episodeNumber!,
+              showName: title,
+            ),
+          ),
+        );
+      } else {
+        Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (context) => TvShowDetailScreen(
+              showId: entry.tmdbId,
+              showTitle: title,
+            ),
+          ),
+        );
+      }
+    } else {
+      // Movie
+      Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (context) => MovieDetailScreen(
+            movieId: entry.tmdbId,
+            movieTitle: title,
+          ),
+        ),
+      );
+    }
+  }
+
   Future<void> _launchTmdbUrl(BuildContext context, NotificationHistoryEntry entry) async {
     final tmdbId = entry.tmdbId;
-    
-    // Determine if it's a TV show or movie based on mediaType field first,
-    // then fall back to release event detection
-    bool isTV = false;
-    if (entry.mediaType != null) {
-      isTV = entry.mediaType == 'tv';
-    } else {
-      // Fallback: check release events for TV type
-      isTV = entry.notificationEvents.any((e) => e.releaseType.toLowerCase() == 'tv');
-    }
+    final isTV = entry.mediaType == 'tv';
     
     await ExternalNavigationUtils.launchTmdbTitle(
       context,

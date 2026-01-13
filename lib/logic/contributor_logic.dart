@@ -432,21 +432,22 @@ class ContributorLogic {
             if (!seenEpisodes.contains(epKey)) {
               seenEpisodes.add(epKey);
               
-              allWorksSet.add(Work(
-                tmdbId: id,
-                title: episodeTitle,
-                posterPath: credit['still_path'] ?? credit['poster_path'] ?? first['poster_path'] as String?,
-                releaseDate: _parseDate(credit['release_date'] ?? credit['first_air_date'] ?? credit['air_date']),
-                type: WorkType.tvEpisode,
-                tmdbRating: (credit['vote_average'] as num?)?.toDouble(),
-                popularity: (credit['popularity'] as num?)?.toDouble(),
-                voteCount: credit['vote_count'] as int?,
-                contributorRoles: roles,
-                imdbId: credit['external_ids']?['imdb_id'] ?? credit['imdb_id'] as String?,
-                seasonNumber: seasonNum,
-                episodeNumber: episodeNum,
-                status: credit['status'] as String?,
-              ));
+                allWorksSet.add(Work(
+                  tmdbId: credit['id'] as int, // Actually the EPISODE id if provided, but combined credits often return showId as 'id'
+                  showId: id, // id is the group key id, which is showId
+                  title: episodeTitle,
+                  posterPath: credit['still_path'] ?? credit['poster_path'] ?? first['poster_path'] as String?,
+                  releaseDate: _parseDate(credit['release_date'] ?? credit['first_air_date'] ?? credit['air_date']),
+                  type: WorkType.tvEpisode,
+                  tmdbRating: (credit['vote_average'] as num?)?.toDouble(),
+                  popularity: (credit['popularity'] as num?)?.toDouble(),
+                  voteCount: credit['vote_count'] as int?,
+                  contributorRoles: roles,
+                  imdbId: credit['external_ids']?['imdb_id'] ?? credit['imdb_id'] as String?,
+                  seasonNumber: seasonNum,
+                  episodeNumber: episodeNum,
+                  status: credit['status'] as String?,
+                ));
             }
           }
         }
@@ -563,9 +564,19 @@ class ContributorLogic {
               }
             }
             
-            // 1. Add next/last episodes as priority
-            if (details['next_episode_to_air'] != null) episodesToProcess.add(Map<String, dynamic>.from(details['next_episode_to_air']));
-            if (details['last_episode_to_air'] != null) episodesToProcess.add(Map<String, dynamic>.from(details['last_episode_to_air']));
+            // Check if this person is a "Creator" on the show
+            final isCreator = show.contributorRoles.any((role) => 
+               role.role.toLowerCase() == 'creator' ||
+               role.department?.toLowerCase() == 'creator'
+            );
+
+            // 1. Add next/last episodes as priority ONLY for followed TV Shows or Creators
+            // This prevents guest actors/directors from having the show's latest episodes 
+            // injected into their history if they weren't involved in them.
+            if (contributor.type == ContributorType.tvShow || isCreator) {
+              if (details['next_episode_to_air'] != null) episodesToProcess.add(Map<String, dynamic>.from(details['next_episode_to_air']));
+              if (details['last_episode_to_air'] != null) episodesToProcess.add(Map<String, dynamic>.from(details['last_episode_to_air']));
+            }
 
             // 2. ENHANCEMENT: If the person is a director on this show, fetch the most recent full season
             // to find more directed episodes.
@@ -657,6 +668,7 @@ class ContributorLogic {
               
               allWorks.add(Work(
                 tmdbId: epId,
+                showId: show.tmdbId,
                 title: '${show.title} - S${ep['season_number'].toString().padLeft(2, '0')}E${ep['episode_number'].toString().padLeft(2, '0')} - ${ep['name']}',
                 posterPath: show.posterPath ?? ep['still_path'],
                 releaseDate: airDate,

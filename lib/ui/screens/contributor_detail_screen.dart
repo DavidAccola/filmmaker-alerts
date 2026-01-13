@@ -7,6 +7,9 @@ import '../../data/models/contributor.dart';
 import '../../data/models/contributor_detail.dart';
 import '../../data/models/preferences.dart';
 import '../../providers/providers.dart';
+import 'movie_detail_screen.dart';
+import 'tv_show_detail_screen.dart';
+import 'tv_episode_detail_screen.dart';
 import '../../logic/work_sorting_logic.dart';
 import '../../logic/tv_show_display_logic.dart';
 import '../common/work_widget.dart';
@@ -14,6 +17,7 @@ import '../common/tv_show_credits_widget.dart';
 import '../common/credit_expansion_section.dart';
 import '../common/external_navigation_utils.dart';
 import '../common/grouped_tv_show_widget.dart';
+import '../common/shelf_with_arrows.dart';
 import 'package:collection/collection.dart';
 import '../../core/tmdb_mapping.dart';
 
@@ -34,8 +38,11 @@ class _ContributorDetailScreenState extends ConsumerState<ContributorDetailScree
   void initState() {
     super.initState();
     // Force a fresh check on screen load to ensure categorization is up to date
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      ref.read(contributorLogicProvider).refreshContributorDetail(widget.contributor);
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      await ref.read(contributorLogicProvider).refreshContributorDetail(widget.contributor);
+      if (mounted) {
+        ref.invalidate(contributorDetailProvider(widget.contributor.tmdbId));
+      }
     });
   }
 
@@ -260,14 +267,14 @@ class _ContributorDetailScreenState extends ConsumerState<ContributorDetailScree
       return b.releaseDate!.compareTo(a.releaseDate!);
     });
     
-    final sectionHeight = 330.0; // Increased to prevent overflows
+    final sectionHeight = 310.0;
 
     return Column(
       children: [
         _buildSection(
           title: 'Shows Created',
           icon: Icons.create,
-          child: _ShelfWithArrows(
+          child: ShelfWithArrows(
             height: sectionHeight,
             builder: (context, controller) => ListView.builder(
               controller: controller, // Injected controller
@@ -280,11 +287,16 @@ class _ContributorDetailScreenState extends ConsumerState<ContributorDetailScree
                   padding: EdgeInsets.only(right: index < sortedShows.length - 1 ? 12 : 0),
                   child: SizedBox(
                     width: 150,
-                    child: TvShowCreditsWidget(
-                      show: show,
+                    child: WorkWidget(
+                      work: show,
                       hideRatings: prefs.hideRatingsInDetails ?? false,
                       onTap: () => _onWorkTapped(show),
                       onAddToWatchlist: () => _onAddToWatchlist(show),
+                      watchlistButtonPosition: WatchlistButtonPosition.topLeft,
+                      showWatchlistOnHover: true,
+                      showDateInPoster: true,
+                      showRating: false,
+                      showDate: false,
                     ),
                   ),
                 );
@@ -350,9 +362,9 @@ class _ContributorDetailScreenState extends ConsumerState<ContributorDetailScree
       return a.releaseDate!.compareTo(b.releaseDate!); // Upcoming: Chronological (Soonest first)
     });
     
-    final sectionHeight = 330.0;
+    final sectionHeight = 310.0;
 
-    return _ShelfWithArrows(
+    return ShelfWithArrows(
       height: sectionHeight,
       builder: (context, controller) => ListView.builder(
         controller: controller,
@@ -370,6 +382,11 @@ class _ContributorDetailScreenState extends ConsumerState<ContributorDetailScree
                 hideRatings: prefs.hideRatingsInDetails ?? false,
                 onTap: () => _onWorkTapped(work),
                 onAddToWatchlist: () => _onAddToWatchlist(work),
+                watchlistButtonPosition: WatchlistButtonPosition.topLeft,
+                showWatchlistOnHover: true,
+                showDateInPoster: true,
+                showRating: false,
+                showDate: false,
               ),
             ),
           );
@@ -406,10 +423,10 @@ class _ContributorDetailScreenState extends ConsumerState<ContributorDetailScree
         if (a.releaseDate == null || b.releaseDate == null) return 0;
         return b.releaseDate!.compareTo(a.releaseDate!);
       });
-      displayItems.add({
-        'title': showTitle,
-        'episodes': sortedGroup,
-      });
+      
+      // REQUIREMENT: Only show the "legit latest" episode in Latest Releases
+      // Instead of the whole group, we just add the latest episode as a Work item
+      displayItems.add(sortedGroup.first);
     });
 
     // Sort all display items by their most recent date
@@ -423,9 +440,9 @@ class _ContributorDetailScreenState extends ConsumerState<ContributorDetailScree
       return dateB.compareTo(dateA);
     });
     
-    final sectionHeight = 330.0;
+    final sectionHeight = 310.0;
     
-    return _ShelfWithArrows(
+    return ShelfWithArrows(
       height: sectionHeight,
       builder: (context, controller) => ListView.builder(
         controller: controller,
@@ -439,22 +456,20 @@ class _ContributorDetailScreenState extends ConsumerState<ContributorDetailScree
             padding: EdgeInsets.only(right: index < displayItems.length - 1 ? 12 : 0),
             child: SizedBox(
               width: 150,
-              child: item is Work 
-                ? WorkWidget(
-                    work: item,
-                    hideRatings: prefs.hideRatingsInDetails ?? false,
-                    onTap: () => _onWorkTapped(item),
-                    onAddToWatchlist: () => _onAddToWatchlist(item),
-                    applyAgeStyling: true,
-                  )
-                : GroupedTvShowWidget(
-                    showTitle: item['title'],
-                    episodes: item['episodes'],
-                    hideRatings: prefs.hideRatingsInDetails ?? false,
-                    onTap: () => _onWorkTapped(item['episodes'].first), // Tap show = tap latest ep for now
-                    onEpisodeWatchlist: (ep) => _onAddToWatchlist(ep),
-                    applyAgeStyling: true,
-                  ),
+              child: WorkWidget(
+                work: item,
+                hideRatings: prefs.hideRatingsInDetails ?? false,
+                onTap: () => _onWorkTapped(item),
+                onAddToWatchlist: () => _onAddToWatchlist(item),
+                applyAgeStyling: true,
+                showRating: false,
+                showDate: false,
+                showDateInPoster: true,
+                watchlistButtonPosition: WatchlistButtonPosition.topLeft,
+                showWatchlistOnHover: true,
+                titleOverride: item.type == WorkType.tvEpisode ? TvShowDisplayLogic.extractShowTitle(item.title) : null,
+                hoverTitle: item.type == WorkType.tvEpisode ? TvShowDisplayLogic.formatEpisodeInfo(item) : null,
+              ),
             ),
           );
         },
@@ -473,9 +488,9 @@ class _ContributorDetailScreenState extends ConsumerState<ContributorDetailScree
     // rankBiggestHits already returns works sorted by hit score (descending)
     final rankedWorks = WorkSortingLogic.rankBiggestHits(biggestHits);
     
-    final sectionHeight = 330.0;
+    final sectionHeight = 310.0;
     
-    return _ShelfWithArrows(
+    return ShelfWithArrows(
       height: sectionHeight,
       builder: (context, controller) => ListView.builder(
         controller: controller,
@@ -493,6 +508,11 @@ class _ContributorDetailScreenState extends ConsumerState<ContributorDetailScree
                 hideRatings: prefs.hideRatingsInDetails ?? false,
                 onTap: () => _onWorkTapped(work),
                 onAddToWatchlist: () => _onAddToWatchlist(work),
+                showDateInPoster: false,
+                showRating: true,
+                showDate: false,
+                watchlistButtonPosition: WatchlistButtonPosition.topLeft,
+                showWatchlistOnHover: true,
               ),
             ),
           );
@@ -502,8 +522,39 @@ class _ContributorDetailScreenState extends ConsumerState<ContributorDetailScree
   }
 
   void _onWorkTapped(Work work) {
-    // TODO: Navigate to work detail screen (movie/TV show)
-    debugPrint('Tapped on work: ${work.title}');
+    if (work.type == WorkType.movie) {
+      Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (context) => MovieDetailScreen(
+            movieId: work.tmdbId,
+            movieTitle: work.title,
+          ),
+        ),
+      );
+    } else if (work.type == WorkType.tvShow) {
+      Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (context) => TvShowDetailScreen(
+            showId: work.tmdbId,
+            showTitle: work.title,
+          ),
+        ),
+      );
+    } else if (work.type == WorkType.tvEpisode) {
+      Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (context) => TvEpisodeDetailScreen(
+            showId: work.showId ?? work.tmdbId, // Use showId, fallback to tmdbId (legacy/quick-creation)
+            seasonNumber: work.seasonNumber ?? 1,
+            episodeNumber: work.episodeNumber ?? 1,
+            showName: work.title, // Actually show name in this context
+          ),
+        ),
+      );
+    }
   }
 
   void _onAddToWatchlist(Work work) {
@@ -707,10 +758,25 @@ class _ContributorDetailScreenState extends ConsumerState<ContributorDetailScree
       return works; // Only filter person contributors for now
     }
 
-    final isTrueAll = widget.contributor.allRolesSelected ?? false;
+    // Check if contributor is actually followed
+    final repo = ref.read(contributorRepositoryProvider);
+    final storedContributor = repo.getContributor(widget.contributor.tmdbId);
+    final isFollowed = storedContributor != null;
+
+    // If not followed, show all works (don't filter)
+    if (!isFollowed) {
+      return works;
+    }
+
+    final isTrueAll = storedContributor.allRolesSelected ?? false;
     if (isTrueAll) return works;
 
-    final followedRoles = widget.contributor.notifyForDepartments;
+    final followedRoles = storedContributor.notifyForDepartments;
+    
+    // If followed but no roles selected...
+    if (followedRoles.isEmpty) {
+        return [];
+    }
 
     return works.where((work) {
       return work.contributorRoles.any((role) {
@@ -758,114 +824,3 @@ class _ContributorDetailScreenState extends ConsumerState<ContributorDetailScree
   }
 }
 
-class _ShelfWithArrows extends StatefulWidget {
-  final Widget Function(BuildContext, ScrollController) builder;
-  final double height;
-
-  const _ShelfWithArrows({required this.builder, required this.height});
-
-  @override
-  State<_ShelfWithArrows> createState() => _ShelfWithArrowsState();
-}
-
-class _ShelfWithArrowsState extends State<_ShelfWithArrows> {
-  final ScrollController _controller = ScrollController();
-  bool _showLeftArrow = false;
-  bool _showRightArrow = true;
-
-  @override
-  void initState() {
-    super.initState();
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      _scrollListener();
-    });
-    _controller.addListener(_scrollListener);
-  }
-
-  void _scrollListener() {
-    if (!_controller.hasClients) return;
-    setState(() {
-      _showLeftArrow = _controller.offset > 10;
-      _showRightArrow = _controller.offset < _controller.position.maxScrollExtent - 10;
-    });
-  }
-
-  @override
-  void dispose() {
-    _controller.dispose();
-    super.dispose();
-  }
-
-  void _scroll(double pixels) {
-    _controller.animateTo(
-      _controller.offset + pixels,
-      duration: const Duration(milliseconds: 300),
-      curve: Curves.easeInOut,
-    );
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return SizedBox(
-      height: widget.height,
-      child: Stack(
-        children: [
-          // The actual scrollable list via builder
-          widget.builder(context, _controller),
-
-          // Left Arrow
-          if (_showLeftArrow)
-            Positioned(
-              left: 0,
-              top: 0,
-              bottom: 0,
-              child: Center(
-                child: Container(
-                  height: 40,
-                  width: 30,
-                  decoration: BoxDecoration(
-                    color: Colors.black45,
-                    borderRadius: const BorderRadius.horizontal(right: Radius.circular(20)),
-                  ),
-                  child: Material(
-                    color: Colors.transparent,
-                    child: InkWell(
-                      borderRadius: const BorderRadius.horizontal(right: Radius.circular(20)),
-                      onTap: () => _scroll(-150),
-                      child: const Icon(Icons.chevron_left, color: Colors.white, size: 20),
-                    ),
-                  ),
-                ),
-              ),
-            ),
-
-          // Right Arrow
-          if (_showRightArrow)
-            Positioned(
-              right: 0,
-              top: 0,
-              bottom: 0,
-              child: Center(
-                child: Container(
-                  height: 40,
-                  width: 30,
-                  decoration: BoxDecoration(
-                    color: Colors.black45,
-                    borderRadius: const BorderRadius.horizontal(left: Radius.circular(20)),
-                  ),
-                  child: Material(
-                    color: Colors.transparent,
-                    child: InkWell(
-                      borderRadius: const BorderRadius.horizontal(left: Radius.circular(20)),
-                      onTap: () => _scroll(150),
-                      child: const Icon(Icons.chevron_right, color: Colors.white, size: 20),
-                    ),
-                  ),
-                ),
-              ),
-            ),
-        ],
-      ),
-    );
-  }
-}

@@ -14,6 +14,7 @@ import 'debug_screen.dart';
 import 'settings_screen.dart';
 import 'contributor_detail_screen.dart';
 import 'movie_detail_screen.dart';
+import 'tv_show_detail_screen.dart';
 
 class HomeScreen extends ConsumerStatefulWidget {
   const HomeScreen({super.key});
@@ -50,6 +51,16 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
           builder: (context) => MovieDetailScreen(
             movieId: contributor.tmdbId,
             movieTitle: contributor.name,
+          ),
+        ),
+      );
+    } else if (contributor.type == ContributorType.tvShow) {
+      Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (context) => TvShowDetailScreen(
+            showId: contributor.tmdbId,
+            showTitle: contributor.name,
           ),
         ),
       );

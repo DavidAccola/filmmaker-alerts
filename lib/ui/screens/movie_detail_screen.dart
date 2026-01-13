@@ -9,6 +9,14 @@ import '../../providers/providers.dart';
 import '../common/streaming_options_widget.dart';
 import '../common/external_navigation_utils.dart';
 import '../common/snackbar_utils.dart';
+import 'contributor_detail_screen.dart';
+import '../../data/models/contributor.dart';
+import '../../logic/work_sorting_logic.dart';
+import '../common/shelf_with_arrows.dart';
+import '../common/expandable_synopsis.dart';
+import '../common/runtime_display.dart';
+import '../common/adaptive_tooltip_text.dart';
+import '../../core/tmdb_mapping.dart';
 
 class MovieDetailScreen extends ConsumerStatefulWidget {
   final int movieId;
@@ -30,40 +38,45 @@ class _MovieDetailScreenState extends ConsumerState<MovieDetailScreen> {
   @override
   Widget build(BuildContext context) {
     final prefsAsync = ref.watch(preferencesProvider);
+    final movieDetailAsync = ref.watch(movieDetailProvider(widget.movieId));
     
     return Scaffold(
       appBar: AppBar(
         title: Text(widget.movieTitle ?? 'Movie Details'),
       ),
       body: prefsAsync.when(
-        data: (prefs) => _buildContent(prefs),
+        data: (prefs) => movieDetailAsync.when(
+          data: (movieDetail) => movieDetail != null 
+              ? _buildContent(prefs, movieDetail)
+              : _buildErrorState('Movie details not available'),
+          loading: () => const Center(child: CircularProgressIndicator()),
+          error: (error, stack) => _buildErrorState('Error: $error'),
+        ),
         loading: () => const Center(child: CircularProgressIndicator()),
-        error: (error, stack) => Center(child: Text('Error: $error')),
+        error: (error, stack) => _buildErrorState('Error: $error'),
       ),
     );
   }
 
-  Widget _buildContent(Preferences prefs) {
-    final movieDetailRepo = MovieDetailRepository();
-    final movieDetail = movieDetailRepo.getMovieDetail(widget.movieId);
+  Widget _buildErrorState(String message) {
+    return Center(
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          const Icon(Icons.movie, size: 64, color: Colors.grey),
+          const SizedBox(height: 16),
+          Text(message),
+          const SizedBox(height: 16),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Go Back'),
+          ),
+        ],
+      ),
+    );
+  }
 
-    if (movieDetail == null) {
-      return Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            const Icon(Icons.movie, size: 64, color: Colors.grey),
-            const SizedBox(height: 16),
-            const Text('Movie details not available'),
-            const SizedBox(height: 16),
-            ElevatedButton(
-              onPressed: () => Navigator.pop(context),
-              child: const Text('Go Back'),
-            ),
-          ],
-        ),
-      );
-    }
+  Widget _buildContent(Preferences prefs, MovieDetail movieDetail) {
 
     return SingleChildScrollView(
       child: Column(
@@ -159,29 +172,40 @@ class _MovieDetailScreenState extends ConsumerState<MovieDetailScreen> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(
+                    AdaptiveTooltipText(
                       movieDetail.title,
                       style: Theme.of(context).textTheme.headlineSmall?.copyWith(
                         fontWeight: FontWeight.bold,
                       ),
                       maxLines: 3,
-                      overflow: TextOverflow.ellipsis,
                     ),
                     
                     const SizedBox(height: 8),
                     
-                    // Release date and runtime
                     if (movieDetail.releaseDate != null || movieDetail.runtime != null)
-                      Text(
-                        [
+                      Row(
+                        children: [
                           if (movieDetail.releaseDate != null)
-                            DateFormat('MMM d, yyyy').format(movieDetail.releaseDate!),
-                          if (movieDetail.runtime != null)
-                            '${movieDetail.runtime} min',
-                        ].join(' • '),
-                        style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                          color: Theme.of(context).colorScheme.onSurfaceVariant,
-                        ),
+                            Text(
+                              DateFormat('MMM d, yyyy').format(movieDetail.releaseDate!),
+                              style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                                color: Theme.of(context).colorScheme.onSurfaceVariant,
+                              ),
+                            ),
+                          if (movieDetail.releaseDate != null && movieDetail.runtime != null && movieDetail.runtime! > 0)
+                            Padding(
+                              padding: const EdgeInsets.symmetric(horizontal: 4.0),
+                              child: Text('•', style: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant)),
+                            ),
+                          if (movieDetail.runtime != null && movieDetail.runtime! > 0)
+                            RuntimeDisplay(
+                              runtime: movieDetail.runtime!,
+                              isUpcoming: movieDetail.releaseDate?.isAfter(DateTime.now()) ?? true,
+                              style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                                color: Theme.of(context).colorScheme.onSurfaceVariant,
+                              ),
+                            ),
+                        ],
                       ),
                     
                     const SizedBox(height: 12),
@@ -236,59 +260,16 @@ class _MovieDetailScreenState extends ConsumerState<MovieDetailScreen> {
             ),
           ),
           const SizedBox(height: 8),
-          GestureDetector(
-            onTap: () {
-              setState(() {
-                _synopsisExpanded = !_synopsisExpanded;
-              });
-            },
-            child: Container(
-              padding: const EdgeInsets.all(12),
-              decoration: BoxDecoration(
-                color: Theme.of(context).colorScheme.surfaceContainerLow,
-                borderRadius: BorderRadius.circular(8),
-                border: Border.all(
-                  color: Theme.of(context).colorScheme.outline.withOpacity(0.2),
-                ),
-              ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    movieDetail.synopsis,
-                    maxLines: _synopsisExpanded ? null : 3,
-                    overflow: _synopsisExpanded ? TextOverflow.visible : TextOverflow.ellipsis,
-                    style: Theme.of(context).textTheme.bodyMedium,
-                  ),
-                  const SizedBox(height: 8),
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.end,
-                    children: [
-                      Text(
-                        _synopsisExpanded ? 'Show less' : 'Show more',
-                        style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                          color: Theme.of(context).colorScheme.primary,
-                          fontWeight: FontWeight.w600,
-                        ),
-                      ),
-                    ],
-                  ),
-                ],
-              ),
-            ),
+          ExpandableSynopsis(
+            synopsis: movieDetail.synopsis,
+            isUpcoming: movieDetail.releaseDate?.isAfter(DateTime.now()) ?? true,
           ),
         ],
       ),
     );
   }
-
   Widget _buildCastSection(MovieDetail movieDetail, Preferences prefs) {
-    // Separate followed and non-followed cast members
-    final followedCast = movieDetail.cast.where((c) => c.isFollowed).toList();
-    final otherCast = movieDetail.cast.where((c) => !c.isFollowed).toList();
-    
-    // Combine with followed first
-    final sortedCast = [...followedCast, ...otherCast];
+    final sortedCast = WorkSortingLogic.sortCast(movieDetail.cast);
 
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 16.0),
@@ -302,16 +283,45 @@ class _MovieDetailScreenState extends ConsumerState<MovieDetailScreen> {
             ),
           ),
           const SizedBox(height: 12),
-          SizedBox(
+          ShelfWithArrows(
             height: 200,
-            child: ListView.builder(
+            builder: (context, controller) => ListView.builder(
+              controller: controller,
               scrollDirection: Axis.horizontal,
               itemCount: sortedCast.length,
               itemBuilder: (context, index) {
                 final castMember = sortedCast[index];
                 return Padding(
                   padding: EdgeInsets.only(right: index < sortedCast.length - 1 ? 12 : 0),
-                  child: _buildCastCard(castMember),
+                  child: _ContributorHoverCard(
+                    tmdbId: castMember.tmdbId,
+                    name: castMember.name,
+                    profilePath: castMember.profilePath,
+                    subtitle: castMember.character,
+                    isFollowed: castMember.isFollowed,
+                    onTap: () {
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (context) => ContributorDetailScreen(
+                            contributor: Contributor(
+                              tmdbId: castMember.tmdbId,
+                              name: castMember.name,
+                              type: ContributorType.person,
+                              profilePath: castMember.profilePath,
+                              notifyForDepartments: [],
+                              availableDepartments: [],
+                              knownFor: '',
+                            ),
+                          ),
+                        ),
+                      );
+                    },
+                    onFollow: () {
+                       // TODO: Implement follow logic
+                       debugPrint('Follow cast: ${castMember.name}');
+                    },
+                  ),
                 );
               },
             ),
@@ -321,87 +331,9 @@ class _MovieDetailScreenState extends ConsumerState<MovieDetailScreen> {
     );
   }
 
-  Widget _buildCastCard(CastMember castMember) {
-    return Container(
-      width: 120,
-      decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(8),
-        border: castMember.isFollowed
-            ? Border.all(
-                color: Theme.of(context).colorScheme.primary,
-                width: 2,
-              )
-            : Border.all(
-                color: Theme.of(context).colorScheme.outline.withOpacity(0.2),
-              ),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          // Profile image
-          Expanded(
-            child: Container(
-              decoration: BoxDecoration(
-                color: Theme.of(context).colorScheme.surfaceContainerHighest,
-                borderRadius: const BorderRadius.only(
-                  topLeft: Radius.circular(8),
-                  topRight: Radius.circular(8),
-                ),
-              ),
-              child: castMember.profilePath != null
-                  ? ClipRRect(
-                      borderRadius: const BorderRadius.only(
-                        topLeft: Radius.circular(8),
-                        topRight: Radius.circular(8),
-                      ),
-                      child: CachedNetworkImage(
-                        imageUrl: 'https://image.tmdb.org/t/p/w200${castMember.profilePath}',
-                        fit: BoxFit.cover,
-                        errorWidget: (_, __, ___) => const Icon(Icons.person, size: 40),
-                      ),
-                    )
-                  : const Icon(Icons.person, size: 40),
-            ),
-          ),
-          
-          // Name and character
-          Padding(
-            padding: const EdgeInsets.all(8.0),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  castMember.name,
-                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                    fontWeight: castMember.isFollowed ? FontWeight.bold : FontWeight.w500,
-                  ),
-                  maxLines: 2,
-                  overflow: TextOverflow.ellipsis,
-                ),
-                const SizedBox(height: 2),
-                Text(
-                  castMember.character,
-                  style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                    color: Theme.of(context).colorScheme.onSurfaceVariant,
-                  ),
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                ),
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
-  }
 
   Widget _buildCrewSection(MovieDetail movieDetail, Preferences prefs) {
-    // Separate followed and non-followed crew members
-    final followedCrew = movieDetail.crew.where((c) => c.isFollowed).toList();
-    final otherCrew = movieDetail.crew.where((c) => !c.isFollowed).toList();
-    
-    // Combine with followed first
-    final sortedCrew = [...followedCrew, ...otherCrew];
+    final sortedCrew = WorkSortingLogic.groupAndSortCrew(movieDetail.crew);
 
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 16.0),
@@ -415,16 +347,45 @@ class _MovieDetailScreenState extends ConsumerState<MovieDetailScreen> {
             ),
           ),
           const SizedBox(height: 12),
-          SizedBox(
+          ShelfWithArrows(
             height: 200,
-            child: ListView.builder(
+            builder: (context, controller) => ListView.builder(
+              controller: controller,
               scrollDirection: Axis.horizontal,
               itemCount: sortedCrew.length,
               itemBuilder: (context, index) {
                 final crewMember = sortedCrew[index];
                 return Padding(
                   padding: EdgeInsets.only(right: index < sortedCrew.length - 1 ? 12 : 0),
-                  child: _buildCrewCard(crewMember),
+                  child: _ContributorHoverCard(
+                    tmdbId: crewMember.tmdbId,
+                    name: crewMember.name,
+                    profilePath: crewMember.profilePath,
+                    subtitle: crewMember.job,
+                    isFollowed: crewMember.isFollowed,
+                    onTap: () {
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (context) => ContributorDetailScreen(
+                            contributor: Contributor(
+                              tmdbId: crewMember.tmdbId,
+                              name: crewMember.name,
+                              type: ContributorType.person,
+                              profilePath: crewMember.profilePath,
+                              notifyForDepartments: [],
+                              availableDepartments: [],
+                              knownFor: '',
+                            ),
+                          ),
+                        ),
+                      );
+                    },
+                    onFollow: () {
+                       // TODO: Implement follow logic
+                       debugPrint('Follow crew: ${crewMember.name}');
+                    },
+                  ),
                 );
               },
             ),
@@ -434,79 +395,6 @@ class _MovieDetailScreenState extends ConsumerState<MovieDetailScreen> {
     );
   }
 
-  Widget _buildCrewCard(CrewMember crewMember) {
-    return Container(
-      width: 120,
-      decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(8),
-        border: crewMember.isFollowed
-            ? Border.all(
-                color: Theme.of(context).colorScheme.primary,
-                width: 2,
-              )
-            : Border.all(
-                color: Theme.of(context).colorScheme.outline.withOpacity(0.2),
-              ),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          // Profile image
-          Expanded(
-            child: Container(
-              decoration: BoxDecoration(
-                color: Theme.of(context).colorScheme.surfaceContainerHighest,
-                borderRadius: const BorderRadius.only(
-                  topLeft: Radius.circular(8),
-                  topRight: Radius.circular(8),
-                ),
-              ),
-              child: crewMember.profilePath != null
-                  ? ClipRRect(
-                      borderRadius: const BorderRadius.only(
-                        topLeft: Radius.circular(8),
-                        topRight: Radius.circular(8),
-                      ),
-                      child: CachedNetworkImage(
-                        imageUrl: 'https://image.tmdb.org/t/p/w200${crewMember.profilePath}',
-                        fit: BoxFit.cover,
-                        errorWidget: (_, __, ___) => const Icon(Icons.person, size: 40),
-                      ),
-                    )
-                  : const Icon(Icons.person, size: 40),
-            ),
-          ),
-          
-          // Name and job
-          Padding(
-            padding: const EdgeInsets.all(8.0),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  crewMember.name,
-                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                    fontWeight: crewMember.isFollowed ? FontWeight.bold : FontWeight.w500,
-                  ),
-                  maxLines: 2,
-                  overflow: TextOverflow.ellipsis,
-                ),
-                const SizedBox(height: 2),
-                Text(
-                  crewMember.job,
-                  style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                    color: Theme.of(context).colorScheme.onSurfaceVariant,
-                  ),
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                ),
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
-  }
 
   Widget _buildExternalLinks(MovieDetail movieDetail) {
     return Padding(
@@ -550,6 +438,147 @@ class _MovieDetailScreenState extends ConsumerState<MovieDetailScreen> {
             ],
           ),
         ],
+      ),
+    );
+  }
+}
+
+class _ContributorHoverCard extends StatefulWidget {
+  final int tmdbId;
+  final String name;
+  final String? profilePath;
+  final String subtitle;
+  final bool isFollowed;
+  final VoidCallback onTap;
+  final VoidCallback onFollow;
+
+  const _ContributorHoverCard({
+    required this.tmdbId,
+    required this.name,
+    this.profilePath,
+    required this.subtitle,
+    required this.isFollowed,
+    required this.onTap,
+    required this.onFollow,
+  });
+
+  @override
+  State<_ContributorHoverCard> createState() => _ContributorHoverCardState();
+}
+
+class _ContributorHoverCardState extends State<_ContributorHoverCard> {
+  bool _isHovered = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    
+    return MouseRegion(
+      onEnter: (_) => setState(() => _isHovered = true),
+      onExit: (_) => setState(() => _isHovered = false),
+      child: InkWell(
+        onTap: widget.onTap,
+        borderRadius: BorderRadius.circular(8),
+        child: Container(
+          width: 120,
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(8),
+            border: widget.isFollowed
+                ? Border.all(
+                    color: theme.colorScheme.primary,
+                    width: 2,
+                  )
+                : Border.all(
+                    color: theme.colorScheme.outline.withOpacity(0.2),
+                  ),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // Profile image
+              Expanded(
+                child: Stack(
+                  children: [
+                    Container(
+                      width: double.infinity,
+                      decoration: BoxDecoration(
+                        color: theme.colorScheme.surfaceContainerHighest,
+                        borderRadius: const BorderRadius.only(
+                          topLeft: Radius.circular(8),
+                          topRight: Radius.circular(8),
+                        ),
+                      ),
+                      child: widget.profilePath != null
+                          ? ClipRRect(
+                              borderRadius: const BorderRadius.only(
+                                topLeft: Radius.circular(8),
+                                topRight: Radius.circular(8),
+                              ),
+                              child: CachedNetworkImage(
+                                imageUrl: 'https://image.tmdb.org/t/p/w200${widget.profilePath}',
+                                fit: BoxFit.cover,
+                                errorWidget: (_, __, ___) => const Icon(Icons.person, size: 40),
+                              ),
+                            )
+                          : const Center(child: Icon(Icons.person, size: 40)),
+                    ),
+                    
+                    // Hover Mask + Center Follow Button
+                    AnimatedOpacity(
+                      opacity: _isHovered ? 1.0 : 0.0,
+                      duration: const Duration(milliseconds: 200),
+                      child: Container(
+                        decoration: BoxDecoration(
+                           color: Colors.blue.withOpacity(0.4),
+                           borderRadius: const BorderRadius.only(
+                            topLeft: Radius.circular(8),
+                            topRight: Radius.circular(8),
+                           ),
+                        ),
+                        child: Center(
+                          child: IconButton(
+                            icon: Icon(
+                              widget.isFollowed ? Icons.remove_circle : Icons.add_circle,
+                              size: 32,
+                              color: Colors.white,
+                            ),
+                            onPressed: widget.onFollow,
+                            tooltip: widget.isFollowed ? 'Unfollow' : 'Follow',
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              
+              // Name and subtitle
+              Padding(
+                padding: const EdgeInsets.all(8.0),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    AdaptiveTooltipText(
+                      widget.name,
+                      style: theme.textTheme.bodySmall?.copyWith(
+                        fontWeight: widget.isFollowed ? FontWeight.bold : FontWeight.w500,
+                      ),
+                      maxLines: 2,
+                    ),
+                    const SizedBox(height: 2),
+                    AdaptiveTooltipText(
+                      widget.subtitle,
+                      style: theme.textTheme.labelSmall?.copyWith(
+                        color: theme.colorScheme.onSurfaceVariant,
+                      ),
+                      maxLines: 1,
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
       ),
     );
   }

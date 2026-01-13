@@ -2,6 +2,7 @@ import 'dart:math' as math;
 import '../core/constants.dart';
 import '../core/tmdb_mapping.dart';
 import '../data/models/contributor_detail.dart';
+import '../data/models/movie_detail.dart';
 
 class WorkSortingLogic {
   /// Sorts upcoming works chronologically by release date.
@@ -144,24 +145,15 @@ class WorkSortingLogic {
     final popularityPercentile = _calculatePercentile(work.popularity!, allPopularities) / 100.0;
     
     // Calculate recency bias (0.0 to 1.0)
-    // Recent works (last 5 years) get a boost, older works gradually decay
+    // Only applied if work is 20 or more years old
     double recencyMultiplier = 1.0;
     if (work.releaseDate != null) {
       final now = DateTime.now();
       final yearsSinceRelease = now.difference(work.releaseDate!).inDays / 365.25;
       
-      if (yearsSinceRelease < 0) {
-        // Future releases get no boost
-        recencyMultiplier = 1.0;
-      } else if (yearsSinceRelease <= 5) {
-        // Recent works (0-5 years): full boost
-        recencyMultiplier = 1.0 + (0.15 * (5 - yearsSinceRelease) / 5); // Up to 15% boost
-      } else if (yearsSinceRelease <= 15) {
-        // Moderately old (5-15 years): gradual decay
-        recencyMultiplier = 1.0 - (0.1 * (yearsSinceRelease - 5) / 10); // Down to 90%
-      } else {
-        // Very old (15+ years): significant decay
-        recencyMultiplier = 0.9 - (0.2 * math.min((yearsSinceRelease - 15) / 20, 1.0)); // Down to 70%
+      if (yearsSinceRelease >= 20) {
+        // Very old (20+ years): significant decay
+        recencyMultiplier = 0.9 - (0.2 * math.min((yearsSinceRelease - 20) / 20, 1.0)); // Down to 70%
       }
     }
     
@@ -252,6 +244,99 @@ class WorkSortingLogic {
       
       // If same priority/department, sort alphabetically by specific job name
       return a.role.compareTo(b.role);
+    });
+    
+    return sorted;
+  }
+  
+  /// Groups multiple crew roles for the same person and sorts them by department priority.
+  static List<CrewMember> groupAndSortCrew(List<CrewMember> crew) {
+    if (crew.isEmpty) return [];
+
+    // Map to group by TMDB ID
+    final Map<int, List<CrewMember>> grouped = {};
+    for (final member in crew) {
+      grouped.putIfAbsent(member.tmdbId, () => []).add(member);
+    }
+
+    final List<CrewMember> result = [];
+    grouped.forEach((tmdbId, members) {
+      final first = members.first;
+      
+      // Sort roles within the person by department priority
+      members.sort((a, b) {
+        final priorityA = AppConstants.allDepartments.indexOf(TmdbMapping.mapTmdbDeptToRole(a.department, job: a.job));
+        final priorityB = AppConstants.allDepartments.indexOf(TmdbMapping.mapTmdbDeptToRole(b.department, job: b.job));
+        final pA = priorityA == -1 ? 999 : priorityA;
+        final pB = priorityB == -1 ? 999 : priorityB;
+        if (pA != pB) return pA.compareTo(pB);
+        return a.job.compareTo(b.job);
+      });
+
+      // Combine unique jobs
+      final uniqueJobs = <String>[];
+      for (final m in members) {
+        if (!uniqueJobs.contains(m.job)) {
+          uniqueJobs.add(m.job);
+        }
+      }
+      final combinedJobs = uniqueJobs.join(', ');
+      final isFollowed = members.any((m) => m.isFollowed);
+      
+      // Use the department of the highest priority role
+      final topDepartment = members.first.department;
+
+      result.add(CrewMember(
+        tmdbId: tmdbId,
+        name: first.name,
+        profilePath: first.profilePath,
+        job: combinedJobs,
+        department: topDepartment,
+        isFollowed: isFollowed,
+      ));
+    });
+
+    // Sort the whole list
+    result.sort((a, b) {
+      // Priority 1: Followed contributors
+      if (a.isFollowed != b.isFollowed) {
+        return a.isFollowed ? -1 : 1;
+      }
+
+      // Priority 2: Department order
+      final priorityA = AppConstants.allDepartments.indexOf(TmdbMapping.mapTmdbDeptToRole(a.department, job: a.job));
+      final priorityB = AppConstants.allDepartments.indexOf(TmdbMapping.mapTmdbDeptToRole(b.department, job: b.job));
+      
+      final pA = priorityA == -1 ? 999 : priorityA;
+      final pB = priorityB == -1 ? 999 : priorityB;
+
+      if (pA != pB) {
+        return pA.compareTo(pB);
+      }
+
+      // Priority 3: Role (Job)
+      final jobCompare = a.job.compareTo(b.job);
+      if (jobCompare != 0) {
+        return jobCompare;
+      }
+
+      // Priority 4: Alphabetical name
+      return a.name.compareTo(b.name);
+    });
+
+    return result;
+  }
+
+  /// Sorts cast members by followed status and then order.
+  static List<CastMember> sortCast(List<CastMember> cast) {
+    if (cast.isEmpty) return [];
+    
+    final List<CastMember> sorted = List.from(cast);
+    sorted.sort((a, b) {
+      if (a.isFollowed != b.isFollowed) {
+        return a.isFollowed ? -1 : 1;
+      }
+      return a.order.compareTo(b.order);
     });
     
     return sorted;

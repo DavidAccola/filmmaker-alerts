@@ -126,15 +126,16 @@ class MovieDetailAdapter extends TypeAdapter<MovieDetail> {
       cast: (fields[8] as List).cast<CastMember>(),
       crew: (fields[9] as List).cast<CrewMember>(),
       imdbId: fields[10] as String?,
-      streamingOptions: (fields[11] as List).cast<StreamingOption>(),
-      lastUpdated: fields[12] as DateTime?,
+      streamingOptions: (fields[12] as List).cast<StreamingOption>(),
+      voteCount: fields[13] as int?,
+      lastUpdated: fields[14] as DateTime?,
     );
   }
 
   @override
   void write(BinaryWriter writer, MovieDetail obj) {
     writer
-      ..writeByte(13)
+      ..writeByte(14)
       ..writeByte(0)
       ..write(obj.tmdbId)
       ..writeByte(1)
@@ -157,9 +158,11 @@ class MovieDetailAdapter extends TypeAdapter<MovieDetail> {
       ..write(obj.crew)
       ..writeByte(10)
       ..write(obj.imdbId)
-      ..writeByte(11)
-      ..write(obj.streamingOptions)
       ..writeByte(12)
+      ..write(obj.streamingOptions)
+      ..writeByte(13)
+      ..write(obj.voteCount)
+      ..writeByte(14)
       ..write(obj.lastUpdated);
   }
 

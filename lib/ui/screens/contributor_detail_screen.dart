@@ -90,21 +90,20 @@ class _ContributorDetailScreenState extends ConsumerState<ContributorDetailScree
   }
 
   Widget _buildContent(Preferences prefs, ContributorDetail? detail) {
-    return Column(
-      children: [
-        // Header with contributor info
-        _buildHeader(prefs),
-        
-        // Main content sections
-        Expanded(
-          child: ScrollConfiguration(
-            behavior: ScrollConfiguration.of(context).copyWith(
-              dragDevices: {
-                ...ScrollConfiguration.of(context).dragDevices,
-                ui.PointerDeviceKind.mouse,
-              },
-            ),
-            child: SingleChildScrollView(
+    return ScrollConfiguration(
+      behavior: ScrollConfiguration.of(context).copyWith(
+        dragDevices: {
+          ...ScrollConfiguration.of(context).dragDevices,
+          ui.PointerDeviceKind.mouse,
+        },
+      ),
+      child: SingleChildScrollView(
+        child: Column(
+          children: [
+             // Header with contributor info (now scrolls)
+            _buildHeader(prefs),
+            
+            Padding(
               padding: const EdgeInsets.all(16.0),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -115,7 +114,9 @@ class _ContributorDetailScreenState extends ConsumerState<ContributorDetailScree
                   _buildSection(
                     title: 'Upcoming',
                     icon: Icons.schedule,
-                    child: _buildUpcomingWorksSection(prefs, detail),
+                    child: (detail?.upcomingWorks?.isEmpty ?? true) && (detail?.allWorks?.isEmpty ?? true)
+                        ? const Padding(padding: EdgeInsets.all(16.0), child: Center(child: Text("Loading upcoming works...")))
+                        : _buildUpcomingWorksSection(prefs, detail),
                   ),
                   
                   const SizedBox(height: 16),
@@ -146,6 +147,7 @@ class _ContributorDetailScreenState extends ConsumerState<ContributorDetailScree
                   // Movie Credits Section
                   _buildMovieCreditsSection(prefs, detail),
                   
+                  
                   const SizedBox(height: 24),
                   
                   // External Links
@@ -153,9 +155,9 @@ class _ContributorDetailScreenState extends ConsumerState<ContributorDetailScree
                 ],
               ),
             ),
-          ),
+          ],
         ),
-      ],
+      ),
     );
   }
 

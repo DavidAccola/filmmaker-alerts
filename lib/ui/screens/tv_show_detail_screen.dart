@@ -122,49 +122,41 @@ class _TvShowDetailScreenState extends ConsumerState<TvShowDetailScreen> {
   }
 
   Widget _buildMetadataHeader(TvShowDetail showDetail, Preferences prefs) {
-    final theme = Theme.of(context);
-    final shadowColor = theme.brightness == Brightness.dark ? Colors.black54 : Colors.grey.withOpacity(0.3);
-    
-    return Padding(
+    return Container(
       padding: const EdgeInsets.all(16.0),
+      decoration: BoxDecoration(
+        color: Theme.of(context).colorScheme.surfaceContainerHighest,
+        border: Border(
+          bottom: BorderSide(
+            color: Theme.of(context).colorScheme.outline.withOpacity(0.2),
+          ),
+        ),
+      ),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           // Poster
-          Hero(
-            tag: 'work_poster_${showDetail.tmdbId}',
-            child: Container(
-              width: 120,
-              height: 180,
-              decoration: BoxDecoration(
-                borderRadius: BorderRadius.circular(12),
-                boxShadow: [
-                  BoxShadow(
-                    color: shadowColor,
-                    blurRadius: 10,
-                    offset: const Offset(0, 4),
-                  ),
-                ],
-              ),
-              child: ClipRRect(
-                borderRadius: BorderRadius.circular(12),
-                child: showDetail.posterPath != null
-                    ? CachedNetworkImage(
-                        imageUrl: 'https://image.tmdb.org/t/p/w500${showDetail.posterPath}',
-                        fit: BoxFit.cover,
-                        placeholder: (context, url) => Container(
-                          color: theme.colorScheme.surfaceContainerHighest,
-                          child: const Center(child: CircularProgressIndicator()),
-                        ),
-                      )
-                    : Container(
-                        color: theme.colorScheme.surfaceContainerHighest,
-                        child: const Icon(Icons.tv, size: 50),
-                      ),
-              ),
+          Container(
+            width: 100,
+            height: 150,
+            decoration: BoxDecoration(
+              color: Theme.of(context).colorScheme.surfaceContainerHighest,
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: ClipRRect(
+              borderRadius: BorderRadius.circular(8),
+              child: showDetail.posterPath != null
+                  ? CachedNetworkImage(
+                      imageUrl: 'https://image.tmdb.org/t/p/w300${showDetail.posterPath}',
+                      fit: BoxFit.cover,
+                      placeholder: (context, url) => const Icon(Icons.tv, size: 40),
+                      errorWidget: (context, url, error) => const Icon(Icons.tv, size: 40),
+                    )
+                  : const Icon(Icons.tv, size: 40),
             ),
           ),
-          const SizedBox(width: 20),
+          
+          const SizedBox(width: 16),
           
           // Basic Info
           Expanded(
@@ -173,7 +165,7 @@ class _TvShowDetailScreenState extends ConsumerState<TvShowDetailScreen> {
               children: [
                 AdaptiveTooltipText(
                   showDetail.name,
-                  style: theme.textTheme.headlineSmall?.copyWith(
+                  style: Theme.of(context).textTheme.headlineSmall?.copyWith(
                     fontWeight: FontWeight.bold,
                   ),
                   maxLines: 2,
@@ -185,32 +177,52 @@ class _TvShowDetailScreenState extends ConsumerState<TvShowDetailScreen> {
                   children: [
                     Text(
                       _formatYearRange(showDetail),
-                      style: theme.textTheme.bodyMedium?.copyWith(
-                        color: theme.colorScheme.onSurfaceVariant,
+                      style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                        color: Theme.of(context).colorScheme.onSurfaceVariant,
                       ),
                     ),
                     if (showDetail.status != null) ...[
-                      const SizedBox(width: 8),
-                      _buildStatusChip(showDetail.status!),
+                      Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 4.0),
+                        child: Text('•', style: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant)),
+                      ),
+                      Text(
+                        showDetail.status!,
+                        style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                           color: Theme.of(context).colorScheme.onSurfaceVariant,
+                        ),
+                      ),
                     ],
                   ],
                 ),
-                const SizedBox(height: 12),
+                const SizedBox(height: 4),
                 
-                // Seasons and Episodes count
                 if (showDetail.numberOfSeasons != null)
                   Row(
                     children: [
                       Text(
-                        '${showDetail.numberOfSeasons} Seasons • ${showDetail.numberOfEpisodes ?? "?"} Episodes',
-                        style: theme.textTheme.bodySmall,
+                        '${showDetail.numberOfSeasons} Seasons',
+                        style: Theme.of(context).textTheme.bodySmall?.copyWith(color: Theme.of(context).colorScheme.onSurfaceVariant),
                       ),
+                      if (showDetail.numberOfEpisodes != null) ...[
+                        Padding(
+                           padding: const EdgeInsets.symmetric(horizontal: 4.0),
+                           child: Text('•', style: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant)),
+                        ),
+                        Text(
+                          '${showDetail.numberOfEpisodes} Episodes',
+                          style: Theme.of(context).textTheme.bodySmall?.copyWith(color: Theme.of(context).colorScheme.onSurfaceVariant),
+                        ),
+                      ],
                       if (showDetail.episodeRunTime.isNotEmpty) ...[
-                        const Text(' • ', style: TextStyle(fontSize: 12)),
+                        Padding(
+                           padding: const EdgeInsets.symmetric(horizontal: 4.0),
+                           child: Text('•', style: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant)),
+                        ),
                         RuntimeDisplay(
                           runtime: showDetail.episodeRunTime.first,
                           isUpcoming: showDetail.status?.toLowerCase() != 'ended',
-                          style: theme.textTheme.bodySmall,
+                          style: Theme.of(context).textTheme.bodySmall?.copyWith(color: Theme.of(context).colorScheme.onSurfaceVariant),
                         ),
                       ],
                     ],
@@ -222,19 +234,12 @@ class _TvShowDetailScreenState extends ConsumerState<TvShowDetailScreen> {
                 if (showDetail.tmdbRating != null && (showDetail.voteCount ?? 0) > 0 && !(prefs.hideRatingsInDetails ?? false))
                   Row(
                     children: [
-                      const Icon(Icons.star, color: Colors.amber, size: 20),
+                      const Icon(Icons.star, color: Colors.amber, size: 16),
                       const SizedBox(width: 4),
                       Text(
                         showDetail.tmdbRating!.toStringAsFixed(1),
-                        style: theme.textTheme.titleMedium?.copyWith(
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                      const SizedBox(width: 4),
-                      Text(
-                        '(${_formatVoteCount(showDetail.voteCount!)})',
-                        style: theme.textTheme.bodySmall?.copyWith(
-                          color: theme.colorScheme.onSurfaceVariant,
+                        style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                          fontWeight: FontWeight.w600,
                         ),
                       ),
                     ],

@@ -105,7 +105,7 @@ class Preferences extends HiveObject {
   // Helper getters for "True All" logic
   // Only honor 'True All' if the feature is enabled
   List<String> get effectiveDefaultDepartments => 
-      ((allRolesSelected ?? false) && (autoFollowNewRoles ?? true)) ? AppConstants.allDepartments : defaultDepartments;
+      ((allRolesSelected ?? false) && (autoFollowNewRoles ?? true)) ? AppConstants.departmentPriority : defaultDepartments;
 
   bool get effectiveNotifyTheatre => (allReleaseTypesSelected ?? false) || notifyTheatre;
   bool get effectiveNotifyStreaming => (allReleaseTypesSelected ?? false) || notifyStreaming;

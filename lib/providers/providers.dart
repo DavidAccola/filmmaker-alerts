@@ -67,19 +67,23 @@ final tvDetailRepositoryProvider = Provider<TvDetailRepository>((ref) {
 
 // --- Services ---
 
-final tmdbServiceProvider = Provider<TmdbService>((ref) {
-  return TmdbService();
+final tmdbServiceProvider = Provider.autoDispose<TmdbService>((ref) {
+  final service = TmdbService();
+  ref.onDispose(() {
+    service.dispose();
+  });
+  return service;
 });
 
-final notificationServiceProvider = Provider<NotificationService>((ref) {
+final notificationServiceProvider = Provider.autoDispose<NotificationService>((ref) {
   return NotificationService();
 });
 
-final systemTrayServiceProvider = Provider<SystemTrayService>((ref) {
+final systemTrayServiceProvider = Provider.autoDispose<SystemTrayService>((ref) {
   return SystemTrayService();
 });
 
-final justWatchServiceProvider = Provider<JustWatchService>((ref) {
+final justWatchServiceProvider = Provider.autoDispose<JustWatchService>((ref) {
   return JustWatchService();
 });
 
@@ -160,7 +164,7 @@ final historyProvider = FutureProvider<List<EnrichedHistoryEntry>>((ref) async {
 });
 
 /// Contributor detail provider - fetches detailed info for a specific contributor
-final contributorDetailProvider = FutureProvider.family<ContributorDetail?, int>((ref, tmdbId) async {
+final contributorDetailProvider = FutureProvider.autoDispose.family<ContributorDetail?, int>((ref, tmdbId) async {
   final repo = ref.watch(contributorDetailRepositoryProvider);
   
   // Check if cached and fresh
@@ -215,7 +219,7 @@ final contributorDetailProvider = FutureProvider.family<ContributorDetail?, int>
   }
 });
 
-final movieDetailProvider = FutureProvider.family<MovieDetail?, int>((ref, movieId) async {
+final movieDetailProvider = FutureProvider.autoDispose.family<MovieDetail?, int>((ref, movieId) async {
   final repo = ref.watch(movieDetailRepositoryProvider);
   
   // Check if cached and fresh
@@ -228,7 +232,7 @@ final movieDetailProvider = FutureProvider.family<MovieDetail?, int>((ref, movie
 });
 
 /// TV show detail provider
-final tvShowDetailProvider = FutureProvider.family<TvShowDetail?, int>((ref, showId) async {
+final tvShowDetailProvider = FutureProvider.autoDispose.family<TvShowDetail?, int>((ref, showId) async {
   final repo = ref.watch(tvDetailRepositoryProvider);
   if (repo.isShowCached(showId)) {
     return repo.getTvShowDetail(showId);
@@ -241,7 +245,7 @@ typedef EpisodeParams = ({int showId, int seasonNumber, int episodeNumber});
 typedef SeasonParams = ({int showId, int seasonNumber});
 
 /// TV season detail provider
-final tvSeasonDetailProvider = FutureProvider.family<TvSeasonDetail?, SeasonParams>((ref, params) async {
+final tvSeasonDetailProvider = FutureProvider.autoDispose.family<TvSeasonDetail?, SeasonParams>((ref, params) async {
   final repo = ref.watch(tvDetailRepositoryProvider);
   if (repo.isSeasonCached(params.showId, params.seasonNumber)) {
     return repo.getTvSeasonDetail(params.showId, params.seasonNumber);
@@ -254,7 +258,7 @@ final tvSeasonDetailProvider = FutureProvider.family<TvSeasonDetail?, SeasonPara
 });
 
 /// TV episode detail provider
-final tvEpisodeDetailProvider = FutureProvider.family<TvEpisodeDetail?, EpisodeParams>((ref, params) async {
+final tvEpisodeDetailProvider = FutureProvider.autoDispose.family<TvEpisodeDetail?, EpisodeParams>((ref, params) async {
   final repo = ref.watch(tvDetailRepositoryProvider);
   
   // We don't have a direct "isCached" for episodes by show/season/ep in the repo yet, 

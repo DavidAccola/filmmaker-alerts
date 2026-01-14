@@ -1,6 +1,7 @@
 import 'dart:math' as math;
 import '../core/constants.dart';
 import '../core/tmdb_mapping.dart';
+import '../core/crew_constants.dart';
 import '../data/models/contributor_detail.dart';
 import '../data/models/movie_detail.dart';
 
@@ -249,7 +250,7 @@ class WorkSortingLogic {
     return sorted;
   }
   
-  /// Groups multiple crew roles for the same person and sorts them by department priority.
+  /// Groups multiple crew roles for the same person and sorts them by department priority and role rank.
   static List<CrewMember> groupAndSortCrew(List<CrewMember> crew) {
     if (crew.isEmpty) return [];
 
@@ -260,20 +261,42 @@ class WorkSortingLogic {
     }
 
     final List<CrewMember> result = [];
+    final Map<int, int> personStage1DeptCount = {};
+
     grouped.forEach((tmdbId, members) {
       final first = members.first;
       
-      // Sort roles within the person by department priority
+      // Calculate Stage 1 Department Count (Key Creative Metric)
+      final stage1Depts = <String>{};
+      for (final m in members) {
+        if (CrewConstants.isStage1(m.department ?? '', m.job)) {
+          stage1Depts.add(m.department ?? '');
+        }
+      }
+      personStage1DeptCount[tmdbId] = stage1Depts.length;
+
+      // Determine the "best" role for this person for sorting purposes
+      // sort members internally so the primary role is first in the list
       members.sort((a, b) {
-        final priorityA = AppConstants.allDepartments.indexOf(TmdbMapping.mapTmdbDeptToRole(a.department, job: a.job));
-        final priorityB = AppConstants.allDepartments.indexOf(TmdbMapping.mapTmdbDeptToRole(b.department, job: b.job));
-        final pA = priorityA == -1 ? 999 : priorityA;
-        final pB = priorityB == -1 ? 999 : priorityB;
-        if (pA != pB) return pA.compareTo(pB);
-        return a.job.compareTo(b.job);
+        // 1. Department Priority
+        final deptIdxA = AppConstants.departmentPriority.indexOf(a.department ?? '');
+        final deptIdxB = AppConstants.departmentPriority.indexOf(b.department ?? '');
+        
+        final deptA = deptIdxA == -1 ? 999 : deptIdxA;
+        final deptB = deptIdxB == -1 ? 999 : deptIdxB;
+        
+        if (deptA != deptB) return deptA.compareTo(deptB);
+        
+        // 2. Role Rank within department
+        final rankA = CrewConstants.getRoleRank(a.department ?? '', a.job);
+        final rankB = CrewConstants.getRoleRank(b.department ?? '', b.job);
+        
+        if (rankA != rankB) return rankA.compareTo(rankB);
+        
+        return 0;
       });
 
-      // Combine unique jobs
+      // Combine jobs based on the sorted order (best job first)
       final uniqueJobs = <String>[];
       for (final m in members) {
         if (!uniqueJobs.contains(m.job)) {
@@ -283,44 +306,58 @@ class WorkSortingLogic {
       final combinedJobs = uniqueJobs.join(', ');
       final isFollowed = members.any((m) => m.isFollowed);
       
-      // Use the department of the highest priority role
-      final topDepartment = members.first.department;
+      // The person behaves as their highest priority department/role
+      final topRole = members.first;
 
       result.add(CrewMember(
         tmdbId: tmdbId,
         name: first.name,
         profilePath: first.profilePath,
         job: combinedJobs,
-        department: topDepartment,
+        department: topRole.department, // Use top department
         isFollowed: isFollowed,
       ));
     });
 
-    // Sort the whole list
+    // Sort the final list of people
     result.sort((a, b) {
       // Priority 1: Followed contributors
       if (a.isFollowed != b.isFollowed) {
         return a.isFollowed ? -1 : 1;
       }
 
-      // Priority 2: Department order
-      final priorityA = AppConstants.allDepartments.indexOf(TmdbMapping.mapTmdbDeptToRole(a.department, job: a.job));
-      final priorityB = AppConstants.allDepartments.indexOf(TmdbMapping.mapTmdbDeptToRole(b.department, job: b.job));
+      // Priority 2: Department Order
+      final deptIdxA = AppConstants.departmentPriority.indexOf(a.department ?? '');
+      final deptIdxB = AppConstants.departmentPriority.indexOf(b.department ?? '');
       
-      final pA = priorityA == -1 ? 999 : priorityA;
-      final pB = priorityB == -1 ? 999 : priorityB;
+      final pA = deptIdxA == -1 ? 999 : deptIdxA;
+      final pB = deptIdxB == -1 ? 999 : deptIdxB;
 
       if (pA != pB) {
         return pA.compareTo(pB);
       }
 
-      // Priority 3: Role (Job)
-      final jobCompare = a.job.compareTo(b.job);
-      if (jobCompare != 0) {
-        return jobCompare;
+      // Priority 3: Stage 1 Department Count (Multi-hyphenate Key Creatives first)
+      // Higher count = Better (Descending sort)
+      final countA = personStage1DeptCount[a.tmdbId] ?? 0;
+      final countB = personStage1DeptCount[b.tmdbId] ?? 0;
+      if (countA != countB) {
+        return countB.compareTo(countA);
       }
 
-      // Priority 4: Alphabetical name
+      // Priority 4: Role Rank
+      // Since we grouped jobs, we need to consider the primary job (first in combined string) for sorting
+      final primaryJobA = a.job.split(', ').first;
+      final primaryJobB = b.job.split(', ').first;
+      
+      final rankA = CrewConstants.getRoleRank(a.department ?? '', primaryJobA);
+      final rankB = CrewConstants.getRoleRank(b.department ?? '', primaryJobB);
+
+      if (rankA != rankB) {
+        return rankA.compareTo(rankB);
+      }
+
+      // Priority 5: Alphabetical name
       return a.name.compareTo(b.name);
     });
 

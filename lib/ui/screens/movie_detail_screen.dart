@@ -16,6 +16,7 @@ import '../common/shelf_with_arrows.dart';
 import '../common/expandable_synopsis.dart';
 import '../common/runtime_display.dart';
 import '../common/adaptive_tooltip_text.dart';
+import '../common/contributor_hover_card.dart';
 import '../../core/tmdb_mapping.dart';
 
 class MovieDetailScreen extends ConsumerStatefulWidget {
@@ -284,7 +285,7 @@ class _MovieDetailScreenState extends ConsumerState<MovieDetailScreen> {
           ),
           const SizedBox(height: 12),
           ShelfWithArrows(
-            height: 200,
+            height: 175,
             builder: (context, controller) => ListView.builder(
               controller: controller,
               scrollDirection: Axis.horizontal,
@@ -293,7 +294,7 @@ class _MovieDetailScreenState extends ConsumerState<MovieDetailScreen> {
                 final castMember = sortedCast[index];
                 return Padding(
                   padding: EdgeInsets.only(right: index < sortedCast.length - 1 ? 12 : 0),
-                  child: _ContributorHoverCard(
+                  child: ContributorHoverCard(
                     tmdbId: castMember.tmdbId,
                     name: castMember.name,
                     profilePath: castMember.profilePath,
@@ -348,7 +349,7 @@ class _MovieDetailScreenState extends ConsumerState<MovieDetailScreen> {
           ),
           const SizedBox(height: 12),
           ShelfWithArrows(
-            height: 200,
+            height: 175,
             builder: (context, controller) => ListView.builder(
               controller: controller,
               scrollDirection: Axis.horizontal,
@@ -357,7 +358,7 @@ class _MovieDetailScreenState extends ConsumerState<MovieDetailScreen> {
                 final crewMember = sortedCrew[index];
                 return Padding(
                   padding: EdgeInsets.only(right: index < sortedCrew.length - 1 ? 12 : 0),
-                  child: _ContributorHoverCard(
+                  child: ContributorHoverCard(
                     tmdbId: crewMember.tmdbId,
                     name: crewMember.name,
                     profilePath: crewMember.profilePath,
@@ -443,143 +444,4 @@ class _MovieDetailScreenState extends ConsumerState<MovieDetailScreen> {
   }
 }
 
-class _ContributorHoverCard extends StatefulWidget {
-  final int tmdbId;
-  final String name;
-  final String? profilePath;
-  final String subtitle;
-  final bool isFollowed;
-  final VoidCallback onTap;
-  final VoidCallback onFollow;
-
-  const _ContributorHoverCard({
-    required this.tmdbId,
-    required this.name,
-    this.profilePath,
-    required this.subtitle,
-    required this.isFollowed,
-    required this.onTap,
-    required this.onFollow,
-  });
-
-  @override
-  State<_ContributorHoverCard> createState() => _ContributorHoverCardState();
-}
-
-class _ContributorHoverCardState extends State<_ContributorHoverCard> {
-  bool _isHovered = false;
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    
-    return MouseRegion(
-      onEnter: (_) => setState(() => _isHovered = true),
-      onExit: (_) => setState(() => _isHovered = false),
-      child: InkWell(
-        onTap: widget.onTap,
-        borderRadius: BorderRadius.circular(8),
-        child: Container(
-          width: 120,
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(8),
-            border: widget.isFollowed
-                ? Border.all(
-                    color: theme.colorScheme.primary,
-                    width: 2,
-                  )
-                : Border.all(
-                    color: theme.colorScheme.outline.withOpacity(0.2),
-                  ),
-          ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              // Profile image
-              Expanded(
-                child: Stack(
-                  children: [
-                    Container(
-                      width: double.infinity,
-                      decoration: BoxDecoration(
-                        color: theme.colorScheme.surfaceContainerHighest,
-                        borderRadius: const BorderRadius.only(
-                          topLeft: Radius.circular(8),
-                          topRight: Radius.circular(8),
-                        ),
-                      ),
-                      child: widget.profilePath != null
-                          ? ClipRRect(
-                              borderRadius: const BorderRadius.only(
-                                topLeft: Radius.circular(8),
-                                topRight: Radius.circular(8),
-                              ),
-                              child: CachedNetworkImage(
-                                imageUrl: 'https://image.tmdb.org/t/p/w200${widget.profilePath}',
-                                fit: BoxFit.cover,
-                                errorWidget: (_, __, ___) => const Icon(Icons.person, size: 40),
-                              ),
-                            )
-                          : const Center(child: Icon(Icons.person, size: 40)),
-                    ),
-                    
-                    // Hover Mask + Center Follow Button
-                    AnimatedOpacity(
-                      opacity: _isHovered ? 1.0 : 0.0,
-                      duration: const Duration(milliseconds: 200),
-                      child: Container(
-                        decoration: BoxDecoration(
-                           color: Colors.blue.withOpacity(0.4),
-                           borderRadius: const BorderRadius.only(
-                            topLeft: Radius.circular(8),
-                            topRight: Radius.circular(8),
-                           ),
-                        ),
-                        child: Center(
-                          child: IconButton(
-                            icon: Icon(
-                              widget.isFollowed ? Icons.remove_circle : Icons.add_circle,
-                              size: 32,
-                              color: Colors.white,
-                            ),
-                            onPressed: widget.onFollow,
-                            tooltip: widget.isFollowed ? 'Unfollow' : 'Follow',
-                          ),
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              
-              // Name and subtitle
-              Padding(
-                padding: const EdgeInsets.all(8.0),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    AdaptiveTooltipText(
-                      widget.name,
-                      style: theme.textTheme.bodySmall?.copyWith(
-                        fontWeight: widget.isFollowed ? FontWeight.bold : FontWeight.w500,
-                      ),
-                      maxLines: 2,
-                    ),
-                    const SizedBox(height: 2),
-                    AdaptiveTooltipText(
-                      widget.subtitle,
-                      style: theme.textTheme.labelSmall?.copyWith(
-                        color: theme.colorScheme.onSurfaceVariant,
-                      ),
-                      maxLines: 1,
-                    ),
-                  ],
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-}
+// Local _ContributorHoverCard removed. Using common/contributor_hover_card.dart

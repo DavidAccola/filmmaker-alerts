@@ -7,6 +7,7 @@ import '../../data/models/movie_detail.dart';
 import '../../providers/providers.dart';
 import '../../core/tmdb_mapping.dart';
 import 'tv_episode_detail_screen.dart';
+import 'tv_show_detail_screen.dart';
 import '../common/expandable_synopsis.dart';
 import '../common/runtime_display.dart';
 import '../common/shelf_with_arrows.dart';
@@ -89,6 +90,26 @@ class TvSeasonDetailScreen extends ConsumerWidget {
                         style: theme.textTheme.labelMedium?.copyWith(
                           color: theme.colorScheme.primary,
                           fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+                      OutlinedButton.icon(
+                        onPressed: () {
+                           Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (context) => TvShowDetailScreen(
+                                showId: showId,
+                                showTitle: showName,
+                              ),
+                            ),
+                          );
+                        },
+                        icon: const Icon(Icons.tv, size: 16),
+                        label: const Text('View Series'),
+                        style: OutlinedButton.styleFrom(
+                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 0),
+                          minimumSize: const Size(0, 32),
                         ),
                       ),
                       const SizedBox(height: 12),

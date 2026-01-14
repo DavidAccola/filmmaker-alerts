@@ -389,4 +389,9 @@ class NotificationService {
         .replaceAll('"', '&quot;')
         .replaceAll("'", '&apos;');
   }
+
+  /// Dispose resources
+  void dispose() {
+    _dio.close();
+  }
 }

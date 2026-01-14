@@ -13,19 +13,23 @@ class AppConstants {
   static const String tvSeasonDetailsBox = 'tv_season_details';
 
   // Department Order (Critical for UI consistency)
-  static const List<String> allDepartments = [
-    'Creator',
-    'Director',
-    'Writer',
+  // This is used for broad categorization priority if specific roles aren't found
+  static const List<String> departmentPriority = [
+    'Directing',
+    'Writing',
     'Production',
-    'Crew',
+    'Creator', // Sometimes mapped separately
     'Art',
     'Camera',
-    'Costume & Makeup',
+    'Costume & Make-Up', // TMDB uses "Costume & Make-Up"
     'Editing',
-    'Lighting',
     'Sound',
     'Visual Effects',
-    'Actor',
+    'Lighting',
+    'Crew',
+    'Actors',
   ];
+
+  // All departments (same as departmentPriority, used for validation and full list operations)
+  static const List<String> allDepartments = departmentPriority;
 }

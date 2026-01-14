@@ -331,7 +331,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
             ),
           ),
           MultiSelectChipGroup<String>(
-            options: AppConstants.allDepartments,
+            options: AppConstants.departmentPriority,
             selectedValues: prefs.effectiveDefaultDepartments,
             isAllSelected: prefs.allRolesSelected ?? false,
             allowTrueAll: prefs.autoFollowNewRoles ?? true,

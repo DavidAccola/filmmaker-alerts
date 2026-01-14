@@ -18,6 +18,7 @@ import '../common/shelf_with_arrows.dart';
 import '../common/expandable_synopsis.dart';
 import '../common/runtime_display.dart';
 import '../common/adaptive_tooltip_text.dart';
+import '../common/contributor_hover_card.dart';
 
 class TvShowDetailScreen extends ConsumerStatefulWidget {
   final int showId;
@@ -419,7 +420,7 @@ class _TvShowDetailScreenState extends ConsumerState<TvShowDetailScreen> {
           ),
         ),
         ShelfWithArrows(
-          height: 140,
+          height: 175,
           builder: (context, controller) => ListView.builder(
             controller: controller,
             scrollDirection: Axis.horizontal,
@@ -429,13 +430,13 @@ class _TvShowDetailScreenState extends ConsumerState<TvShowDetailScreen> {
               final member = sortedCast[index];
               return Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 4.0),
-                child: _ContributorHoverCircle(
+                child: ContributorHoverCard(
                   tmdbId: member.tmdbId,
                   name: member.name,
                   profilePath: member.profilePath,
                   subtitle: member.character,
                   isFollowed: member.isFollowed,
-                  radius: 35,
+                  // radius: 35, // Removed
                   onTap: () {
                     Navigator.push(
                       context,
@@ -484,7 +485,7 @@ class _TvShowDetailScreenState extends ConsumerState<TvShowDetailScreen> {
           ),
         ),
         ShelfWithArrows(
-          height: 140,
+          height: 175,
           builder: (context, controller) => ListView.builder(
             controller: controller,
             scrollDirection: Axis.horizontal,
@@ -494,13 +495,13 @@ class _TvShowDetailScreenState extends ConsumerState<TvShowDetailScreen> {
               final member = sortedCrew[index];
               return Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 4.0),
-                child: _ContributorHoverCircle(
+                child: ContributorHoverCard(
                   tmdbId: member.tmdbId,
                   name: member.name,
                   profilePath: member.profilePath,
                   subtitle: member.job,
                   isFollowed: member.isFollowed,
-                  radius: 35,
+                  // radius: 35, // Removed
                   onTap: () {
                     Navigator.push(
                       context,
@@ -580,109 +581,4 @@ class _TvShowDetailScreenState extends ConsumerState<TvShowDetailScreen> {
   }
 }
 
-class _ContributorHoverCircle extends StatefulWidget {
-  final int tmdbId;
-  final String name;
-  final String? profilePath;
-  final String subtitle;
-  final bool isFollowed;
-  final double radius;
-  final VoidCallback onTap;
-  final VoidCallback onFollow;
-
-  const _ContributorHoverCircle({
-    required this.tmdbId,
-    required this.name,
-    this.profilePath,
-    required this.subtitle,
-    required this.isFollowed,
-    required this.radius,
-    required this.onTap,
-    required this.onFollow,
-  });
-
-  @override
-  State<_ContributorHoverCircle> createState() => _ContributorHoverCircleState();
-}
-
-class _ContributorHoverCircleState extends State<_ContributorHoverCircle> {
-  bool _isHovered = false;
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    
-    return MouseRegion(
-      onEnter: (_) => setState(() => _isHovered = true),
-      onExit: (_) => setState(() => _isHovered = false),
-      child: InkWell(
-        onTap: widget.onTap,
-        borderRadius: BorderRadius.circular(widget.radius + 10),
-        child: SizedBox(
-          width: widget.radius * 2 + 20,
-          child: Column(
-            children: [
-              Stack(
-                children: [
-                  CircleAvatar(
-                    radius: widget.radius,
-                    backgroundColor: theme.colorScheme.surfaceContainerHighest,
-                    backgroundImage: widget.profilePath != null
-                        ? CachedNetworkImageProvider('https://image.tmdb.org/t/p/w200${widget.profilePath}')
-                        : null,
-                    child: widget.profilePath == null ? const Icon(Icons.person) : null,
-                  ),
-                  
-                  // Hover Mask + Center Follow Button
-                  AnimatedOpacity(
-                    opacity: _isHovered ? 1.0 : 0.0,
-                    duration: const Duration(milliseconds: 200),
-                    child: Container(
-                      width: widget.radius * 2,
-                      height: widget.radius * 2,
-                      decoration: BoxDecoration(
-                         color: Colors.blue.withOpacity(0.4),
-                         shape: BoxShape.circle,
-                      ),
-                      child: Center(
-                        child: IconButton(
-                          icon: Icon(
-                            widget.isFollowed ? Icons.remove_circle : Icons.add_circle,
-                            size: 28,
-                            color: Colors.white,
-                          ),
-                          onPressed: widget.onFollow,
-                          padding: EdgeInsets.zero,
-                          constraints: const BoxConstraints(),
-                          tooltip: widget.isFollowed ? 'Unfollow' : 'Follow',
-                        ),
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 8),
-              AdaptiveTooltipText(
-                widget.name,
-                textAlign: TextAlign.center,
-                maxLines: 2,
-                style: theme.textTheme.labelSmall?.copyWith(
-                  fontWeight: widget.isFollowed ? FontWeight.bold : FontWeight.w500,
-                ),
-              ),
-              AdaptiveTooltipText(
-                widget.subtitle,
-                textAlign: TextAlign.center,
-                maxLines: 1,
-                style: theme.textTheme.labelSmall?.copyWith(
-                  color: theme.colorScheme.onSurfaceVariant,
-                  fontSize: 10,
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-}
+// Local _ContributorHoverCircle removed. Using common/contributor_hover_card.dart

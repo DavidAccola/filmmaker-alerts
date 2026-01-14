@@ -26,6 +26,10 @@ import 'package:path_provider/path_provider.dart';
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
+  // Configure image cache to prevent unbounded memory growth
+  imageCache.maximumSize = 100; // Maximum number of images to cache
+  imageCache.maximumSizeBytes = 50 * 1024 * 1024; // 50MB maximum cache size
+
   // 0. Initialize window manager (Windows only)
   if (Platform.isWindows) {
     debugPrint('[Main] Initializing window manager for Windows');

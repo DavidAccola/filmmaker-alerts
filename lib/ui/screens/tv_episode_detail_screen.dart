@@ -18,6 +18,10 @@ import '../common/expandable_synopsis.dart';
 import '../common/runtime_display.dart';
 import '../common/adaptive_tooltip_text.dart';
 import '../common/contributor_hover_card.dart';
+import '../common/snackbar_utils.dart';
+import '../../logic/contributor_logic.dart';
+import '../../data/repositories/preferences_repository.dart';
+import '../common/department_selection_dialog.dart';
 
 class TvEpisodeDetailScreen extends ConsumerStatefulWidget {
   final int showId;
@@ -319,8 +323,8 @@ class _TvEpisodeDetailScreenState extends ConsumerState<TvEpisodeDetailScreen> {
                       ),
                     );
                   },
-                  onFollow: () {
-                    debugPrint('Follow cast: ${member.name}');
+                  onFollow: () async {
+                    await _handleFollowPerson(member, ref);
                   },
                 ),
               );
@@ -380,8 +384,8 @@ class _TvEpisodeDetailScreenState extends ConsumerState<TvEpisodeDetailScreen> {
                       ),
                     );
                   },
-                  onFollow: () {
-                    debugPrint('Follow crew: ${member.name}');
+                  onFollow: () async {
+                    await _handleFollowPerson(member, ref);
                   },
                 ),
               );
@@ -456,6 +460,95 @@ class _TvEpisodeDetailScreenState extends ConsumerState<TvEpisodeDetailScreen> {
         ),
       ],
     );
+  }
+
+  Future<void> _handleFollowPerson(dynamic member, WidgetRef ref) async {
+    try {
+      final contributorLogic = ref.read(contributorLogicProvider);
+      
+      // Determine knownFor based on member type (CastMember vs CrewMember)
+      String knownFor = '';
+      if (member is CastMember) {
+        knownFor = 'Actor';
+      } else if (member is CrewMember) {
+        // For crew, use their primary department as knownFor
+        knownFor = member.department ?? '';
+      }
+      
+      final sparseContributor = Contributor(
+        tmdbId: member.tmdbId,
+        name: member.name,
+        type: ContributorType.person,
+        profilePath: member.profilePath,
+        notifyForDepartments: [],
+        availableDepartments: [],
+        knownFor: knownFor,
+      );
+
+      final availableDepts = await contributorLogic.getAvailableDepartments(sparseContributor);
+      
+      if (!mounted) return;
+
+      final success = await contributorLogic.addEnrichedContributor(
+        sparseContributor,
+        overrideAvailableDepts: availableDepts,
+      );
+
+      if (success && mounted) {
+        ref.invalidate(contributorsProvider);
+        
+        final prefs = ref.read(preferencesRepositoryProvider).getPreferences();
+        final selectedDepts = availableDepts
+            .where((d) => prefs.effectiveDefaultDepartments.contains(d) || d == knownFor)
+            .toList();
+
+        showSuccessSnackBar(
+          context,
+          contributor: sparseContributor,
+          roles: selectedDepts,
+          availableRoles: availableDepts,
+          onChange: () async {
+            // Show the department selection dialog
+            if (mounted) {
+              final result = await showDialog<Map<String, dynamic>>(
+                context: context,
+                builder: (context) => DepartmentSelectionDialog(
+                  name: sparseContributor.name,
+                  availableDepartments: availableDepts,
+                  initialSelectedDepartments: selectedDepts,
+                  defaultDepartments: prefs.effectiveDefaultDepartments,
+                  initialAllRolesSelected: false,
+                  allowTrueAll: prefs.autoFollowNewRoles ?? true,
+                ),
+              );
+
+              if (result != null && mounted) {
+                final newRoles = result['roles'] as List<String>;
+                
+                // Fetch the actual contributor from the repository to preserve followedAt
+                final existingContributor = ref.read(contributorRepositoryProvider).getContributor(sparseContributor.tmdbId);
+                
+                if (existingContributor != null) {
+                  await contributorLogic.updateContributorRoles(existingContributor, newRoles);
+                  ref.invalidate(contributorsProvider);
+                  
+                  if (mounted) {
+                    showSimpleSnackBar(context, 'Updated ${sparseContributor.name} to follow ${newRoles.join(", ")}', duration: const Duration(seconds: 3));
+                  }
+                }
+              }
+            }
+          },
+        );
+      } else if (mounted) {
+        showSimpleSnackBar(context, 'Person already followed.');
+      }
+    } catch (e) {
+      debugPrint('Error following person: $e');
+      if (mounted) {
+        showSimpleSnackBar(context, 'Error: $e');
+      }
+    }
   }
 }
 

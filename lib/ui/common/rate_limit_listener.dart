@@ -2,6 +2,7 @@ import 'package:filmmaker_alerts/data/services/tmdb_service.dart';
 import 'package:filmmaker_alerts/providers/tmdb_events_provider.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'snackbar_utils.dart';
 
 class RateLimitListener extends ConsumerWidget {
   final Widget child;
@@ -13,14 +14,10 @@ class RateLimitListener extends ConsumerWidget {
     ref.listen<AsyncValue<RateLimitEvent>>(tmdbRateLimitProvider, (previous, next) {
       next.whenData((event) {
         if (event.waitTimeSeconds > 0) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text(
-                'Movie database service (TMDB) is busy. Waiting ${event.waitTimeSeconds}s... (Retry ${event.retryCount}/${event.maxRetries})',
-              ),
-              duration: Duration(seconds: event.waitTimeSeconds),
-              backgroundColor: Colors.orange,
-            ),
+          showSimpleSnackBar(
+            context,
+            'Movie database service (TMDB) is busy. Waiting ${event.waitTimeSeconds}s... (Retry ${event.retryCount}/${event.maxRetries})',
+            duration: Duration(seconds: event.waitTimeSeconds),
           );
         }
       });

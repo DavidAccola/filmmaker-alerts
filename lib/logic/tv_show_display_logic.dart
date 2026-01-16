@@ -1,4 +1,5 @@
 import '../data/models/contributor_detail.dart';
+import '../core/crew_constants.dart';
 
 /// Logic for handling TV show specific display in contributor details
 /// Handles creator credits, director episodes, and mixed roles
@@ -39,6 +40,82 @@ class TvShowDisplayLogic {
       'shows': shows,
       'episodes': episodes,
     };
+  }
+
+  /// Groups works by department and stage, then by title
+  /// Returns a map with keys like "Directing - Stage 1", "Directing - Stage 2", etc.
+  static Map<String, List<Work>> groupWorksByDepartmentAndStage(List<Work> works) {
+    final grouped = <String, List<Work>>{};
+    
+    for (final work in works) {
+      for (final role in work.contributorRoles) {
+        String dept;
+        if (role.department != null && role.department!.isNotEmpty) {
+          dept = role.department!;
+        } else if (role.character != null && role.character!.isNotEmpty) {
+          dept = 'Cast';
+        } else {
+          dept = 'General';
+        }
+        
+        if (dept == 'Creator' && work.type == WorkType.tvEpisode) {
+          continue;
+        }
+
+        // Determine stage for this role
+        String stage = 'Stage 1'; // Default
+        if (dept != 'Cast' && dept != 'General' && dept != 'Creator') {
+          // Use CrewConstants to determine stage
+          if (CrewConstants.isStage2(dept, role.role)) {
+            stage = 'Stage 2';
+          }
+        }
+        
+        final key = '$dept - $stage';
+        
+        if (!grouped.containsKey(key)) {
+          grouped[key] = [];
+        }
+        
+        // Avoid duplicate works in the same department-stage
+        if (!grouped[key]!.any((w) => w.tmdbId == work.tmdbId && w.type == work.type)) {
+          grouped[key]!.add(work);
+        }
+      }
+    }
+
+    // Special handling for Production: Collapse excessive episodes
+    final productionKeys = grouped.keys.where((k) => k.startsWith('Production')).toList();
+    for (final key in productionKeys) {
+      final productionWorks = grouped[key]!;
+      final Map<String, List<Work>> progGrouped = {};
+      final List<Work> keptWorks = [];
+
+      for (var w in productionWorks) {
+        String showTitle = w.type == WorkType.tvEpisode ? extractShowTitle(w.title) : w.title;
+        progGrouped.putIfAbsent(showTitle, () => []).add(w);
+      }
+
+      for (var entry in progGrouped.entries) {
+        final works = entry.value;
+        final showWork = works.firstWhere((w) => w.type == WorkType.tvShow, orElse: () => works.first);
+        final hasShowLevel = works.any((w) => w.type == WorkType.tvShow);
+        
+        if (hasShowLevel || works.length > 3) {
+           keptWorks.add(showWork.type == WorkType.tvShow ? showWork : showWork.copyWith(
+             type: WorkType.tvShow,
+             title: entry.key,
+             seasonNumber: null,
+             episodeNumber: null,
+           )); 
+        } else {
+           keptWorks.addAll(works);
+        }
+      }
+      grouped[key] = keptWorks;
+    }
+    
+    return grouped;
   }
 
   /// Groups works by department then by title
@@ -132,13 +209,21 @@ class TvShowDisplayLogic {
       grouped[showTitle]!.add(episode);
     }
     
-    // Sort episodes within each show by season and episode number
+    // Sort episodes within each show by release date (most recent first)
+    // This ensures that when we pick the first episode, it's the most recent one
     for (final episodes in grouped.values) {
       episodes.sort((a, b) {
-        if (a.seasonNumber != b.seasonNumber) {
-          return (a.seasonNumber ?? 0).compareTo(b.seasonNumber ?? 0);
+        // Sort by release date descending (most recent first)
+        if (a.releaseDate == null && b.releaseDate == null) {
+          // If both have no date, fall back to season/episode order
+          if (a.seasonNumber != b.seasonNumber) {
+            return (b.seasonNumber ?? 0).compareTo(a.seasonNumber ?? 0);
+          }
+          return (b.episodeNumber ?? 0).compareTo(a.episodeNumber ?? 0);
         }
-        return (a.episodeNumber ?? 0).compareTo(b.episodeNumber ?? 0);
+        if (a.releaseDate == null) return 1; // No date goes last
+        if (b.releaseDate == null) return -1;
+        return b.releaseDate!.compareTo(a.releaseDate!); // Most recent first
       });
     }
     

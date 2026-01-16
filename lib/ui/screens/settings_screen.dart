@@ -6,6 +6,7 @@ import '../../data/models/contributor.dart';
 import '../../providers/providers.dart';
 
 import '../common/multi_select_chip_group.dart';
+import '../common/snackbar_utils.dart';
 
 class SettingsScreen extends ConsumerStatefulWidget {
   const SettingsScreen({super.key});
@@ -50,9 +51,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
             if (_debugTapCount >= 7) {
               setState(() => _showDebug = !_showDebug);
               _debugTapCount = 0;
-              ScaffoldMessenger.of(context).showSnackBar(
-                SnackBar(content: Text(_showDebug ? 'Debug mode enabled' : 'Debug mode disabled')),
-              );
+              showSimpleSnackBar(context, _showDebug ? 'Debug mode enabled' : 'Debug mode disabled');
             }
           },
           child: const Text('Settings'),
@@ -434,15 +433,11 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                 await logic.clearAllContributorDetails();
                 
                 if (context.mounted) {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(content: Text('Detail cache cleared. Entering a contributor screen will now fetch fresh data.')),
-                  );
+                  showSimpleSnackBar(context, 'Detail cache cleared. Entering a contributor screen will now fetch fresh data.');
                 }
               } catch (e) {
                 if (context.mounted) {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(content: Text('Error clearing cache: $e')),
-                  );
+                  showSimpleSnackBar(context, 'Error clearing cache: $e');
                 }
               }
             },
@@ -453,9 +448,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
             title: const Text('Clear Image Cache'),
             dense: true,
             onTap: () {
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(content: Text('Image cache cleared (Placeholder)')),
-              );
+              showSimpleSnackBar(context, 'Image cache cleared (Placeholder)');
             },
           ),
         ],
@@ -547,7 +540,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
       },
       onLongPress: () {
         _updatePrefs(ref, prefs, pretendToday: null);
-        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Cleared pretend date')));
+        showSimpleSnackBar(context, 'Cleared pretend date');
       },
     );
   }

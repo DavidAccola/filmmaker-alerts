@@ -23,10 +23,11 @@ class HomeScreen extends ConsumerStatefulWidget {
   ConsumerState<HomeScreen> createState() => _HomeScreenState();
 }
 
-class _HomeScreenState extends ConsumerState<HomeScreen> {
+class _HomeScreenState extends ConsumerState<HomeScreen> with SingleTickerProviderStateMixin {
   final ScrollController _scrollController = ScrollController();
   final GlobalKey _newContributorKey = GlobalKey();
   int? _newlyAddedContributorId; // Track the newly added contributor
+  double _fabBottomPadding = 0.0; // Track FAB padding for snackbar avoidance
 
   @override
   void dispose() {
@@ -84,14 +85,27 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
               tooltip: 'Refresh All',
               onPressed: () async {
                 final logic = ref.read(contributorLogicProvider);
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(content: Text('Refreshing contributors...'), duration: Duration(seconds: 1)),
+                showSimpleSnackBar(
+                  context,
+                  'Refreshing contributors...',
+                  duration: const Duration(seconds: 1),
+                  onSnackBarVisibilityChanged: (isVisible) {
+                    setState(() {
+                      _fabBottomPadding = isVisible ? 70.0 : 0.0;
+                    });
+                  },
                 );
                 await logic.refreshAllContributors();
                 ref.invalidate(contributorsProvider);
                 if (context.mounted) {
-                   ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(content: Text('Refresh complete.')),
+                  showSimpleSnackBar(
+                    context,
+                    'Refresh complete.',
+                    onSnackBarVisibilityChanged: (isVisible) {
+                      setState(() {
+                        _fabBottomPadding = isVisible ? 70.0 : 0.0;
+                      });
+                    },
                   );
                 }
               },
@@ -356,169 +370,203 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
           );
         },
       ),
-      floatingActionButton: Tooltip(
-        message: 'Find More to Follow',
-        waitDuration: const Duration(milliseconds: 250),
-        child: FloatingActionButton(
-          backgroundColor: const Color(0xFF2196F3), // Modern blue
-          foregroundColor: Colors.white,
-          onPressed: () async {
-            final result = await Navigator.push(context, MaterialPageRoute(builder: (_) => const AddContributorScreen()));
-            
-            if (context.mounted && result is Map && result['contributor'] is Contributor) {
-              final contributor = result['contributor'] as Contributor;
-              final roles = result['roles'] as List<String>?;
-              final availableRoles = result['availableRoles'] as List<String>? ?? [];
-              final allSelectedInit = result['allRolesSelected'] as bool? ?? false;
+      floatingActionButton: AnimatedPadding(
+        duration: const Duration(milliseconds: 200),
+        curve: Curves.easeInOut,
+        padding: EdgeInsets.only(bottom: _fabBottomPadding),
+        child: Tooltip(
+          message: 'Find More to Follow',
+          waitDuration: const Duration(milliseconds: 250),
+          child: FloatingActionButton(
+            backgroundColor: const Color(0xFF2196F3), // Modern blue
+            foregroundColor: Colors.white,
+            onPressed: () async {
+              final result = await Navigator.push(context, MaterialPageRoute(builder: (_) => const AddContributorScreen()));
+              
+              if (context.mounted && result is Map && result['contributor'] is Contributor) {
+                final contributor = result['contributor'] as Contributor;
+                final roles = result['roles'] as List<String>?;
+                final availableRoles = result['availableRoles'] as List<String>? ?? [];
+                final allSelectedInit = result['allRolesSelected'] as bool? ?? false;
 
-              // Set the newly added contributor ID for key assignment
-              setState(() {
-                _newlyAddedContributorId = contributor.tmdbId;
-              });
+                // Set the newly added contributor ID for key assignment
+                setState(() {
+                  _newlyAddedContributorId = contributor.tmdbId;
+                });
 
-              showSuccessSnackBar(
-                context,
-                contributor: contributor,
-                roles: roles ?? [],
-                availableRoles: availableRoles,
-                tvNotificationPrefs: result['tvNotificationPrefs'] as TvNotificationPreferences?,
-                onChange: () async {
-                  final logic = ref.read(contributorLogicProvider);
-                  final repo = ref.read(preferencesRepositoryProvider);
-                  final prefs = repo.getPreferences();
+                showSuccessSnackBar(
+                  context,
+                  contributor: contributor,
+                  roles: roles ?? [],
+                  availableRoles: availableRoles,
+                  tvNotificationPrefs: result['tvNotificationPrefs'] as TvNotificationPreferences?,
+                  onSnackBarVisibilityChanged: (isVisible) {
+                    setState(() {
+                      _fabBottomPadding = isVisible ? 70.0 : 0.0;
+                    });
+                  },
+                  onChange: () async {
+                    final logic = ref.read(contributorLogicProvider);
+                    final repo = ref.read(preferencesRepositoryProvider);
+                    final prefs = repo.getPreferences();
 
-                  if (contributor.type == ContributorType.tvShow) {
-                    // Handle TV show preferences dialog
-                    final tvResult = await showDialog<Map<String, dynamic>>(
-                      context: context,
-                      builder: (context) => _TvNotificationPreferencesDialog(
-                        showName: contributor.name,
-                        currentPrefs: contributor.tvNotificationPrefs ?? TvNotificationPreferences(),
-                      ),
-                    );
+                    if (contributor.type == ContributorType.tvShow) {
+                      // Handle TV show preferences dialog
+                      final tvResult = await showDialog<Map<String, dynamic>>(
+                        context: context,
+                        builder: (context) => _TvNotificationPreferencesDialog(
+                          showName: contributor.name,
+                          currentPrefs: contributor.tvNotificationPrefs ?? TvNotificationPreferences(),
+                        ),
+                      );
 
-                    if (tvResult != null) {
-                      final newPrefs = tvResult['preferences'] as TvNotificationPreferences;
-                      final oldPrefs = contributor.tvNotificationPrefs ?? TvNotificationPreferences();
-                      
-                      // Check if preferences actually changed
-                      final hasChanges = oldPrefs.seriesPremiere != newPrefs.seriesPremiere ||
-                                        oldPrefs.seasonPremieres != newPrefs.seasonPremieres ||
-                                        oldPrefs.seasonFinales != newPrefs.seasonFinales ||
-                                        oldPrefs.newEpisodes != newPrefs.newEpisodes ||
-                                        oldPrefs.specials != newPrefs.specials;
-                      
-                      if (hasChanges) {
-                        final updatedContributor = Contributor(
-                          tmdbId: contributor.tmdbId,
-                          name: contributor.name,
-                          type: contributor.type,
-                          profilePath: contributor.profilePath,
-                          notifyForDepartments: contributor.notifyForDepartments,
-                          availableDepartments: contributor.availableDepartments,
-                          knownFor: contributor.knownFor,
-                          latestWork: contributor.latestWork,
-                          followedAt: contributor.followedAt,
-                          tvNotificationPrefs: newPrefs,
-                          showStatus: contributor.showStatus,
-                          totalSeasons: contributor.totalSeasons,
-                          nextEpisodeDate: contributor.nextEpisodeDate,
-                        );
-
-                        await logic.updateContributorRoles(updatedContributor, contributor.notifyForDepartments);
-                        ref.invalidate(contributorsProvider);
-                        if (context.mounted) {
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            const SnackBar(content: Text('TV preferences updated.')),
+                      if (tvResult != null) {
+                        final newPrefs = tvResult['preferences'] as TvNotificationPreferences;
+                        final oldPrefs = contributor.tvNotificationPrefs ?? TvNotificationPreferences();
+                        
+                        // Check if preferences actually changed
+                        final hasChanges = oldPrefs.seriesPremiere != newPrefs.seriesPremiere ||
+                                          oldPrefs.seasonPremieres != newPrefs.seasonPremieres ||
+                                          oldPrefs.seasonFinales != newPrefs.seasonFinales ||
+                                          oldPrefs.newEpisodes != newPrefs.newEpisodes ||
+                                          oldPrefs.specials != newPrefs.specials;
+                        
+                        if (hasChanges) {
+                          final updatedContributor = Contributor(
+                            tmdbId: contributor.tmdbId,
+                            name: contributor.name,
+                            type: contributor.type,
+                            profilePath: contributor.profilePath,
+                            notifyForDepartments: contributor.notifyForDepartments,
+                            availableDepartments: contributor.availableDepartments,
+                            knownFor: contributor.knownFor,
+                            latestWork: contributor.latestWork,
+                            followedAt: contributor.followedAt,
+                            tvNotificationPrefs: newPrefs,
+                            showStatus: contributor.showStatus,
+                            totalSeasons: contributor.totalSeasons,
+                            nextEpisodeDate: contributor.nextEpisodeDate,
                           );
+
+                          await logic.updateContributorRoles(updatedContributor, contributor.notifyForDepartments);
+                          ref.invalidate(contributorsProvider);
+                          if (context.mounted) {
+                            showSimpleSnackBar(
+                              context,
+                              'TV preferences updated.',
+                              onSnackBarVisibilityChanged: (isVisible) {
+                                setState(() {
+                                  _fabBottomPadding = isVisible ? 70.0 : 0.0;
+                                });
+                              },
+                            );
+                          }
+                        } else {
+                          // No changes made
+                          if (context.mounted) {
+                            showSimpleSnackBar(
+                              context,
+                              'No changes made to TV preferences.',
+                              onSnackBarVisibilityChanged: (isVisible) {
+                                setState(() {
+                                  _fabBottomPadding = isVisible ? 70.0 : 0.0;
+                                });
+                              },
+                            );
+                          }
                         }
-                      } else {
-                        // No changes made
-                        if (context.mounted) {
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            const SnackBar(content: Text('No changes made to TV preferences.')),
+                      }
+                    } else {
+                      // Handle person role selection dialog
+                      final resultDialog = await showDialog<dynamic>(
+                        context: context,
+                        builder: (context) => DepartmentSelectionDialog(
+                          name: contributor.name,
+                          availableDepartments: availableRoles,
+                          initialSelectedDepartments: roles ?? [],
+                          defaultDepartments: prefs.effectiveDefaultDepartments,
+                          initialAllRolesSelected: allSelectedInit,
+                          allowTrueAll: prefs.autoFollowNewRoles ?? true,
+                        ),
+                      );
+
+                      if (resultDialog != null && resultDialog is Map) {
+                        final selectedDepts = resultDialog['roles'] as List<String>;
+                        final allSelected = resultDialog['allRolesSelected'] as bool;
+                        
+                        // Check if roles actually changed
+                        final oldRoles = Set<String>.from(roles ?? []);
+                        final newRoles = Set<String>.from(selectedDepts);
+                        final oldAllSelected = allSelectedInit;
+                        
+                        const setEquality = SetEquality<String>();
+                        final hasRoleChanges = !setEquality.equals(oldRoles, newRoles) || oldAllSelected != allSelected;
+                        
+                        if (hasRoleChanges) {
+                          final enrichedForUpdate = Contributor(
+                            tmdbId: contributor.tmdbId,
+                            name: contributor.name,
+                            type: contributor.type,
+                            profilePath: contributor.profilePath,
+                            notifyForDepartments: selectedDepts,
+                            availableDepartments: availableRoles, 
+                            knownFor: contributor.knownFor,
+                            allRolesSelected: allSelected,
+                            followedAt: contributor.followedAt,
+                            latestWork: contributor.latestWork,
+                            tvNotificationPrefs: contributor.tvNotificationPrefs, // Preserve TV preferences
+                            showStatus: contributor.showStatus,
+                            totalSeasons: contributor.totalSeasons,
+                            nextEpisodeDate: contributor.nextEpisodeDate,
                           );
+
+                          await logic.updateContributorRoles(enrichedForUpdate, selectedDepts);
+                          ref.invalidate(contributorsProvider);
+                          if (context.mounted) {
+                            showSimpleSnackBar(
+                              context,
+                              'Roles updated.',
+                              onSnackBarVisibilityChanged: (isVisible) {
+                                setState(() {
+                                  _fabBottomPadding = isVisible ? 70.0 : 0.0;
+                                });
+                              },
+                            );
+                          }
+                        } else {
+                          // No changes made
+                          if (context.mounted) {
+                            showSimpleSnackBar(
+                              context,
+                              'No changes made to roles.',
+                              onSnackBarVisibilityChanged: (isVisible) {
+                                setState(() {
+                                  _fabBottomPadding = isVisible ? 70.0 : 0.0;
+                                });
+                              },
+                            );
+                          }
                         }
                       }
                     }
-                  } else {
-                    // Handle person role selection dialog
-                    final resultDialog = await showDialog<dynamic>(
-                      context: context,
-                      builder: (context) => DepartmentSelectionDialog(
-                        name: contributor.name,
-                        availableDepartments: availableRoles,
-                        initialSelectedDepartments: roles ?? [],
-                        defaultDepartments: prefs.effectiveDefaultDepartments,
-                        initialAllRolesSelected: allSelectedInit,
-                        allowTrueAll: prefs.autoFollowNewRoles ?? true,
-                      ),
-                    );
-
-                    if (resultDialog != null && resultDialog is Map) {
-                      final selectedDepts = resultDialog['roles'] as List<String>;
-                      final allSelected = resultDialog['allRolesSelected'] as bool;
-                      
-                      // Check if roles actually changed
-                      final oldRoles = Set<String>.from(roles ?? []);
-                      final newRoles = Set<String>.from(selectedDepts);
-                      final oldAllSelected = allSelectedInit;
-                      
-                      const setEquality = SetEquality<String>();
-                      final hasRoleChanges = !setEquality.equals(oldRoles, newRoles) || oldAllSelected != allSelected;
-                      
-                      if (hasRoleChanges) {
-                        final enrichedForUpdate = Contributor(
-                          tmdbId: contributor.tmdbId,
-                          name: contributor.name,
-                          type: contributor.type,
-                          profilePath: contributor.profilePath,
-                          notifyForDepartments: selectedDepts,
-                          availableDepartments: availableRoles, 
-                          knownFor: contributor.knownFor,
-                          allRolesSelected: allSelected,
-                          followedAt: contributor.followedAt,
-                          latestWork: contributor.latestWork,
-                          tvNotificationPrefs: contributor.tvNotificationPrefs, // Preserve TV preferences
-                          showStatus: contributor.showStatus,
-                          totalSeasons: contributor.totalSeasons,
-                          nextEpisodeDate: contributor.nextEpisodeDate,
-                        );
-
-                        await logic.updateContributorRoles(enrichedForUpdate, selectedDepts);
-                        ref.invalidate(contributorsProvider);
-                        if (context.mounted) {
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            const SnackBar(content: Text('Roles updated.')),
-                          );
-                        }
-                      } else {
-                        // No changes made
-                        if (context.mounted) {
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            const SnackBar(content: Text('No changes made to roles.')),
-                          );
-                        }
-                      }
-                    }
+                  },
+                );
+                
+                // Scroll to the newly added contributor
+                _scrollToNewContributor(contributor);
+                
+                // Clear the newly added contributor ID after a delay
+                Future.delayed(const Duration(seconds: 2), () {
+                  if (mounted) {
+                    setState(() {
+                      _newlyAddedContributorId = null;
+                    });
                   }
-                },
-              );
-              
-              // Scroll to the newly added contributor
-              _scrollToNewContributor(contributor);
-              
-              // Clear the newly added contributor ID after a delay
-              Future.delayed(const Duration(seconds: 2), () {
-                if (mounted) {
-                  setState(() {
-                    _newlyAddedContributorId = null;
-                  });
-                }
-              });
-            }
-          },
-          child: const Icon(Icons.add),
+                });
+              }
+            },
+            child: const Icon(Icons.add),
+          ),
         ),
       ),
     );
@@ -702,6 +750,11 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
       showRemovalSnackBar(
         context,
         message: 'Removed ${contributor.name}',
+        onSnackBarVisibilityChanged: (isVisible) {
+          setState(() {
+            _fabBottomPadding = isVisible ? 70.0 : 0.0;
+          });
+        },
         onUndo: () async {
           // 3. Re-add if Undone
           await repo.addContributor(contributor);
@@ -738,12 +791,6 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                           oldPrefs.specials != newPrefs.specials;
         
         if (hasChanges) {
-          if (context.mounted) {
-            ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(content: Text('Updating TV preferences for ${contributor.name}...')),
-            );
-          }
-
           // Create updated contributor with new TV preferences
           final updatedContributor = Contributor(
             tmdbId: contributor.tmdbId,
@@ -765,15 +812,27 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
           ref.invalidate(contributorsProvider);
           
           if (context.mounted) {
-            ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(content: Text('TV preferences updated.')),
+            showSimpleSnackBar(
+              context,
+              'TV preferences updated.',
+              onSnackBarVisibilityChanged: (isVisible) {
+                setState(() {
+                  _fabBottomPadding = isVisible ? 70.0 : 0.0;
+                });
+              },
             );
           }
         } else {
           // No changes made
           if (context.mounted) {
-            ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(content: Text('No changes made to TV preferences.')),
+            showSimpleSnackBar(
+              context,
+              'No changes made to TV preferences.',
+              onSnackBarVisibilityChanged: (isVisible) {
+                setState(() {
+                  _fabBottomPadding = isVisible ? 70.0 : 0.0;
+                });
+              },
             );
           }
         }
@@ -782,14 +841,21 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
       // Handle person role editing (existing logic)
       final result = await showDialog<dynamic>(
         context: context,
-        builder: (context) => DepartmentSelectionDialog(
-          name: contributor.name,
-          availableDepartments: contributor.availableDepartments,
-          initialSelectedDepartments: contributor.notifyForDepartments,
-          defaultDepartments: prefs.effectiveDefaultDepartments,
-          initialAllRolesSelected: contributor.allRolesSelected ?? false,
-          allowTrueAll: prefs.autoFollowNewRoles ?? true,
-        ),
+        builder: (context) {
+          debugPrint('[HomeScreen] Opening DepartmentSelectionDialog for ${contributor.name}');
+          debugPrint('[HomeScreen] availableDepartments: ${contributor.availableDepartments}');
+          debugPrint('[HomeScreen] initialSelectedDepartments: ${contributor.notifyForDepartments}');
+          debugPrint('[HomeScreen] initialAllRolesSelected: ${contributor.allRolesSelected ?? false}');
+          
+          return DepartmentSelectionDialog(
+            name: contributor.name,
+            availableDepartments: contributor.availableDepartments,
+            initialSelectedDepartments: contributor.notifyForDepartments,
+            defaultDepartments: prefs.effectiveDefaultDepartments,
+            initialAllRolesSelected: contributor.allRolesSelected ?? false,
+            allowTrueAll: prefs.autoFollowNewRoles ?? true,
+          );
+        },
       );
 
       if (result != null && result is Map) {
@@ -805,12 +871,6 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
         final hasRoleChanges = !setEquality.equals(oldRoles, newRoles) || oldAllSelected != allSelected;
         
         if (hasRoleChanges) {
-          if (context.mounted) {
-            ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(content: Text('Updating roles for ${contributor.name}...')),
-            );
-          }
-
           // Create updated contributor with new flags
           final updatedContributor = Contributor(
             tmdbId: contributor.tmdbId,
@@ -833,15 +893,27 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
           ref.invalidate(contributorsProvider);
           
           if (context.mounted) {
-            ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(content: Text('Roles updated.')),
+            showSimpleSnackBar(
+              context,
+              'Roles updated.',
+              onSnackBarVisibilityChanged: (isVisible) {
+                setState(() {
+                  _fabBottomPadding = isVisible ? 70.0 : 0.0;
+                });
+              },
             );
           }
         } else {
           // No changes made
           if (context.mounted) {
-            ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(content: Text('No changes made to roles.')),
+            showSimpleSnackBar(
+              context,
+              'No changes made to roles.',
+              onSnackBarVisibilityChanged: (isVisible) {
+                setState(() {
+                  _fabBottomPadding = isVisible ? 70.0 : 0.0;
+                });
+              },
             );
           }
         }

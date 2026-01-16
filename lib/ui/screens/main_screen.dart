@@ -149,9 +149,7 @@ class _MainScreenState extends ConsumerState<MainScreen> with WindowListener {
                 await logic.updateContributorRoles(enrichedForUpdate, selectedDepts);
                 ref.invalidate(contributorsProvider);
                 if (mounted) {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(content: Text('Roles updated.')),
-                  );
+                  showSimpleSnackBar(context, 'Roles updated.');
                 }
               }
         },

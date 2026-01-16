@@ -198,7 +198,6 @@ class MyApp extends ConsumerWidget {
             useMaterial3: true,
             snackBarTheme: const SnackBarThemeData(
               behavior: SnackBarBehavior.floating,
-              insetPadding: EdgeInsets.fromLTRB(16, 0, 16, 80),
             ),
           ),
           darkTheme: ThemeData(
@@ -209,7 +208,6 @@ class MyApp extends ConsumerWidget {
             useMaterial3: true,
             snackBarTheme: const SnackBarThemeData(
               behavior: SnackBarBehavior.floating,
-              insetPadding: EdgeInsets.fromLTRB(16, 0, 16, 80),
             ),
           ),
           themeMode: useDarkMode ? ThemeMode.dark : ThemeMode.light,

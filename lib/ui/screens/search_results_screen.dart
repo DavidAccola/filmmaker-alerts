@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../data/models/contributor.dart';
 import '../../providers/providers.dart';
 import '../common/department_selection_dialog.dart';
+import '../common/snackbar_utils.dart';
 
 enum SearchSort { relevance, name }
 
@@ -85,9 +86,7 @@ class _SearchResultsScreenState extends ConsumerState<SearchResultsScreen> {
     } catch (e) {
        if (mounted) {
          setState(() => _isLoadingMore = false);
-         ScaffoldMessenger.of(context).showSnackBar(
-           SnackBar(content: Text('Failed to load more results: $e')),
-         );
+         showSimpleSnackBar(context, 'Failed to load more results: $e');
        }
     }
   }
@@ -156,22 +155,16 @@ class _SearchResultsScreenState extends ConsumerState<SearchResultsScreen> {
         
         if (success) {
           ref.invalidate(contributorsProvider);
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('Added ${contributor.name}')),
-          );
+          showSimpleSnackBar(context, 'Added ${contributor.name}');
         } else {
-           ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('Already following.')),
-          );
+          showSimpleSnackBar(context, 'Already following.');
         }
       }
     } catch (e) {
       if (mounted) {
         // Ensure loading check is closed
         try { Navigator.pop(context); } catch (_) {}
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error: $e')),
-        );
+        showSimpleSnackBar(context, 'Error: $e');
       }
     }
   }

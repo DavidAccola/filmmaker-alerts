@@ -48,7 +48,7 @@ class _CreditExpansionSectionState extends State<CreditExpansionSection> {
 
   void _processWorks() {
     debugPrint('[CreditExpansionSection] Processing ${widget.works.length} works for ${widget.title}');
-    groupedByDept = TvShowDisplayLogic.groupWorksByDepartment(widget.works);
+    groupedByDept = TvShowDisplayLogic.groupWorksByDepartmentAndStage(widget.works);
     
 
 
@@ -78,20 +78,65 @@ class _CreditExpansionSectionState extends State<CreditExpansionSection> {
     }
   }
 
+  /// Sorts departments by Stage 1/Stage 2 priority and department order
+  /// Stage 1 order: Creator, Directing, Writing, Producing, Sound, Other (alphabetical)
+  /// Then Stage 2 order: Same department order
+  List<String> _sortDepartments(List<String> depts) {
+    const stage1Priority = ['Creator', 'Directing', 'Writing', 'Producing', 'Sound'];
+    
+    final stage1Depts = <String>[];
+    final stage2Depts = <String>[];
+    
+    for (final dept in depts) {
+      // Extract department name and stage from key like "Directing - Stage 1"
+      final parts = dept.split(' - ');
+      final stage = parts.length > 1 ? parts[1] : 'Stage 1';
+      
+      if (stage == 'Stage 1') {
+        stage1Depts.add(dept);
+      } else {
+        stage2Depts.add(dept);
+      }
+    }
+    
+    // Sort stage1 by priority order
+    stage1Depts.sort((a, b) {
+      final aDept = a.split(' - ')[0];
+      final bDept = b.split(' - ')[0];
+      
+      if (aDept == 'Cast') return -1;
+      if (bDept == 'Cast') return 1;
+      if (aDept == 'General') return -1;
+      if (bDept == 'General') return 1;
+      
+      final aIdx = stage1Priority.indexOf(aDept);
+      final bIdx = stage1Priority.indexOf(bDept);
+      if (aIdx != -1 && bIdx != -1) return aIdx.compareTo(bIdx);
+      if (aIdx != -1) return -1;
+      if (bIdx != -1) return 1;
+      return aDept.compareTo(bDept);
+    });
+    
+    // Sort stage2 by priority order
+    stage2Depts.sort((a, b) {
+      final aDept = a.split(' - ')[0];
+      final bDept = b.split(' - ')[0];
+      
+      final aIdx = stage1Priority.indexOf(aDept);
+      final bIdx = stage1Priority.indexOf(bDept);
+      if (aIdx != -1 && bIdx != -1) return aIdx.compareTo(bIdx);
+      if (aIdx != -1) return -1;
+      if (bIdx != -1) return 1;
+      return aDept.compareTo(bDept);
+    });
+    
+    return [...stage1Depts, ...stage2Depts];
+  }
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final sortedDepts = groupedByDept.keys.toList()..sort((a, b) {
-      int score(String s) {
-        if (s == 'Cast') return 2;
-        if (s == 'General') return 1;
-        return 0;
-      }
-      final sa = score(a);
-      final sb = score(b);
-      if (sa != sb) return sa.compareTo(sb);
-      return a.compareTo(b);
-    });
+    final sortedDepts = _sortDepartments(groupedByDept.keys.toList());
 
     return Card(
       clipBehavior: Clip.antiAlias,

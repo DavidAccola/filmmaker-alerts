@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../data/models/contributor.dart';
 import '../../providers/providers.dart';
+import '../common/snackbar_utils.dart';
 import 'search_results_screen.dart';
 
 class AddContributorScreen extends ConsumerStatefulWidget {
@@ -91,9 +92,7 @@ class _AddContributorScreenState extends ConsumerState<AddContributorScreen> {
           _results = [];
           _isLoading = false;
         });
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Search failed: $e')),
-        );
+        showSimpleSnackBar(context, 'Search failed: $e');
       }
     }
   }
@@ -125,20 +124,28 @@ class _AddContributorScreenState extends ConsumerState<AddContributorScreen> {
              isAllSelected = true;
         }
 
-        // Logic: specific defaults -> or known for/first available
-        if (initialSelection.isNotEmpty) {
-          selectedDepts = initialSelection;
+        // Extract just the role part from knownFor (before the "•" separator)
+        final knownForRole = contributor.knownFor.isNotEmpty 
+            ? contributor.knownFor.split('•').first.trim()
+            : '';
+        
+        debugPrint('[AddContributor] contributor.knownFor: "${contributor.knownFor}"');
+        debugPrint('[AddContributor] extracted knownForRole: "$knownForRole"');
+        debugPrint('[AddContributor] initialSelection: $initialSelection');
+        debugPrint('[AddContributor] availableDepts: $availableDepts');
+
+        // Logic: specific defaults + knownFor -> or known for/first available
+        if (initialSelection.isNotEmpty || knownForRole.isNotEmpty) {
+          selectedDepts = {...initialSelection, if (knownForRole.isNotEmpty) knownForRole}.toList();
         } else if (availableDepts.isNotEmpty) {
-             // Fallback: Try to match "Known For" or take the first one
-             if (availableDepts.contains(contributor.knownFor)) {
-                selectedDepts = [contributor.knownFor];
-             } else {
-                selectedDepts = [availableDepts.first];
-             }
+             // Fallback: Take the first one
+             selectedDepts = [availableDepts.first];
              isAllSelected = false; 
         } else {
            selectedDepts = [];
         }
+        
+        debugPrint('[AddContributor] final selectedDepts: $selectedDepts');
       } else if (contributor.type == ContributorType.tvShow) {
         // Use default TV notification preferences without showing dialog
         final defaultPrefs = prefs.defaultTvNotificationPrefs ?? TvNotificationPreferences();
@@ -192,17 +199,13 @@ class _AddContributorScreenState extends ConsumerState<AddContributorScreen> {
       } else {
         if (mounted) {
            setState(() => _isLoading = false);
-           ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('Contributor already followed.')),
-          );
+           showSimpleSnackBar(context, 'Contributor already followed.');
         }
       }
     } catch (e) {
       if (mounted) {
         setState(() => _isLoading = false);
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error adding contributor: $e')),
-        );
+        showSimpleSnackBar(context, 'Error adding contributor: $e');
       }
     }
   }

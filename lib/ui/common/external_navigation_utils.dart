@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:url_launcher/url_launcher.dart';
+import 'snackbar_utils.dart';
 
 /// Utility class for handling external navigation to TMDB and IMDB
 class ExternalNavigationUtils {
@@ -30,9 +31,7 @@ class ExternalNavigationUtils {
   }) async {
     if (imdbId.isEmpty) {
       if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('IMDb ID not available for this title')),
-        );
+        showSimpleSnackBar(context, 'IMDb ID not available for this title');
       }
       return;
     }
@@ -48,9 +47,7 @@ class ExternalNavigationUtils {
   }) async {
     if (imdbId.isEmpty) {
       if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('IMDb ID not available for this person')),
-        );
+        showSimpleSnackBar(context, 'IMDb ID not available for this person');
       }
       return;
     }
@@ -71,16 +68,12 @@ class ExternalNavigationUtils {
         await launchUrl(uri, mode: LaunchMode.externalApplication);
       } else {
         if (context.mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('Could not open $provider page')),
-          );
+          showSimpleSnackBar(context, 'Could not open $provider page');
         }
       }
     } catch (e) {
       if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error opening $provider: $e')),
-        );
+        showSimpleSnackBar(context, 'Error opening $provider: $e');
       }
     }
   }

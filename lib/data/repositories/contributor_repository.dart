@@ -33,16 +33,28 @@ class ContributorRepository {
 
   /// Update an existing contributor (e.g., updating latestWork or departments).
   Future<void> updateContributor(Contributor updatedContributor) async {
-    // Hive objects extend HiveObject, so they have a .save() method,
-    // but since we might be passing a new instance, we find the key first.
-    final key = _box.keys.firstWhere(
-      (k) => _box.get(k)?.tmdbId == updatedContributor.tmdbId,
-      orElse: () => null,
+    // Find the existing contributor in the box
+    final existingContributor = _box.values.firstWhere(
+      (c) => c.tmdbId == updatedContributor.tmdbId,
+      orElse: () => throw Exception('Contributor not found'),
     );
 
-    if (key != null) {
-      await _box.put(key, updatedContributor);
-    }
+    // Update the existing object's fields in place to preserve its position
+    existingContributor.profilePath = updatedContributor.profilePath;
+    existingContributor.notifyForDepartments = updatedContributor.notifyForDepartments;
+    existingContributor.availableDepartments = updatedContributor.availableDepartments;
+    existingContributor.latestWork = updatedContributor.latestWork;
+    existingContributor.allRolesSelected = updatedContributor.allRolesSelected;
+    existingContributor.tvNotificationPrefs = updatedContributor.tvNotificationPrefs;
+    existingContributor.notifyTvEpisodeWork = updatedContributor.notifyTvEpisodeWork;
+    existingContributor.showStatus = updatedContributor.showStatus;
+    existingContributor.totalSeasons = updatedContributor.totalSeasons;
+    existingContributor.nextEpisodeDate = updatedContributor.nextEpisodeDate;
+    existingContributor.imdbId = updatedContributor.imdbId;
+    // Note: We intentionally do NOT update followedAt to preserve the original add time
+
+    // Save the updated object (this preserves its position in the box)
+    await existingContributor.save();
   }
 
   /// Remove a contributor by TMDB ID.

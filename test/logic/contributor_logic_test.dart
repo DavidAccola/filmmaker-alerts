@@ -103,8 +103,8 @@ void main() {
     // 3. Verify
     expect(result, isTrue);
 
-    // Check that we fetched credits
-    verify(mockTmdb.getPersonCombinedCredits(1)).called(1);
+    // Check that we fetched credits (called twice: once for available departments, once for detail update)
+    verify(mockTmdb.getPersonCombinedCredits(1)).called(2);
     
     // Check that we called repository with enriched data
     final captured = verify(mockRepo.addContributor(captureAny)).captured.first as Contributor;
@@ -113,5 +113,47 @@ void main() {
     expect(captured.notifyForDepartments, contains('Director'));
     expect(captured.latestWork, isNotNull);
     expect(captured.latestWork!.title, 'Oppenheimer');
+  });
+
+  test('addEnrichedContributor should extract role from knownFor with separator', () async {
+    // Test that when knownFor contains "Role • Movie1, Movie2", only "Role" is used
+    final sparse = Contributor(
+      tmdbId: 2,
+      name: 'Daniel Craig',
+      type: ContributorType.person,
+      profilePath: '/craig.jpg',
+      notifyForDepartments: [],
+      availableDepartments: [],
+      knownFor: 'Actor • Skyfall, Knives Out, Casino Royale',
+    );
+
+    when(mockPrefsRepo.getPreferences()).thenReturn(Preferences(
+      defaultDepartments: [],
+    ));
+
+    when(mockTmdb.getPersonCombinedCredits(2)).thenAnswer((_) async => {
+      'cast': [
+        {'id': 100, 'character': 'James Bond'},
+      ],
+      'crew': [],
+    });
+
+    when(mockRepo.addContributor(any)).thenAnswer((_) async => true);
+    
+    when(mockLatestWorkLogic.calculateLatestWork(any, pretendToday: anyNamed('pretendToday')))
+        .thenAnswer((_) async => null);
+
+    // Execute
+    final result = await contributorLogic.addEnrichedContributor(sparse);
+
+    // Verify
+    expect(result, isTrue);
+    
+    final captured = verify(mockRepo.addContributor(captureAny)).captured.first as Contributor;
+    
+    // Should contain "Actor" but NOT "Actor • Skyfall, Knives Out, Casino Royale"
+    expect(captured.notifyForDepartments, contains('Actor'));
+    expect(captured.notifyForDepartments, isNot(contains('Actor • Skyfall, Knives Out, Casino Royale')));
+    expect(captured.notifyForDepartments.length, 1);
   });
 }

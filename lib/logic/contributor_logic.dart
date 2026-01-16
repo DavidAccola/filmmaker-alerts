@@ -115,6 +115,11 @@ class ContributorLogic {
   }) async {
     final prefs = _preferencesRepository.getPreferences();
 
+    debugPrint('[ContributorLogic] addEnrichedContributor called for ${sparseContributor.name}');
+    debugPrint('[ContributorLogic] sparseContributor.knownFor: "${sparseContributor.knownFor}"');
+    debugPrint('[ContributorLogic] overrideNotifyDepts: $overrideNotifyDepts');
+    debugPrint('[ContributorLogic] overrideAvailableDepts: $overrideAvailableDepts');
+
     // 1. Fetch Credits & Determine Available Departments (unless provided)
     final availableDepts = overrideAvailableDepts ?? await getAvailableDepartments(sparseContributor);
 
@@ -122,8 +127,18 @@ class ContributorLogic {
     List<String> notifyDepts = [];
     if (overrideNotifyDepts != null) {
       notifyDepts = overrideNotifyDepts;
+      debugPrint('[ContributorLogic] Using overrideNotifyDepts: $notifyDepts');
     } else if (sparseContributor.type == ContributorType.person) {
-      notifyDepts = availableDepts.where((d) => prefs.effectiveDefaultDepartments.contains(d)).toList();
+      // Include both default departments AND the person's knownFor category
+      final defaultDepts = availableDepts.where((d) => prefs.effectiveDefaultDepartments.contains(d)).toList();
+      // Extract just the role part from knownFor (before the "•" separator)
+      final knownForRole = sparseContributor.knownFor.isNotEmpty 
+          ? sparseContributor.knownFor.split('•').first.trim()
+          : '';
+      debugPrint('[ContributorLogic] extracted knownForRole: "$knownForRole"');
+      final knownForDept = knownForRole.isNotEmpty ? [knownForRole] : <String>[];
+      notifyDepts = <String>{...defaultDepts, ...knownForDept}.toList();
+      debugPrint('[ContributorLogic] Computed notifyDepts: $notifyDepts');
     } else {
       notifyDepts = List.from(availableDepts);
     }
@@ -170,6 +185,10 @@ class ContributorLogic {
       totalSeasons: sparseContributor.totalSeasons,
       nextEpisodeDate: sparseContributor.nextEpisodeDate,
     );
+
+    debugPrint('[ContributorLogic] Final enrichedContributor.notifyForDepartments: ${enrichedContributor.notifyForDepartments}');
+    debugPrint('[ContributorLogic] Final enrichedContributor.availableDepartments: ${enrichedContributor.availableDepartments}');
+    debugPrint('[ContributorLogic] Final enrichedContributor.allRolesSelected: ${enrichedContributor.allRolesSelected}');
 
     // Update contributor detail if repository is available
     if (sparseContributor.type == ContributorType.person) {
@@ -395,13 +414,29 @@ class ContributorLogic {
         releaseDate = DateTime.tryParse(datePart);
       }
 
-      final roles = credits.map((c) => ContributorRole(
-        contributorId: contributor.tmdbId,
-        contributorName: contributor.name,
-        role: (c['job'] ?? c['character'] ?? (contributor.type == ContributorType.movie ? 'Movie' : (c['media_type'] == 'tv' ? 'TV Show' : 'Cast/Crew'))) as String,
-        department: c['department'] as String?,
-        character: c['character'] as String?,
-      )).toList();
+      final roles = credits.map((c) {
+        // For cast members (actors), TMDB doesn't provide a department field
+        // We need to detect this and set it to 'Acting' so it maps to 'Actor'
+        String? department = c['department'] as String?;
+        final character = c['character'] as String?;
+        final job = c['job'] as String?;
+        
+        // If we have a character field (even if empty) and no job, this is a cast member (actor)
+        // Cast members have 'character' field, crew members have 'job' field
+        if (character != null && job == null && (department == null || department == 'null' || department.isEmpty)) {
+          department = 'Acting';
+        }
+        
+        debugPrint('[ContributorLogic] Creating ContributorRole: dept="$department", job="$job", char="$character"');
+        
+        return ContributorRole(
+          contributorId: contributor.tmdbId,
+          contributorName: contributor.name,
+          role: (job ?? character ?? (contributor.type == ContributorType.movie ? 'Movie' : (c['media_type'] == 'tv' ? 'TV Show' : 'Cast/Crew'))) as String,
+          department: department,
+          character: character,
+        );
+      }).toList();
 
       if (mediaType == 'tv') {
         // Always ensure we have a "Show" object for TV credits to store show-level metadata (endDate, status)

@@ -50,18 +50,23 @@ class WorkSortingLogic {
   /// Ranks works by biggest hits using Bayesian weighted rating and popularity percentile.
   /// Returns top 100 works based on the ranking algorithm.
   /// Filters out low-quality content like featurettes and works with few votes.
+  /// 
+  /// For TV episodes:
+  /// - Only includes the single best-rated episode per show
+  /// - Only shows an episode if the show itself is not in the hits
+  /// - Episodes are displayed with show name, but reveal S#E# - Episode Name on hover
+  /// 
   /// **Validates: Requirements 4.1**
   static List<Work> rankBiggestHits(List<Work> works) {
     final List<Work> sortedWorks = List.from(works);
     
     // Filter criteria for quality content:
     // 1. Must have both rating and popularity
-    // 2. Must not be a TV episode (shows are preferred)
-    // 3. Filter out featurettes, behind-the-scenes, and other low-value content
+    // 2. Filter out featurettes, behind-the-scenes, and other low-value content
+    // 3. TV episodes are allowed but will be deduplicated per show
     final worksWithMetrics = sortedWorks.where((work) {
       // Basic metrics check
       if (work.tmdbRating == null || work.popularity == null) return false;
-      if (work.type == WorkType.tvEpisode) return false;
       
       // Filter out works with 0 rating (likely no votes or unreleased)
       if (work.tmdbRating! <= 0.0) return false;
@@ -109,8 +114,53 @@ class WorkSortingLogic {
       return scoreB.compareTo(scoreA); // Descending order (highest first)
     });
     
+    // Deduplicate TV shows and episodes:
+    // - If a show is in the hits, don't include any episodes from that show
+    // - If a show is NOT in the hits, include only the best episode from that show
+    final showIds = <int>{};
+    final episodesByShow = <int, Work>{};
+    final result = <Work>[];
+    
+    for (final work in worksWithMetrics) {
+      if (work.type == WorkType.tvShow) {
+        // Add the show and mark it as present
+        showIds.add(work.tmdbId);
+        result.add(work);
+      } else if (work.type == WorkType.tvEpisode && work.showId != null) {
+        final showId = work.showId!; // Safe unwrap since we checked != null
+        // Only consider episodes from shows NOT in the hits
+        if (!showIds.contains(showId)) {
+          // Keep only the best episode per show
+          final existing = episodesByShow[showId];
+          if (existing == null) {
+            episodesByShow[showId] = work;
+          } else {
+            // Compare scores and keep the better one
+            final scoreNew = _calculateHitScore(work, meanRating, popularities);
+            final scoreExisting = _calculateHitScore(existing, meanRating, popularities);
+            if (scoreNew > scoreExisting) {
+              episodesByShow[showId] = work;
+            }
+          }
+        }
+      } else {
+        // Movies and other types
+        result.add(work);
+      }
+    }
+    
+    // Add the best episode from each show (that doesn't have the show itself)
+    result.addAll(episodesByShow.values);
+    
+    // Re-sort the final result by hit score
+    result.sort((a, b) {
+      final scoreA = _calculateHitScore(a, meanRating, popularities);
+      final scoreB = _calculateHitScore(b, meanRating, popularities);
+      return scoreB.compareTo(scoreA);
+    });
+    
     // Return top 100
-    return worksWithMetrics.take(100).toList();
+    return result.take(100).toList();
   }
 
   /// Calculates a combined hit score using:

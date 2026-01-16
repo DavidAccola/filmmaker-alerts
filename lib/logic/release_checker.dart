@@ -1584,13 +1584,27 @@ class ReleaseChecker {
         releaseDate = DateTime.tryParse(datePart);
       }
 
-      final roles = credits.map((c) => ContributorRole(
-        contributorId: contributor.tmdbId,
-        contributorName: contributor.name,
-        role: (c['job'] ?? c['character'] ?? (contributor.type == ContributorType.movie ? 'Movie' : (c['media_type'] == 'tv' ? 'TV Show' : 'Cast/Crew'))) as String,
-        department: c['department'] as String?,
-        character: c['character'] as String?,
-      )).toList();
+      final roles = credits.map((c) {
+        // For cast members (actors), TMDB doesn't provide a department field
+        // We need to detect this and set it to 'Acting' so it maps to 'Actor'
+        String? department = c['department'] as String?;
+        final character = c['character'] as String?;
+        final job = c['job'] as String?;
+        
+        // If we have a character field (even if empty) and no job, this is a cast member (actor)
+        // Cast members have 'character' field, crew members have 'job' field
+        if (character != null && job == null && (department == null || department == 'null' || department.isEmpty)) {
+          department = 'Acting';
+        }
+        
+        return ContributorRole(
+          contributorId: contributor.tmdbId,
+          contributorName: contributor.name,
+          role: (job ?? character ?? (contributor.type == ContributorType.movie ? 'Movie' : (c['media_type'] == 'tv' ? 'TV Show' : 'Cast/Crew'))) as String,
+          department: department,
+          character: character,
+        );
+      }).toList();
 
       allWorks.add(Work(
         tmdbId: id,
@@ -1619,7 +1633,7 @@ class ReleaseChecker {
     var sortedLatest = WorkSortingLogic.sortLatestReleasesReverseChronologically(past);
     var sortedHits = WorkSortingLogic.rankBiggestHits(allWorks);
 
-    // ENHANCEMENT: Fetch latest episodes for top TV shows to enable grouping
+    // ENHANCEMENT: Fetch all episodes from seasons where person has credits
     if (contributor.type == ContributorType.person) {
       final List<Work> relevantTvShows = [
         ...sortedUpcoming.where((w) => w.type == WorkType.tvShow),
@@ -1628,35 +1642,50 @@ class ReleaseChecker {
       ].toSet().take(10).toList();
 
       if (relevantTvShows.isNotEmpty) {
-        debugPrint('[ReleaseChecker] Enriched detail: Fetching latest episodes for ${relevantTvShows.length} shows');
+        debugPrint('[ReleaseChecker] Enriched detail: Fetching episodes for ${relevantTvShows.length} shows');
+        
+        // First, identify which seasons have the person's credits
+        final Map<int, Set<int>> showSeasons = {}; // showId -> set of season numbers
+        
+        for (final credit in allCredits) {
+          if (credit == null || credit['media_type'] != 'tv') continue;
+          final showId = credit['id'] as int?;
+          final seasonNum = credit['season_number'] as int?;
+          
+          if (showId != null && seasonNum != null) {
+            showSeasons.putIfAbsent(showId, () => {}).add(seasonNum);
+          }
+        }
+        
+        // Now fetch all episodes from those seasons
         for (final show in relevantTvShows) {
           try {
-            final details = await _tmdbService.getTvDetailsWithEpisodes(show.tmdbId);
-            final List<Map<String, dynamic>> episodes = [];
-            if (details['next_episode_to_air'] != null) episodes.add(Map<String, dynamic>.from(details['next_episode_to_air']));
-            if (details['last_episode_to_air'] != null) episodes.add(Map<String, dynamic>.from(details['last_episode_to_air']));
-
-            for (final ep in episodes) {
-              final airDateStr = ep['air_date'] as String?;
-              DateTime? airDate;
-              if (airDateStr != null && airDateStr.isNotEmpty) {
-                airDate = DateTime.tryParse(airDateStr);
+            final seasons = showSeasons[show.tmdbId] ?? {};
+            
+            if (seasons.isEmpty) {
+              // Fallback: fetch next and last episodes if no season info
+              final details = await _tmdbService.getTvDetailsWithEpisodes(show.tmdbId);
+              final List<Map<String, dynamic>> episodes = [];
+              if (details['next_episode_to_air'] != null) episodes.add(Map<String, dynamic>.from(details['next_episode_to_air']));
+              if (details['last_episode_to_air'] != null) episodes.add(Map<String, dynamic>.from(details['last_episode_to_air']));
+              
+              for (final ep in episodes) {
+                _addEpisodeToWorks(allWorks, show, ep);
               }
-
-              allWorks.add(Work(
-                tmdbId: ep['id'],
-                title: '${show.title} - S${ ep['season_number'].toString().padLeft(2, '0')}E${ep['episode_number'].toString().padLeft(2, '0')} - ${ep['name']}',
-                posterPath: show.posterPath ?? ep['still_path'],
-                releaseDate: airDate,
-                type: WorkType.tvEpisode,
-                tmdbRating: (ep['vote_average'] as num?)?.toDouble(),
-                voteCount: ep['vote_count'] as int?,
-                popularity: show.popularity,
-                contributorRoles: show.contributorRoles,
-                imdbId: show.imdbId,
-                seasonNumber: ep['season_number'],
-                episodeNumber: ep['episode_number'],
-              ));
+            } else {
+              // Fetch all episodes from the seasons where person has credits
+              for (final seasonNum in seasons) {
+                try {
+                  final seasonDetails = await _tmdbService.getTvSeasonDetails(show.tmdbId, seasonNum);
+                  final seasonEpisodes = seasonDetails['episodes'] as List? ?? [];
+                  
+                  for (final ep in seasonEpisodes) {
+                    _addEpisodeToWorks(allWorks, show, ep);
+                  }
+                } catch (e) {
+                  debugPrint('[ReleaseChecker] Error fetching season $seasonNum for show ${show.title}: $e');
+                }
+              }
             }
           } catch (e) {
             debugPrint('[ReleaseChecker] Error fetching episodes for show ${show.title}: $e');
@@ -1710,5 +1739,30 @@ class ReleaseChecker {
 
     await _contributorDetailRepository!.cacheContributorDetail(detail);
     debugPrint('[ReleaseChecker] Successfully cached contributor detail for ${contributor.name}');
+  }
+
+  /// Helper method to add an episode to the works list
+  void _addEpisodeToWorks(List<Work> works, Work show, Map<String, dynamic> ep) {
+    final airDateStr = ep['air_date'] as String?;
+    DateTime? airDate;
+    if (airDateStr != null && airDateStr.isNotEmpty) {
+      airDate = DateTime.tryParse(airDateStr);
+    }
+
+    works.add(Work(
+      tmdbId: ep['id'],
+      title: '${show.title} - S${ep['season_number'].toString().padLeft(2, '0')}E${ep['episode_number'].toString().padLeft(2, '0')} - ${ep['name']}',
+      posterPath: show.posterPath ?? ep['still_path'],
+      releaseDate: airDate,
+      type: WorkType.tvEpisode,
+      tmdbRating: (ep['vote_average'] as num?)?.toDouble(),
+      voteCount: ep['vote_count'] as int?,
+      popularity: show.popularity,
+      contributorRoles: show.contributorRoles,
+      imdbId: show.imdbId,
+      seasonNumber: ep['season_number'],
+      episodeNumber: ep['episode_number'],
+      showId: show.tmdbId,
+    ));
   }
 }

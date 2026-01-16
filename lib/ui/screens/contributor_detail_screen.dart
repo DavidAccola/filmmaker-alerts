@@ -12,12 +12,14 @@ import 'tv_show_detail_screen.dart';
 import 'tv_episode_detail_screen.dart';
 import '../../logic/work_sorting_logic.dart';
 import '../../logic/tv_show_display_logic.dart';
+import '../../logic/work_filtering_logic.dart';
 import '../common/work_widget.dart';
 import '../common/tv_show_credits_widget.dart';
 import '../common/credit_expansion_section.dart';
 import '../common/external_navigation_utils.dart';
 import '../common/grouped_tv_show_widget.dart';
 import '../common/shelf_with_arrows.dart';
+import '../common/filter_toggle_widget.dart';
 import 'package:collection/collection.dart';
 import '../../core/tmdb_mapping.dart';
 
@@ -34,9 +36,19 @@ class ContributorDetailScreen extends ConsumerStatefulWidget {
 }
 
 class _ContributorDetailScreenState extends ConsumerState<ContributorDetailScreen> {
+  // Track filter state for each section independently
+  late bool _filterLatestReleases;
+  late bool _filterBiggestHits;
+  late String _lastFollowedRoles;
+
   @override
   void initState() {
     super.initState();
+    // Initialize filter states to true (filtering enabled by default)
+    _filterLatestReleases = true;
+    _filterBiggestHits = true;
+    _lastFollowedRoles = widget.contributor.notifyForDepartments.join(',');
+    
     // Force a fresh check on screen load to ensure categorization is up to date
     WidgetsBinding.instance.addPostFrameCallback((_) async {
       await ref.read(contributorLogicProvider).refreshContributorDetail(widget.contributor);
@@ -44,6 +56,18 @@ class _ContributorDetailScreenState extends ConsumerState<ContributorDetailScree
         ref.invalidate(contributorDetailProvider(widget.contributor.tmdbId));
       }
     });
+  }
+
+  @override
+  void didUpdateWidget(ContributorDetailScreen oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    // Check if followed roles have changed
+    final currentRoles = widget.contributor.notifyForDepartments.join(',');
+    if (currentRoles != _lastFollowedRoles) {
+      _lastFollowedRoles = currentRoles;
+      // Invalidate the provider to refresh the display
+      ref.invalidate(contributorDetailProvider(widget.contributor.tmdbId));
+    }
   }
 
   @override
@@ -121,21 +145,13 @@ class _ContributorDetailScreenState extends ConsumerState<ContributorDetailScree
                   
                   const SizedBox(height: 16),
                   
-                  // Latest Releases Section
-                  _buildSection(
-                    title: 'Latest Releases',
-                    icon: Icons.new_releases,
-                    child: _buildLatestReleasesSection(prefs, detail),
-                  ),
+                  // Latest Releases Section (includes filter toggle)
+                  _buildLatestReleasesSection(prefs, detail),
                   
                   const SizedBox(height: 16),
                   
-                  // Biggest Hits Section
-                  _buildSection(
-                    title: 'Biggest Hits',
-                    icon: Icons.star,
-                    child: _buildBiggestHitsSection(prefs, detail),
-                  ),
+                  // Biggest Hits Section (includes filter toggle)
+                  _buildBiggestHitsSection(prefs, detail),
 
                   const SizedBox(height: 16),
 
@@ -398,18 +414,48 @@ class _ContributorDetailScreenState extends ConsumerState<ContributorDetailScree
   }
 
   Widget _buildLatestReleasesSection(Preferences prefs, ContributorDetail? detail) {
-    final List<Work> rawReleases = _filterByFollowedRoles(detail?.latestReleases ?? []);
+    final List<Work> rawReleases = detail?.latestReleases ?? [];
     
     if (rawReleases.isEmpty) {
       return _buildPlaceholderContent('Latest releases will appear here');
     }
 
+    // Get the stored contributor to ensure we have the latest followed roles
+    final repo = ref.read(contributorRepositoryProvider);
+    final storedContributor = repo.getContributor(widget.contributor.tmdbId);
+    final contributorForFiltering = storedContributor ?? widget.contributor;
+
+    // Determine if filtering should be applied
+    final shouldFilter = WorkFilteringLogic.shouldApplyFiltering(rawReleases, contributorForFiltering);
+    final disabledReason = WorkFilteringLogic.getFilterDisabledReason(rawReleases, contributorForFiltering);
+    final followedRolesList = WorkFilteringLogic.getFollowedRolesString(contributorForFiltering);
+    
+    // Check if filtering would make a difference
+    final filteredWorks = WorkFilteringLogic.filterWorksByFollowedRoles(rawReleases, contributorForFiltering);
+    final filterMakesDifference = filteredWorks.length != rawReleases.length;
+    
+    // Apply filtering if applicable and enabled
+    List<Work> filteredReleases = rawReleases;
+    if (shouldFilter && _filterLatestReleases) {
+      filteredReleases = filteredWorks;
+    } else if (shouldFilter && !_filterLatestReleases) {
+      // User toggled to show all works
+      filteredReleases = rawReleases;
+    } else if (!shouldFilter && disabledReason != null) {
+      // Filtering would be empty, show all works
+      filteredReleases = rawReleases;
+    }
+
+    if (filteredReleases.isEmpty) {
+      return _buildPlaceholderContent('Latest releases will appear here');
+    }
+
     // Group TV episodes by show
-    final List<Work> episodes = rawReleases.where((w) => w.type == WorkType.tvEpisode).toList();
+    final List<Work> episodes = filteredReleases.where((w) => w.type == WorkType.tvEpisode).toList();
     final Map<String, List<Work>> grouped = TvShowDisplayLogic.groupEpisodesByShow(episodes);
 
     // Filter out TV shows from nonEpisodes if we already have episodes for them
-    final List<Work> nonEpisodes = rawReleases.where((w) {
+    final List<Work> nonEpisodes = filteredReleases.where((w) {
       if (w.type != WorkType.tvShow) return w.type != WorkType.tvEpisode;
       // If it's a TV show, check if its title is already in the grouped episodes
       return !grouped.containsKey(w.title);
@@ -443,82 +489,147 @@ class _ContributorDetailScreenState extends ConsumerState<ContributorDetailScree
     });
     
     final sectionHeight = 310.0;
+
+    // Only show filter toggle if filtering makes a difference
+    Widget? filterToggle;
+    if (filterMakesDifference) {
+      filterToggle = FilterToggleWidget(
+        isFiltered: _filterLatestReleases && shouldFilter,
+        isApplicable: shouldFilter || disabledReason != null,
+        onToggle: _toggleLatestReleasesFilter,
+        disabledReason: disabledReason,
+        followedRolesList: followedRolesList,
+      );
+    }
     
-    return ShelfWithArrows(
-      height: sectionHeight,
-      builder: (context, controller) => ListView.builder(
-        controller: controller,
-        scrollDirection: Axis.horizontal,
-        physics: const AlwaysScrollableScrollPhysics(), // Ensure swiping works
-        itemCount: displayItems.length,
-        itemBuilder: (context, index) {
-          final item = displayItems[index];
-          
-          return Padding(
-            padding: EdgeInsets.only(right: index < displayItems.length - 1 ? 12 : 0),
-            child: SizedBox(
-              width: 150,
-              child: WorkWidget(
-                work: item,
-                hideRatings: prefs.hideRatingsInDetails ?? false,
-                onTap: () => _onWorkTapped(item),
-                onAddToWatchlist: () => _onAddToWatchlist(item),
-                applyAgeStyling: true,
-                showRating: false,
-                showDate: false,
-                showDateInPoster: true,
-                watchlistButtonPosition: WatchlistButtonPosition.topLeft,
-                showWatchlistOnHover: true,
-                titleOverride: item.type == WorkType.tvEpisode ? TvShowDisplayLogic.extractShowTitle(item.title) : null,
-                hoverTitle: item.type == WorkType.tvEpisode ? TvShowDisplayLogic.formatEpisodeInfo(item) : null,
+    return _buildSection(
+      title: 'Latest Releases',
+      icon: Icons.new_releases,
+      filterToggle: filterToggle,
+      child: ShelfWithArrows(
+        height: sectionHeight,
+        builder: (context, controller) => ListView.builder(
+          controller: controller,
+          scrollDirection: Axis.horizontal,
+          physics: const AlwaysScrollableScrollPhysics(), // Ensure swiping works
+          itemCount: displayItems.length,
+          itemBuilder: (context, index) {
+            final item = displayItems[index];
+            
+            return Padding(
+              padding: EdgeInsets.only(right: index < displayItems.length - 1 ? 12 : 0),
+              child: SizedBox(
+                width: 150,
+                child: WorkWidget(
+                  work: item,
+                  hideRatings: prefs.hideRatingsInDetails ?? false,
+                  onTap: () => _onWorkTapped(item),
+                  onAddToWatchlist: () => _onAddToWatchlist(item),
+                  applyAgeStyling: true,
+                  showRating: false,
+                  showDate: false,
+                  showDateInPoster: true,
+                  watchlistButtonPosition: WatchlistButtonPosition.topLeft,
+                  showWatchlistOnHover: true,
+                  titleOverride: item.type == WorkType.tvEpisode ? TvShowDisplayLogic.extractShowTitle(item.title) : null,
+                  hoverTitle: item.type == WorkType.tvEpisode ? TvShowDisplayLogic.formatEpisodeInfo(item) : null,
+                ),
               ),
-            ),
-          );
-        },
+            );
+          },
+        ),
       ),
     );
   }
 
   Widget _buildBiggestHitsSection(Preferences prefs, ContributorDetail? detail) {
-    // TODO: Get actual contributor detail data from repository
-    final List<Work> biggestHits = _filterByFollowedRoles(detail?.biggestHits ?? []); 
+    final List<Work> rawBiggestHits = detail?.biggestHits ?? [];
     
-    if (biggestHits.isEmpty) {
+    if (rawBiggestHits.isEmpty) {
+      return _buildPlaceholderContent('Biggest hits will appear here');
+    }
+
+    // Get the stored contributor to ensure we have the latest followed roles
+    final repo = ref.read(contributorRepositoryProvider);
+    final storedContributor = repo.getContributor(widget.contributor.tmdbId);
+    final contributorForFiltering = storedContributor ?? widget.contributor;
+
+    // Determine if filtering should be applied
+    final shouldFilter = WorkFilteringLogic.shouldApplyFiltering(rawBiggestHits, contributorForFiltering);
+    final disabledReason = WorkFilteringLogic.getFilterDisabledReason(rawBiggestHits, contributorForFiltering);
+    final followedRolesList = WorkFilteringLogic.getFollowedRolesString(contributorForFiltering);
+    
+    // Check if filtering would make a difference
+    final filteredWorks = WorkFilteringLogic.filterWorksByFollowedRoles(rawBiggestHits, contributorForFiltering);
+    final filterMakesDifference = filteredWorks.length != rawBiggestHits.length;
+    
+    // Apply filtering if applicable and enabled
+    List<Work> filteredHits = rawBiggestHits;
+    if (shouldFilter && _filterBiggestHits) {
+      filteredHits = filteredWorks;
+    } else if (shouldFilter && !_filterBiggestHits) {
+      // User toggled to show all works
+      filteredHits = rawBiggestHits;
+    } else if (!shouldFilter && disabledReason != null) {
+      // Filtering would be empty, show all works
+      filteredHits = rawBiggestHits;
+    }
+
+    if (filteredHits.isEmpty) {
       return _buildPlaceholderContent('Biggest hits will appear here');
     }
     
     // rankBiggestHits already returns works sorted by hit score (descending)
-    final rankedWorks = WorkSortingLogic.rankBiggestHits(biggestHits);
+    final rankedWorks = WorkSortingLogic.rankBiggestHits(filteredHits);
     
     final sectionHeight = 310.0;
+
+    // Only show filter toggle if filtering makes a difference
+    Widget? filterToggle;
+    if (filterMakesDifference) {
+      filterToggle = FilterToggleWidget(
+        isFiltered: _filterBiggestHits && shouldFilter,
+        isApplicable: shouldFilter || disabledReason != null,
+        onToggle: _toggleBiggestHitsFilter,
+        disabledReason: disabledReason,
+        followedRolesList: followedRolesList,
+      );
+    }
     
-    return ShelfWithArrows(
-      height: sectionHeight,
-      builder: (context, controller) => ListView.builder(
-        controller: controller,
-        scrollDirection: Axis.horizontal,
-        physics: const AlwaysScrollableScrollPhysics(),
-        itemCount: rankedWorks.length,
-        itemBuilder: (context, index) {
-          final work = rankedWorks[index];
-          return Padding(
-            padding: EdgeInsets.only(right: index < rankedWorks.length - 1 ? 12 : 0),
-            child: SizedBox(
-              width: 150,
-              child: WorkWidget(
-                work: work,
-                hideRatings: prefs.hideRatingsInDetails ?? false,
-                onTap: () => _onWorkTapped(work),
-                onAddToWatchlist: () => _onAddToWatchlist(work),
-                showDateInPoster: false,
-                showRating: true,
-                showDate: false,
-                watchlistButtonPosition: WatchlistButtonPosition.topLeft,
-                showWatchlistOnHover: true,
+    return _buildSection(
+      title: 'Biggest Hits',
+      icon: Icons.star,
+      filterToggle: filterToggle,
+      child: ShelfWithArrows(
+        height: sectionHeight,
+        builder: (context, controller) => ListView.builder(
+          controller: controller,
+          scrollDirection: Axis.horizontal,
+          physics: const AlwaysScrollableScrollPhysics(),
+          itemCount: rankedWorks.length,
+          itemBuilder: (context, index) {
+            final work = rankedWorks[index];
+            return Padding(
+              padding: EdgeInsets.only(right: index < rankedWorks.length - 1 ? 12 : 0),
+              child: SizedBox(
+                width: 150,
+                child: WorkWidget(
+                  work: work,
+                  hideRatings: prefs.hideRatingsInDetails ?? false,
+                  onTap: () => _onWorkTapped(work),
+                  onAddToWatchlist: () => _onAddToWatchlist(work),
+                  showDateInPoster: false,
+                  showRating: true,
+                  showDate: false,
+                  watchlistButtonPosition: WatchlistButtonPosition.topLeft,
+                  showWatchlistOnHover: true,
+                  titleOverride: work.type == WorkType.tvEpisode ? TvShowDisplayLogic.extractShowTitle(work.title) : null,
+                  hoverTitle: work.type == WorkType.tvEpisode ? TvShowDisplayLogic.formatEpisodeInfo(work) : null,
+                ),
               ),
-            ),
-          );
-        },
+            );
+          },
+        ),
       ),
     );
   }
@@ -568,6 +679,7 @@ class _ContributorDetailScreenState extends ConsumerState<ContributorDetailScree
     required String title,
     required IconData icon,
     required Widget child,
+    Widget? filterToggle,
   }) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -582,6 +694,10 @@ class _ContributorDetailScreenState extends ConsumerState<ContributorDetailScree
                 fontWeight: FontWeight.bold,
               ),
             ),
+            if (filterToggle != null) ...[
+              const SizedBox(width: 8),
+              filterToggle,
+            ],
           ],
         ),
         const SizedBox(height: 12),
@@ -702,6 +818,11 @@ class _ContributorDetailScreenState extends ConsumerState<ContributorDetailScree
   Widget _buildFollowedRolesChips() {
     final roles = widget.contributor.notifyForDepartments;
     final isTrueAll = widget.contributor.allRolesSelected ?? false;
+
+    debugPrint('[ContributorDetail] Building followed roles chips for ${widget.contributor.name}');
+    debugPrint('[ContributorDetail] notifyForDepartments: $roles');
+    debugPrint('[ContributorDetail] allRolesSelected: $isTrueAll');
+    debugPrint('[ContributorDetail] knownFor: ${widget.contributor.knownFor}');
 
     if (isTrueAll) {
       return Wrap(
@@ -824,5 +945,16 @@ class _ContributorDetailScreenState extends ConsumerState<ContributorDetailScree
     // Refresh the provider
     ref.invalidate(preferencesProvider);
   }
-}
 
+  void _toggleLatestReleasesFilter() {
+    setState(() {
+      _filterLatestReleases = !_filterLatestReleases;
+    });
+  }
+
+  void _toggleBiggestHitsFilter() {
+    setState(() {
+      _filterBiggestHits = !_filterBiggestHits;
+    });
+  }
+}

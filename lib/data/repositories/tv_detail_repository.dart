@@ -1,5 +1,6 @@
 import 'package:hive_flutter/hive_flutter.dart';
 import 'package:collection/collection.dart';
+import 'package:flutter/foundation.dart';
 import '../../core/constants.dart';
 import '../models/tv_detail.dart';
 
@@ -91,23 +92,32 @@ class TvDetailRepository {
 
   TvEpisodeDetail? getTvEpisodeDetail(int tmdbId) {
     try {
-      return _episodeBox.values.firstWhere((e) => e.tmdbId == tmdbId);
+      debugPrint('[TvDetailRepository] Looking up episode with tmdbId=$tmdbId');
+      final result = _episodeBox.values.firstWhere((e) => e.tmdbId == tmdbId);
+      debugPrint('[TvDetailRepository] Found episode: ${result.name}');
+      return result;
     } catch (_) {
+      debugPrint('[TvDetailRepository] Episode not found in cache: tmdbId=$tmdbId');
       return null;
     }
   }
 
   Future<void> cacheTvEpisodeDetail(TvEpisodeDetail detail) async {
+    debugPrint('[TvDetailRepository] Caching episode: tmdbId=${detail.tmdbId}, showId=${detail.showId}, S${detail.seasonNumber}E${detail.episodeNumber}');
+    
     final key = _episodeBox.keys.firstWhere(
       (k) => _episodeBox.get(k)?.tmdbId == detail.tmdbId,
       orElse: () => null,
     );
 
     if (key != null) {
+      debugPrint('[TvDetailRepository] Updating existing episode cache entry');
       await _episodeBox.put(key, detail);
     } else {
+      debugPrint('[TvDetailRepository] Adding new episode to cache');
       await _episodeBox.add(detail);
     }
+    debugPrint('[TvDetailRepository] Episode cached successfully');
   }
 
   bool isEpisodeCached(int tmdbId) {

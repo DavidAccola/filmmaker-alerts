@@ -83,6 +83,9 @@ class StreamingOption {
   @HiveField(5)
   final String deepLink;
 
+  @HiveField(6)
+  final String? watchLink;
+
   StreamingOption({
     required this.providerId,
     required this.providerName,
@@ -90,6 +93,7 @@ class StreamingOption {
     required this.type,
     this.price,
     required this.deepLink,
+    this.watchLink,
   });
 }
 
@@ -146,6 +150,9 @@ class Work {
   @HiveField(16)
   final int? showId;
 
+  @HiveField(17)
+  final String? showName;
+
   Work({
     required this.tmdbId,
     required this.title,
@@ -164,6 +171,7 @@ class Work {
     this.endDate,
     this.voteCount,
     this.showId,
+    this.showName,
   });
 
   @override
@@ -203,6 +211,7 @@ class Work {
     DateTime? endDate,
     int? voteCount,
     int? showId,
+    String? showName,
   }) {
     return Work(
       tmdbId: tmdbId ?? this.tmdbId,
@@ -222,6 +231,7 @@ class Work {
       endDate: endDate ?? this.endDate,
       voteCount: voteCount ?? this.voteCount,
       showId: showId ?? this.showId,
+      showName: showName ?? this.showName,
     );
   }
 }

@@ -376,7 +376,26 @@ class WorkSortingLogic {
         return a.isFollowed ? -1 : 1;
       }
 
-      // Priority 2: Department Order
+      // Priority 2: Stage 1 Department Count (Multi-hyphenate Key Creatives first)
+      // Higher count = Better (Descending sort)
+      final countA = personStage1DeptCount[a.tmdbId] ?? 0;
+      final countB = personStage1DeptCount[b.tmdbId] ?? 0;
+      if (countA != countB) {
+        return countB.compareTo(countA);
+      }
+
+      // Priority 3: Stage (Stage 1 before Stage 2)
+      final primaryJobA = a.job.split(', ').first;
+      final primaryJobB = b.job.split(', ').first;
+      
+      final isStage1A = CrewConstants.isStage1(a.department ?? '', primaryJobA);
+      final isStage1B = CrewConstants.isStage1(b.department ?? '', primaryJobB);
+      
+      if (isStage1A != isStage1B) {
+        return isStage1A ? -1 : 1; // Stage 1 comes first
+      }
+
+      // Priority 4: Department Order (within same stage)
       final deptIdxA = AppConstants.departmentPriority.indexOf(a.department ?? '');
       final deptIdxB = AppConstants.departmentPriority.indexOf(b.department ?? '');
       
@@ -387,19 +406,7 @@ class WorkSortingLogic {
         return pA.compareTo(pB);
       }
 
-      // Priority 3: Stage 1 Department Count (Multi-hyphenate Key Creatives first)
-      // Higher count = Better (Descending sort)
-      final countA = personStage1DeptCount[a.tmdbId] ?? 0;
-      final countB = personStage1DeptCount[b.tmdbId] ?? 0;
-      if (countA != countB) {
-        return countB.compareTo(countA);
-      }
-
-      // Priority 4: Role Rank
-      // Since we grouped jobs, we need to consider the primary job (first in combined string) for sorting
-      final primaryJobA = a.job.split(', ').first;
-      final primaryJobB = b.job.split(', ').first;
-      
+      // Priority 5: Role Rank within department and stage
       final rankA = CrewConstants.getRoleRank(a.department ?? '', primaryJobA);
       final rankB = CrewConstants.getRoleRank(b.department ?? '', primaryJobB);
 
@@ -407,7 +414,14 @@ class WorkSortingLogic {
         return rankA.compareTo(rankB);
       }
 
-      // Priority 5: Alphabetical name
+      // Priority 6: Profile picture (with picture before no picture)
+      final hasProfileA = a.profilePath != null && a.profilePath!.isNotEmpty;
+      final hasProfileB = b.profilePath != null && b.profilePath!.isNotEmpty;
+      if (hasProfileA != hasProfileB) {
+        return hasProfileA ? -1 : 1; // With picture comes first
+      }
+
+      // Priority 7: Alphabetical name
       return a.name.compareTo(b.name);
     });
 
@@ -420,9 +434,19 @@ class WorkSortingLogic {
     
     final List<CastMember> sorted = List.from(cast);
     sorted.sort((a, b) {
+      // Priority 1: Followed status
       if (a.isFollowed != b.isFollowed) {
         return a.isFollowed ? -1 : 1;
       }
+      
+      // Priority 2: Profile picture (with picture before no picture)
+      final hasProfileA = a.profilePath != null && a.profilePath!.isNotEmpty;
+      final hasProfileB = b.profilePath != null && b.profilePath!.isNotEmpty;
+      if (hasProfileA != hasProfileB) {
+        return hasProfileA ? -1 : 1; // With picture comes first
+      }
+      
+      // Priority 3: Order
       return a.order.compareTo(b.order);
     });
     

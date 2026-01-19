@@ -95,18 +95,6 @@ class _MovieDetailScreenState extends ConsumerState<MovieDetailScreen> {
           
           const SizedBox(height: 24),
           
-          // Streaming options
-          if (movieDetail.streamingOptions.isNotEmpty)
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 16.0),
-              child: StreamingOptionsWidget(
-                streamingOptions: movieDetail.streamingOptions,
-              ),
-            ),
-          
-          if (movieDetail.streamingOptions.isNotEmpty)
-            const SizedBox(height: 24),
-          
           // Cast section
           if (movieDetail.cast.isNotEmpty)
             _buildCastSection(movieDetail, prefs),
@@ -141,108 +129,189 @@ class _MovieDetailScreenState extends ConsumerState<MovieDetailScreen> {
           ),
         ),
       ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          // Poster and basic info
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              // Poster image
-              Container(
-                width: 100,
-                height: 150,
-                decoration: BoxDecoration(
-                  color: Theme.of(context).colorScheme.surfaceContainerHighest,
-                  borderRadius: BorderRadius.circular(8),
-                ),
-                child: movieDetail.posterPath != null
-                    ? ClipRRect(
-                        borderRadius: BorderRadius.circular(8),
-                        child: CachedNetworkImage(
-                          imageUrl: 'https://image.tmdb.org/t/p/w300${movieDetail.posterPath}',
-                          fit: BoxFit.cover,
-                          errorWidget: (_, __, ___) => const Icon(Icons.movie, size: 40),
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          final isWideScreen = constraints.maxWidth > 800;
+          
+          if (isWideScreen) {
+            // Wide screen layout: poster + info on left, streaming on right
+            return Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                // Left side: Poster and basic info
+                Expanded(
+                  flex: 1,
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      // Poster image
+                      Container(
+                        width: 100,
+                        height: 150,
+                        decoration: BoxDecoration(
+                          color: Theme.of(context).colorScheme.surfaceContainerHighest,
+                          borderRadius: BorderRadius.circular(8),
                         ),
-                      )
-                    : const Icon(Icons.movie, size: 40),
-              ),
-              
-              const SizedBox(width: 16),
-              
-              // Title and metadata
-              Expanded(
-                child: Column(
+                        child: movieDetail.posterPath != null
+                            ? ClipRRect(
+                                borderRadius: BorderRadius.circular(8),
+                                child: CachedNetworkImage(
+                                  imageUrl: 'https://image.tmdb.org/t/p/w300${movieDetail.posterPath}',
+                                  fit: BoxFit.cover,
+                                  errorWidget: (_, __, ___) => const Icon(Icons.movie, size: 40),
+                                ),
+                              )
+                            : const Icon(Icons.movie, size: 40),
+                      ),
+                      
+                      const SizedBox(width: 16),
+                      
+                      // Title and metadata
+                      Expanded(
+                        child: _buildMovieInfo(movieDetail, prefs),
+                      ),
+                    ],
+                  ),
+                ),
+                
+                const SizedBox(width: 24),
+                
+                // Right side: Streaming options
+                if (movieDetail.streamingOptions.isNotEmpty)
+                  SizedBox(
+                    width: 350,
+                    child: StreamingOptionsWidget(
+                      streamingOptions: movieDetail.streamingOptions,
+                      tmdbId: movieDetail.tmdbId,
+                      isTV: false,
+                      isCompact: true,
+                      locale: prefs.streamingCountry,
+                    ),
+                  ),
+              ],
+            );
+          } else {
+            // Narrow screen layout: traditional stacked layout
+            return Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    AdaptiveTooltipText(
-                      movieDetail.title,
-                      style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-                        fontWeight: FontWeight.bold,
+                    // Poster image
+                    Container(
+                      width: 100,
+                      height: 150,
+                      decoration: BoxDecoration(
+                        color: Theme.of(context).colorScheme.surfaceContainerHighest,
+                        borderRadius: BorderRadius.circular(8),
                       ),
-                      maxLines: 3,
+                      child: movieDetail.posterPath != null
+                          ? ClipRRect(
+                              borderRadius: BorderRadius.circular(8),
+                              child: CachedNetworkImage(
+                                imageUrl: 'https://image.tmdb.org/t/p/w300${movieDetail.posterPath}',
+                                fit: BoxFit.cover,
+                                errorWidget: (_, __, ___) => const Icon(Icons.movie, size: 40),
+                              ),
+                            )
+                          : const Icon(Icons.movie, size: 40),
                     ),
                     
-                    const SizedBox(height: 8),
+                    const SizedBox(width: 16),
                     
-                    if (movieDetail.releaseDate != null || movieDetail.runtime != null)
-                      Row(
-                        children: [
-                          if (movieDetail.releaseDate != null)
-                            Text(
-                              DateFormat('MMM d, yyyy').format(movieDetail.releaseDate!),
-                              style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                                color: Theme.of(context).colorScheme.onSurfaceVariant,
-                              ),
-                            ),
-                          if (movieDetail.releaseDate != null && movieDetail.runtime != null && movieDetail.runtime! > 0)
-                            Padding(
-                              padding: const EdgeInsets.symmetric(horizontal: 4.0),
-                              child: Text('•', style: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant)),
-                            ),
-                          if (movieDetail.runtime != null && movieDetail.runtime! > 0)
-                            RuntimeDisplay(
-                              runtime: movieDetail.runtime!,
-                              isUpcoming: movieDetail.releaseDate?.isAfter(DateTime.now()) ?? true,
-                              style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                                color: Theme.of(context).colorScheme.onSurfaceVariant,
-                              ),
-                            ),
-                        ],
-                      ),
-                    
-                    const SizedBox(height: 12),
-                    
-                    // Rating and popularity
-                    Row(
-                      children: [
-                        if (!(prefs.hideRatingsInDetails ?? false) && movieDetail.tmdbRating != null && movieDetail.voteCount != null && movieDetail.voteCount! > 0)
-                          Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              const Icon(
-                                Icons.star,
-                                size: 16,
-                                color: Colors.amber,
-                              ),
-                              const SizedBox(width: 4),
-                              Text(
-                                movieDetail.tmdbRating!.toStringAsFixed(1),
-                                style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                                  fontWeight: FontWeight.w600,
-                                ),
-                              ),
-                            ],
-                          ),
-                      ],
+                    // Title and metadata
+                    Expanded(
+                      child: _buildMovieInfo(movieDetail, prefs),
                     ),
                   ],
                 ),
-              ),
+                
+                // Streaming options below on small screens
+                if (movieDetail.streamingOptions.isNotEmpty) ...[
+                  const SizedBox(height: 16),
+                  StreamingOptionsWidget(
+                    streamingOptions: movieDetail.streamingOptions,
+                    tmdbId: movieDetail.tmdbId,
+                    isTV: false,
+                    isCompact: true,
+                    locale: prefs.streamingCountry,
+                  ),
+                ],
+              ],
+            );
+          }
+        },
+      ),
+    );
+  }
+
+  Widget _buildMovieInfo(MovieDetail movieDetail, Preferences prefs) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        AdaptiveTooltipText(
+          movieDetail.title,
+          style: Theme.of(context).textTheme.headlineSmall?.copyWith(
+            fontWeight: FontWeight.bold,
+          ),
+          maxLines: 3,
+        ),
+        
+        const SizedBox(height: 8),
+        
+        if (movieDetail.releaseDate != null || movieDetail.runtime != null)
+          Row(
+            children: [
+              if (movieDetail.releaseDate != null)
+                Text(
+                  DateFormat('MMM d, yyyy').format(movieDetail.releaseDate!),
+                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                    color: Theme.of(context).colorScheme.onSurfaceVariant,
+                  ),
+                ),
+              if (movieDetail.releaseDate != null && movieDetail.runtime != null && movieDetail.runtime! > 0)
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 4.0),
+                  child: Text('•', style: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant)),
+                ),
+              if (movieDetail.runtime != null && movieDetail.runtime! > 0)
+                RuntimeDisplay(
+                  runtime: movieDetail.runtime!,
+                  isUpcoming: movieDetail.releaseDate?.isAfter(DateTime.now()) ?? true,
+                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                    color: Theme.of(context).colorScheme.onSurfaceVariant,
+                  ),
+                ),
             ],
           ),
-        ],
-      ),
+        
+        const SizedBox(height: 12),
+        
+        // Rating and popularity
+        Row(
+          children: [
+            if (!(prefs.hideRatingsInDetails ?? false) && movieDetail.tmdbRating != null && movieDetail.voteCount != null && movieDetail.voteCount! > 0)
+              Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const Icon(
+                    Icons.star,
+                    size: 16,
+                    color: Colors.amber,
+                  ),
+                  const SizedBox(width: 4),
+                  Text(
+                    movieDetail.tmdbRating!.toStringAsFixed(1),
+                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ],
+              ),
+          ],
+        ),
+      ],
     );
   }
 
@@ -398,48 +467,132 @@ class _MovieDetailScreenState extends ConsumerState<MovieDetailScreen> {
 
 
   Widget _buildExternalLinks(MovieDetail movieDetail) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 16.0),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            'External Links',
-            style: Theme.of(context).textTheme.titleMedium?.copyWith(
-              fontWeight: FontWeight.bold,
-            ),
-          ),
-          const SizedBox(height: 12),
-          Row(
-            children: [
-              Expanded(
-                child: ElevatedButton.icon(
-                  onPressed: () => ExternalNavigationUtils.launchTmdbTitle(
-                    context,
-                    tmdbId: movieDetail.tmdbId,
-                    isTV: false,
+    return Consumer(
+      builder: (context, ref, child) {
+        final prefsAsync = ref.watch(preferencesProvider);
+        return prefsAsync.when(
+          data: (prefs) {
+            final movieDetailsPreference = prefs.movieDetailsPreference ?? 'both';
+            final brightness = Theme.of(context).brightness;
+            
+            // Determine which links to show based on preference
+            final showTmdb = movieDetailsPreference == 'tmdb' || movieDetailsPreference == 'both';
+            final showImdb = movieDetailsPreference == 'imdb' || movieDetailsPreference == 'both';
+            final hasImdbId = movieDetail.imdbId != null && movieDetail.imdbId!.isNotEmpty;
+            
+            if (!showTmdb && !showImdb) {
+              return const SizedBox.shrink();
+            }
+            
+            return Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16.0),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'More Details',
+                    style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                      fontWeight: FontWeight.bold,
+                    ),
                   ),
-                  icon: const Icon(Icons.open_in_new),
-                  label: const Text('TMDB'),
-                ),
+                  const SizedBox(height: 12),
+                  Row(
+                    children: [
+                      if (showTmdb) ...[
+                        Tooltip(
+                          message: 'View ${movieDetail.title} on TMDB',
+                          child: Material(
+                            color: Colors.transparent,
+                            child: InkWell(
+                              onTap: () => ExternalNavigationUtils.launchTmdbTitle(
+                                context,
+                                tmdbId: movieDetail.tmdbId,
+                                isTV: false,
+                              ),
+                              borderRadius: BorderRadius.circular(8),
+                              child: Container(
+                                width: 48,
+                                height: 48,
+                                decoration: BoxDecoration(
+                                  borderRadius: BorderRadius.circular(8),
+                                  border: Border.all(
+                                    color: Theme.of(context).colorScheme.outline.withOpacity(0.3),
+                                  ),
+                                ),
+                                child: ClipRRect(
+                                  borderRadius: BorderRadius.circular(7),
+                                  child: Image.asset(
+                                    'assets/images/tmdb_square.png',
+                                    fit: BoxFit.contain,
+                                    errorBuilder: (context, error, stackTrace) => Container(
+                                      color: Theme.of(context).colorScheme.primaryContainer,
+                                      child: const Icon(Icons.movie),
+                                    ),
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 12),
+                      ],
+                      if (showImdb && hasImdbId) ...[
+                        Tooltip(
+                          message: 'View ${movieDetail.title} on IMDb',
+                          child: Material(
+                            color: Colors.transparent,
+                            child: InkWell(
+                              onTap: () => ExternalNavigationUtils.launchImdbTitle(
+                                context,
+                                imdbId: movieDetail.imdbId!,
+                              ),
+                              borderRadius: BorderRadius.circular(8),
+                              child: Container(
+                                width: 48,
+                                height: 48,
+                                decoration: BoxDecoration(
+                                  borderRadius: BorderRadius.circular(8),
+                                  border: Border.all(
+                                    color: Theme.of(context).colorScheme.outline.withOpacity(0.3),
+                                  ),
+                                ),
+                                child: ClipRRect(
+                                  borderRadius: BorderRadius.circular(7),
+                                  child: Image.asset(
+                                    brightness == Brightness.light
+                                        ? 'assets/images/imdb_square_gold.png'
+                                        : 'assets/images/imdb_square_black.png',
+                                    fit: BoxFit.contain,
+                                    errorBuilder: (context, error, stackTrace) => Container(
+                                      color: const Color(0xFFF5C518),
+                                      child: const Center(
+                                        child: Text(
+                                          'I',
+                                          style: TextStyle(
+                                            color: Colors.black,
+                                            fontSize: 20,
+                                            fontWeight: FontWeight.bold,
+                                          ),
+                                        ),
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ],
+                  ),
+                ],
               ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: ElevatedButton.icon(
-                  onPressed: movieDetail.imdbId != null && movieDetail.imdbId!.isNotEmpty
-                      ? () => ExternalNavigationUtils.launchImdbTitle(
-                          context,
-                          imdbId: movieDetail.imdbId!,
-                        )
-                      : null,
-                  icon: const Icon(Icons.open_in_new),
-                  label: const Text('IMDb'),
-                ),
-              ),
-            ],
-          ),
-        ],
-      ),
+            );
+          },
+          loading: () => const SizedBox.shrink(),
+          error: (_, __) => const SizedBox.shrink(),
+        );
+      },
     );
   }
 

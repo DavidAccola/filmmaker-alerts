@@ -11,6 +11,7 @@ class CreditExpansionSection extends StatefulWidget {
   final IconData? icon;
   final Function(Work)? onWorkTap;
   final Function(Work)? onAddToWatchlist;
+  final bool splitByStage;
 
   const CreditExpansionSection({
     super.key,
@@ -20,6 +21,7 @@ class CreditExpansionSection extends StatefulWidget {
     this.icon,
     this.onWorkTap,
     this.onAddToWatchlist,
+    this.splitByStage = true,
   });
 
   @override
@@ -48,9 +50,11 @@ class _CreditExpansionSectionState extends State<CreditExpansionSection> {
 
   void _processWorks() {
     debugPrint('[CreditExpansionSection] Processing ${widget.works.length} works for ${widget.title}');
-    groupedByDept = TvShowDisplayLogic.groupWorksByDepartmentAndStage(widget.works);
-    
-
+    if (widget.splitByStage) {
+      groupedByDept = TvShowDisplayLogic.groupWorksByDepartmentAndStage(widget.works);
+    } else {
+      groupedByDept = TvShowDisplayLogic.groupWorksByDepartment(widget.works);
+    }
 
     debugPrint('[CreditExpansionSection] Grouped into departments: ${groupedByDept.keys.toList()}');
     
@@ -76,6 +80,37 @@ class _CreditExpansionSectionState extends State<CreditExpansionSection> {
           }
        }
     }
+  }
+
+  /// Sorts departments for TV/Movie credits (without stage splitting)
+  /// Order: Creator, Directing, Writing, Production, Other departments (alphabetical), General, Cast
+  List<String> _sortDepartmentsForCredits(List<String> depts) {
+    const priority = ['Creator', 'Directing', 'Writing', 'Production'];
+    
+    final sorted = depts.toList();
+    sorted.sort((a, b) {
+      // Cast and General go last
+      if (a == 'Cast' && b == 'Cast') return 0;
+      if (a == 'Cast') return 1;
+      if (b == 'Cast') return -1;
+      
+      if (a == 'General' && b == 'General') return 0;
+      if (a == 'General') return 1;
+      if (b == 'General') return -1;
+      
+      // Priority departments first
+      final aIdx = priority.indexOf(a);
+      final bIdx = priority.indexOf(b);
+      
+      if (aIdx != -1 && bIdx != -1) return aIdx.compareTo(bIdx);
+      if (aIdx != -1) return -1;
+      if (bIdx != -1) return 1;
+      
+      // Other departments alphabetically
+      return a.compareTo(b);
+    });
+    
+    return sorted;
   }
 
   /// Sorts departments by Stage 1/Stage 2 priority and department order
@@ -104,10 +139,10 @@ class _CreditExpansionSectionState extends State<CreditExpansionSection> {
       final aDept = a.split(' - ')[0];
       final bDept = b.split(' - ')[0];
       
-      if (aDept == 'Cast') return -1;
-      if (bDept == 'Cast') return 1;
-      if (aDept == 'General') return -1;
-      if (bDept == 'General') return 1;
+      if (aDept == 'Cast') return 1;
+      if (bDept == 'Cast') return -1;
+      if (aDept == 'General') return 1;
+      if (bDept == 'General') return -1;
       
       final aIdx = stage1Priority.indexOf(aDept);
       final bIdx = stage1Priority.indexOf(bDept);
@@ -136,7 +171,9 @@ class _CreditExpansionSectionState extends State<CreditExpansionSection> {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final sortedDepts = _sortDepartments(groupedByDept.keys.toList());
+    final sortedDepts = widget.splitByStage 
+        ? _sortDepartments(groupedByDept.keys.toList())
+        : _sortDepartmentsForCredits(groupedByDept.keys.toList());
 
     return Card(
       clipBehavior: Clip.antiAlias,
@@ -153,7 +190,7 @@ class _CreditExpansionSectionState extends State<CreditExpansionSection> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                // Header (Icon + Title + Count) - No longer clickable for expansion, purely informational or just clickable to expand if collapsed
+                // Header (Icon + Title + Group by Role toggle)
                 InkWell(
                   onTap: () {
                     setState(() {
@@ -176,11 +213,21 @@ class _CreditExpansionSectionState extends State<CreditExpansionSection> {
                             ),
                           ),
                         ),
-                        Text(
-                          '${widget.works.length}',
-                          style: theme.textTheme.labelMedium?.copyWith(
-                            color: theme.colorScheme.onSurfaceVariant,
-                          ),
+                        // Group by Role toggle on the right
+                        Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Text('Group by Role', style: theme.textTheme.labelSmall),
+                            Switch(
+                              value: _groupByRole,
+                              onChanged: (val) {
+                                setState(() {
+                                  _groupByRole = val;
+                                });
+                              },
+                              materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                            ),
+                          ],
                         ),
                       ],
                     ),
@@ -188,25 +235,8 @@ class _CreditExpansionSectionState extends State<CreditExpansionSection> {
                 ),
 
                 if (_isExpanded) ...[
-                  // Expanded Controls
-                  Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 0),
-                    child: Row(
-                      mainAxisAlignment: MainAxisAlignment.end,
-                      children: [
-                        Text('Group by Role', style: theme.textTheme.labelSmall),
-                        Switch(
-                          value: _groupByRole,
-                          onChanged: (val) {
-                            setState(() {
-                              _groupByRole = val;
-                            });
-                          },
-                          materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                        ),
-                      ],
-                    ),
-                  ),
+                  // Expanded Controls (Group by Role toggle moved to header, so remove it from here)
+                  // No additional controls needed in expanded state
 
                   if (_groupByRole)
                     ...sortedDepts.map((dept) {
@@ -215,13 +245,20 @@ class _CreditExpansionSectionState extends State<CreditExpansionSection> {
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           Padding(
-                            padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
-                            child: Text(
-                              dept.toUpperCase(),
-                              style: theme.textTheme.labelSmall?.copyWith(
-                                color: theme.colorScheme.primary,
-                                fontWeight: FontWeight.bold,
-                                letterSpacing: 1.0,
+                            padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
+                            child: Container(
+                              decoration: BoxDecoration(
+                                color: theme.colorScheme.primaryContainer,
+                                borderRadius: BorderRadius.circular(6),
+                              ),
+                              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                              child: Text(
+                                dept.toUpperCase(),
+                                style: theme.textTheme.labelMedium?.copyWith(
+                                  color: theme.colorScheme.onPrimaryContainer,
+                                  fontWeight: FontWeight.bold,
+                                  letterSpacing: 1.2,
+                                ),
                               ),
                             ),
                           ),
@@ -241,36 +278,53 @@ class _CreditExpansionSectionState extends State<CreditExpansionSection> {
                     ),
                   ),
                 ] else ...[
-                  // Collapsed State: Top 5 Chronological
-                  _buildChronologicalList(limit: 5),
+                  // Collapsed State: Top 2 Chronological with fade effect
+                  _buildChronologicalList(limit: 2),
                   
-                   // Fade + Show More
-                   if (widget.works.length > 5)
-                      Stack(
-                        alignment: Alignment.center,
-                        children: [
-                          Container(
-                             height: 40,
-                             decoration: BoxDecoration(
-                               gradient: LinearGradient(
-                                 begin: Alignment.topCenter,
-                                 end: Alignment.bottomCenter,
-                                 colors: [
-                                   theme.cardColor.withOpacity(0.0),
-                                   theme.cardColor,
-                                 ],
-                               ),
-                             ),
-                          ),
-                          Center(
-                            child: TextButton.icon(
-                              onPressed: () => setState(() => _isExpanded = true),
-                              icon: const Icon(Icons.expand_more),
-                              label: Text('Show all ${widget.works.length} credits'),
+                  // Fade + Show More
+                  if (widget.works.length > 2)
+                    Material(
+                      color: Colors.transparent,
+                      child: InkWell(
+                        onTap: () => setState(() => _isExpanded = true),
+                        child: Stack(
+                          alignment: Alignment.center,
+                          children: [
+                            // Fade gradient - last item fades into button
+                            Container(
+                              height: 40,
+                              decoration: BoxDecoration(
+                                gradient: LinearGradient(
+                                  begin: Alignment.topCenter,
+                                  end: Alignment.bottomCenter,
+                                  colors: [
+                                    theme.cardColor.withOpacity(0.0),
+                                    theme.cardColor.withOpacity(0.5),
+                                    theme.cardColor.withOpacity(0.9),
+                                    theme.cardColor,
+                                  ],
+                                ),
+                              ),
                             ),
-                          ),
-                        ],
+                            // Show all button - compact
+                            Row(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                const Icon(Icons.expand_more, size: 18),
+                                const SizedBox(width: 6),
+                                Text(
+                                  'Show all ${widget.works.length} credits',
+                                  style: theme.textTheme.labelMedium?.copyWith(
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ],
+                        ),
                       ),
+                    ),
                 ],
               ],
             ),
@@ -347,7 +401,11 @@ class _CreditExpansionSectionState extends State<CreditExpansionSection> {
             final ep = episodes.first;
             final combinedTitle = "$key (S${ep.seasonNumber.toString().padLeft(2, '0')}E${ep.episodeNumber.toString().padLeft(2, '0')} - ${_extractEpisodeTitle(ep.title)})";
             return _buildWorkItem(
-              work.copyWith(title: combinedTitle),
+              ep.copyWith(
+                title: combinedTitle,
+                posterPath: work.posterPath, // Use show poster instead of episode still
+              ),
+              isEpisode: false, // Don't extract title again, show full combined title with poster
               children: null
             );
         }
@@ -412,9 +470,27 @@ class _CreditExpansionSectionState extends State<CreditExpansionSection> {
           final ep = episodes.first;
           final combinedTitle = "$showTitle (S${ep.seasonNumber.toString().padLeft(2, '0')}E${ep.episodeNumber.toString().padLeft(2, '0')} - ${_extractEpisodeTitle(ep.title)})";
           
+          debugPrint('[CreditExpansionSection] === SINGLE EPISODE CASE ===');
+          debugPrint('[CreditExpansionSection] showTitle: "$showTitle"');
+          debugPrint('[CreditExpansionSection] ep.title: "${ep.title}"');
+          debugPrint('[CreditExpansionSection] ep.type: ${ep.type}');
+          debugPrint('[CreditExpansionSection] ep.showId: ${ep.showId}');
+          debugPrint('[CreditExpansionSection] ep.showName: "${ep.showName}"');
+          debugPrint('[CreditExpansionSection] ep.seasonNumber: ${ep.seasonNumber}');
+          debugPrint('[CreditExpansionSection] ep.episodeNumber: ${ep.episodeNumber}');
+          debugPrint('[CreditExpansionSection] combinedTitle: "$combinedTitle"');
+          
+          final workToRender = ep.copyWith(title: combinedTitle);
+          debugPrint('[CreditExpansionSection] workToRender.type: ${workToRender.type}');
+          debugPrint('[CreditExpansionSection] workToRender.title: "${workToRender.title}"');
+          debugPrint('[CreditExpansionSection] workToRender.showId: ${workToRender.showId}');
+          debugPrint('[CreditExpansionSection] workToRender.showName: "${workToRender.showName}"');
+          debugPrint('[CreditExpansionSection] Calling _buildWorkItem with isEpisode: true');
+          
           renderedGroups.add(
             _buildWorkItem(
-              showWork!.copyWith(title: combinedTitle),
+              workToRender,
+              isEpisode: true,
               children: null, // No details row
               currentDepartmentFilter: filterDept,
             )
@@ -497,6 +573,17 @@ class _CreditWorkItemState extends State<_CreditWorkItem> {
     final children = widget.children;
     final currentDepartmentFilter = widget.currentDepartmentFilter;
 
+    if (work.title.contains('Interior Chinatown')) {
+      debugPrint('[_CreditWorkItem] === INTERIOR CHINATOWN RENDER ===');
+      debugPrint('[_CreditWorkItem] work.type: ${work.type}');
+      debugPrint('[_CreditWorkItem] work.title: "${work.title}"');
+      debugPrint('[_CreditWorkItem] isEpisode parameter: $isEpisode');
+      debugPrint('[_CreditWorkItem] work.showId: ${work.showId}');
+      debugPrint('[_CreditWorkItem] work.showName: "${work.showName}"');
+      debugPrint('[_CreditWorkItem] work.seasonNumber: ${work.seasonNumber}');
+      debugPrint('[_CreditWorkItem] work.episodeNumber: ${work.episodeNumber}');
+    }
+
     // Logic to sort and filter roles
     List<String> rawRoles;
     if (currentDepartmentFilter != null) {
@@ -543,7 +630,19 @@ class _CreditWorkItemState extends State<_CreditWorkItem> {
           onEnter: (_) => setState(() => _isHovered = true),
           onExit: (_) => setState(() => _isHovered = false),
           child: InkWell(
-            onTap: () => widget.onWorkTap?.call(work),
+            onTap: () {
+              if (work.title.contains('Interior Chinatown')) {
+                debugPrint('[_CreditWorkItem] === INTERIOR CHINATOWN TAP ===');
+                debugPrint('[_CreditWorkItem] work.type: ${work.type}');
+                debugPrint('[_CreditWorkItem] work.title: "${work.title}"');
+                debugPrint('[_CreditWorkItem] isEpisode: $isEpisode');
+                debugPrint('[_CreditWorkItem] work.showId: ${work.showId}');
+                debugPrint('[_CreditWorkItem] work.showName: "${work.showName}"');
+                debugPrint('[_CreditWorkItem] work.seasonNumber: ${work.seasonNumber}');
+                debugPrint('[_CreditWorkItem] work.episodeNumber: ${work.episodeNumber}');
+              }
+              widget.onWorkTap?.call(work);
+            },
             child: Padding(
               padding: EdgeInsets.symmetric(
                 horizontal: isEpisode ? 32 : 16,

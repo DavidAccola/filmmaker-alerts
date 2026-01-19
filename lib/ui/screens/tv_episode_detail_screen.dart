@@ -22,6 +22,8 @@ import '../common/snackbar_utils.dart';
 import '../../logic/contributor_logic.dart';
 import '../../data/repositories/preferences_repository.dart';
 import '../common/department_selection_dialog.dart';
+import '../common/tv_breadcrumb.dart';
+import '../common/streaming_options_widget.dart';
 
 class TvEpisodeDetailScreen extends ConsumerStatefulWidget {
   final int showId;
@@ -43,6 +45,16 @@ class TvEpisodeDetailScreen extends ConsumerStatefulWidget {
 
 class _TvEpisodeDetailScreenState extends ConsumerState<TvEpisodeDetailScreen> {
   @override
+  void initState() {
+    super.initState();
+    debugPrint('[TvEpisodeDetailScreen] === INIT STATE DEBUG ===');
+    debugPrint('[TvEpisodeDetailScreen] showId: ${widget.showId}');
+    debugPrint('[TvEpisodeDetailScreen] seasonNumber: ${widget.seasonNumber}');
+    debugPrint('[TvEpisodeDetailScreen] episodeNumber: ${widget.episodeNumber}');
+    debugPrint('[TvEpisodeDetailScreen] showName: "${widget.showName}"');
+  }
+  
+  @override
   Widget build(BuildContext context) {
     final prefsAsync = ref.watch(preferencesProvider);
     final episodeDetailAsync = ref.watch(tvEpisodeDetailProvider((
@@ -50,15 +62,73 @@ class _TvEpisodeDetailScreenState extends ConsumerState<TvEpisodeDetailScreen> {
       seasonNumber: widget.seasonNumber,
       episodeNumber: widget.episodeNumber,
     )));
+    final showDetailAsync = ref.watch(tvShowDetailProvider(widget.showId));
     
     return Scaffold(
       appBar: AppBar(
-        title: Text(widget.showName ?? 'Episode Details'),
+        title: LayoutBuilder(
+          builder: (context, constraints) {
+            return episodeDetailAsync.when(
+              data: (episodeDetail) {
+                if (episodeDetail == null) {
+                  return const Text('Episode Details');
+                }
+                
+                return TvBreadcrumb(
+                  items: [
+                    BreadcrumbItem(
+                      label: widget.showName ?? 'Show',
+                      isClickable: true,
+                      onTap: () {
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (context) => TvShowDetailScreen(
+                              showId: widget.showId,
+                              showTitle: widget.showName,
+                            ),
+                          ),
+                        );
+                      },
+                    ),
+                    BreadcrumbItem(
+                      label: 'Season ${widget.seasonNumber}',
+                      isClickable: true,
+                      onTap: () {
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (context) => TvSeasonDetailScreen(
+                              showId: widget.showId,
+                              seasonNumber: widget.seasonNumber,
+                              showName: widget.showName ?? 'Show',
+                            ),
+                          ),
+                        );
+                      },
+                    ),
+                    BreadcrumbItem(
+                      label: 'Episode ${widget.episodeNumber}: ${episodeDetail.name}',
+                      isClickable: false,
+                    ),
+                  ],
+                  maxWidth: constraints.maxWidth - 100,
+                );
+              },
+              loading: () => const Text('Episode Details'),
+              error: (_, __) => const Text('Episode Details'),
+            );
+          },
+        ),
       ),
       body: prefsAsync.when(
         data: (prefs) => episodeDetailAsync.when(
           data: (episodeDetail) => episodeDetail != null 
-              ? _buildContent(prefs, episodeDetail)
+              ? showDetailAsync.when(
+                  data: (showDetail) => _buildContent(prefs, episodeDetail, showDetail),
+                  loading: () => _buildContent(prefs, episodeDetail, null),
+                  error: (_, __) => _buildContent(prefs, episodeDetail, null),
+                )
               : _buildErrorState('Episode details not available'),
           loading: () => const Center(child: CircularProgressIndicator()),
           error: (error, stack) => _buildErrorState('Error: $error'),
@@ -87,20 +157,21 @@ class _TvEpisodeDetailScreenState extends ConsumerState<TvEpisodeDetailScreen> {
     );
   }
 
-  Widget _buildContent(Preferences prefs, TvEpisodeDetail episodeDetail) {
+  Widget _buildContent(Preferences prefs, TvEpisodeDetail episodeDetail, TvShowDetail? showDetail) {
     final theme = Theme.of(context);
     
     return SingleChildScrollView(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          _buildEpisodeHeader(episodeDetail, prefs),
+          _buildEpisodeHeader(episodeDetail, prefs, showDetail),
           
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 20.0),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
+                const SizedBox(height: 24),
                 // Overview Section
                 Text(
                   'Overview',
@@ -144,7 +215,7 @@ class _TvEpisodeDetailScreenState extends ConsumerState<TvEpisodeDetailScreen> {
     );
   }
 
-  Widget _buildEpisodeHeader(TvEpisodeDetail episodeDetail, Preferences prefs) {
+  Widget _buildEpisodeHeader(TvEpisodeDetail episodeDetail, Preferences prefs, TvShowDetail? showDetail) {
     return Container(
       padding: const EdgeInsets.all(16.0),
       decoration: BoxDecoration(
@@ -155,102 +226,189 @@ class _TvEpisodeDetailScreenState extends ConsumerState<TvEpisodeDetailScreen> {
           ),
         ),
       ),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          // Episode Thumbnail (Left)
-          SizedBox(
-            width: 140, // Slightly wider for 16:9 thumb
-            height: 80,
-            child: ClipRRect(
-              borderRadius: BorderRadius.circular(8),
-              child: episodeDetail.stillPath != null
-                  ? CachedNetworkImage(
-                      imageUrl: 'https://image.tmdb.org/t/p/w300${episodeDetail.stillPath}',
-                      fit: BoxFit.cover,
-                      placeholder: (context, url) => const Center(child: CircularProgressIndicator()),
-                      errorWidget: (context, url, error) => const Icon(Icons.tv, size: 32),
-                    )
-                  : Container(
-                      color: Theme.of(context).colorScheme.surfaceContainerHighest,
-                      child: const Icon(Icons.tv, size: 32),
-                    ),
-            ),
-          ),
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          final isWideScreen = constraints.maxWidth > 800;
           
-          const SizedBox(width: 16),
-          
-          // Episode Info (Right)
-          Expanded(
-            child: Column(
+          if (isWideScreen) {
+            // Wide screen layout: thumbnail + info on left, streaming on right
+            return Row(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                 Text(
-                  'S${episodeDetail.seasonNumber} E${episodeDetail.episodeNumber}',
-                  style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                    color: Theme.of(context).colorScheme.primary,
-                    fontWeight: FontWeight.bold,
-                    letterSpacing: 1.0,
+                // Left side: Thumbnail and basic info
+                Expanded(
+                  flex: 1,
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      // Episode Thumbnail
+                      SizedBox(
+                        width: 140,
+                        height: 80,
+                        child: ClipRRect(
+                          borderRadius: BorderRadius.circular(8),
+                          child: episodeDetail.stillPath != null
+                              ? CachedNetworkImage(
+                                  imageUrl: 'https://image.tmdb.org/t/p/w300${episodeDetail.stillPath}',
+                                  fit: BoxFit.cover,
+                                  placeholder: (context, url) => const Center(child: CircularProgressIndicator()),
+                                  errorWidget: (context, url, error) => const Icon(Icons.tv, size: 32),
+                                )
+                              : Container(
+                                  color: Theme.of(context).colorScheme.surfaceContainerHighest,
+                                  child: const Icon(Icons.tv, size: 32),
+                                ),
+                        ),
+                      ),
+                      
+                      const SizedBox(width: 16),
+                      
+                      // Episode Info
+                      Expanded(
+                        child: _buildEpisodeInfo(episodeDetail, prefs),
+                      ),
+                    ],
                   ),
                 ),
-                const SizedBox(height: 4),
-                AdaptiveTooltipText(
-                  episodeDetail.name,
-                  style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-                    fontWeight: FontWeight.bold,
-                    fontSize: 20, // Slightly smaller than movie title potentially
+                
+                const SizedBox(width: 24),
+                
+                // Right side: Streaming options
+                if (showDetail != null && showDetail.streamingOptions.isNotEmpty)
+                  SizedBox(
+                    width: 350,
+                    child: StreamingOptionsWidget(
+                      streamingOptions: showDetail.streamingOptions,
+                      tmdbId: showDetail.tmdbId,
+                      isTV: true,
+                      isCompact: true,
+                      locale: prefs.streamingCountry,
+                    ),
                   ),
-                  maxLines: 2,
-                ),
-                 const SizedBox(height: 4),
-                AdaptiveTooltipText(
-                   episodeDetail.showName,
-                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                    color: Theme.of(context).colorScheme.onSurfaceVariant,
-                  ),
-                  maxLines: 1,
-                ),
-                const SizedBox(height: 8),
+              ],
+            );
+          } else {
+            // Narrow screen layout: traditional stacked layout
+            return Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
                 Row(
-                  crossAxisAlignment: CrossAxisAlignment.center,
+                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    if (episodeDetail.airDate != null)
-                      Text(
-                        DateFormat('MMM d, yyyy').format(episodeDetail.airDate!),
-                        style: Theme.of(context).textTheme.bodySmall?.copyWith(color: Theme.of(context).colorScheme.onSurfaceVariant),
+                    // Episode Thumbnail
+                    SizedBox(
+                      width: 140,
+                      height: 80,
+                      child: ClipRRect(
+                        borderRadius: BorderRadius.circular(8),
+                        child: episodeDetail.stillPath != null
+                            ? CachedNetworkImage(
+                                imageUrl: 'https://image.tmdb.org/t/p/w300${episodeDetail.stillPath}',
+                                fit: BoxFit.cover,
+                                placeholder: (context, url) => const Center(child: CircularProgressIndicator()),
+                                errorWidget: (context, url, error) => const Icon(Icons.tv, size: 32),
+                              )
+                            : Container(
+                                color: Theme.of(context).colorScheme.surfaceContainerHighest,
+                                child: const Icon(Icons.tv, size: 32),
+                              ),
                       ),
-                    if (episodeDetail.airDate != null && episodeDetail.runtime != null && episodeDetail.runtime! > 0)
-                       Padding(padding: const EdgeInsets.symmetric(horizontal: 4.0), 
-                          child: Text("•", style: Theme.of(context).textTheme.bodySmall?.copyWith(color: Theme.of(context).colorScheme.onSurfaceVariant)),
-                       ),
-                    if (episodeDetail.runtime != null && episodeDetail.runtime! > 0)
-                      RuntimeDisplay(
-                        runtime: episodeDetail.runtime!,
-                        isUpcoming: episodeDetail.airDate?.isAfter(DateTime.now()) ?? true,
-                        style: Theme.of(context).textTheme.bodySmall?.copyWith(color: Theme.of(context).colorScheme.onSurfaceVariant),
-                      ),
+                    ),
+                    
+                    const SizedBox(width: 16),
+                    
+                    // Episode Info
+                    Expanded(
+                      child: _buildEpisodeInfo(episodeDetail, prefs),
+                    ),
                   ],
                 ),
-                const SizedBox(height: 4),
-                 if (episodeDetail.tmdbRating != null && episodeDetail.tmdbRating! > 0 && !(prefs.hideRatingsInDetails ?? false))
-                      Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          const Icon(Icons.star, color: Colors.amber, size: 14),
-                          const SizedBox(width: 4),
-                          Text(
-                            episodeDetail.tmdbRating!.toStringAsFixed(1),
-                            style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                              fontWeight: FontWeight.bold,
-                            ),
-                          ),
-                        ],
-                      ),
+                
+                // Streaming options below on small screens
+                if (showDetail != null && showDetail.streamingOptions.isNotEmpty) ...[
+                  const SizedBox(height: 16),
+                  StreamingOptionsWidget(
+                    streamingOptions: showDetail.streamingOptions,
+                    tmdbId: showDetail.tmdbId,
+                    isTV: true,
+                    isCompact: true,
+                    locale: prefs.streamingCountry,
+                  ),
+                ],
               ],
-            ),
-          ),
-        ],
+            );
+          }
+        },
       ),
+    );
+  }
+
+  Widget _buildEpisodeInfo(TvEpisodeDetail episodeDetail, Preferences prefs) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+         Text(
+          'S${episodeDetail.seasonNumber} E${episodeDetail.episodeNumber}',
+          style: Theme.of(context).textTheme.labelSmall?.copyWith(
+            color: Theme.of(context).colorScheme.primary,
+            fontWeight: FontWeight.bold,
+            letterSpacing: 1.0,
+          ),
+        ),
+        const SizedBox(height: 4),
+        AdaptiveTooltipText(
+          episodeDetail.name,
+          style: Theme.of(context).textTheme.headlineSmall?.copyWith(
+            fontWeight: FontWeight.bold,
+            fontSize: 20,
+          ),
+          maxLines: 2,
+        ),
+         const SizedBox(height: 4),
+        AdaptiveTooltipText(
+           episodeDetail.showName,
+          style: Theme.of(context).textTheme.bodySmall?.copyWith(
+            color: Theme.of(context).colorScheme.onSurfaceVariant,
+          ),
+          maxLines: 1,
+        ),
+        const SizedBox(height: 8),
+        Row(
+          crossAxisAlignment: CrossAxisAlignment.center,
+          children: [
+            if (episodeDetail.airDate != null)
+              Text(
+                DateFormat('MMM d, yyyy').format(episodeDetail.airDate!),
+                style: Theme.of(context).textTheme.bodySmall?.copyWith(color: Theme.of(context).colorScheme.onSurfaceVariant),
+              ),
+            if (episodeDetail.airDate != null && episodeDetail.runtime != null && episodeDetail.runtime! > 0)
+               Padding(padding: const EdgeInsets.symmetric(horizontal: 4.0), 
+                  child: Text("•", style: Theme.of(context).textTheme.bodySmall?.copyWith(color: Theme.of(context).colorScheme.onSurfaceVariant)),
+               ),
+            if (episodeDetail.runtime != null && episodeDetail.runtime! > 0)
+              RuntimeDisplay(
+                runtime: episodeDetail.runtime!,
+                isUpcoming: episodeDetail.airDate?.isAfter(DateTime.now()) ?? true,
+                style: Theme.of(context).textTheme.bodySmall?.copyWith(color: Theme.of(context).colorScheme.onSurfaceVariant),
+              ),
+          ],
+        ),
+        const SizedBox(height: 4),
+         if (episodeDetail.tmdbRating != null && episodeDetail.tmdbRating! > 0 && !(prefs.hideRatingsInDetails ?? false))
+              Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const Icon(Icons.star, color: Colors.amber, size: 14),
+                  const SizedBox(width: 4),
+                  Text(
+                    episodeDetail.tmdbRating!.toStringAsFixed(1),
+                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                ],
+              ),
+      ],
     );
   }
 
@@ -397,68 +555,142 @@ class _TvEpisodeDetailScreenState extends ConsumerState<TvEpisodeDetailScreen> {
   }
 
   Widget _buildExternalLinks(TvEpisodeDetail episodeDetail) {
-    return Column(
-      children: [
-        Row(
-            children: [
-                Expanded(
-                  child: OutlinedButton.icon(
-                      onPressed: () {
-                         // Pop back if previous screen was season details? Or just navigate?
-                         // If we just push, we might create a stack loop if not careful, but usually fine.
-                         // But wait, we don't know the season Id easily without fetching? 
-                         // Check params: showId, seasonNumber, episodeNumber are available.
-                         Navigator.push(
-                            context,
-                            MaterialPageRoute(
-                              builder: (context) => TvSeasonDetailScreen(
+    return Consumer(
+      builder: (context, ref, child) {
+        final prefsAsync = ref.watch(preferencesProvider);
+        return prefsAsync.when(
+          data: (prefs) {
+            final movieDetailsPreference = prefs.movieDetailsPreference ?? 'both';
+            final brightness = Theme.of(context).brightness;
+            
+            // Determine which links to show based on preference
+            final showTmdb = movieDetailsPreference == 'tmdb' || movieDetailsPreference == 'both';
+            final showImdb = movieDetailsPreference == 'imdb' || movieDetailsPreference == 'both';
+            
+            // Get IMDb ID from the TV show cache (episodes don't have their own IMDb IDs)
+            String? imdbId;
+            bool hasImdbId = false;
+            if (showImdb) {
+              final tvCacheRepo = ref.read(tvCacheRepositoryProvider);
+              final tvShow = tvCacheRepo.getShow(episodeDetail.showId);
+              imdbId = tvShow?.imdbId;
+              hasImdbId = imdbId != null && imdbId.isNotEmpty;
+            }
+            
+            if (!showTmdb && !showImdb) {
+              return const SizedBox.shrink();
+            }
+            
+            return Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16.0),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'More Details',
+                    style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  Row(
+                    children: [
+                      if (showTmdb) ...[
+                        Tooltip(
+                          message: 'View ${episodeDetail.name} on TMDB',
+                          child: Material(
+                            color: Colors.transparent,
+                            child: InkWell(
+                              onTap: () => ExternalNavigationUtils.launchTmdbEpisode(
+                                context,
                                 showId: episodeDetail.showId,
                                 seasonNumber: episodeDetail.seasonNumber,
-                                showName: episodeDetail.showName,
+                                episodeNumber: episodeDetail.episodeNumber,
+                              ),
+                              borderRadius: BorderRadius.circular(8),
+                              child: Container(
+                                width: 48,
+                                height: 48,
+                                decoration: BoxDecoration(
+                                  borderRadius: BorderRadius.circular(8),
+                                  border: Border.all(
+                                    color: Theme.of(context).colorScheme.outline.withOpacity(0.3),
+                                  ),
+                                ),
+                                child: ClipRRect(
+                                  borderRadius: BorderRadius.circular(7),
+                                  child: Image.asset(
+                                    'assets/images/tmdb_square.png',
+                                    fit: BoxFit.contain,
+                                    errorBuilder: (context, error, stackTrace) => Container(
+                                      color: Theme.of(context).colorScheme.primaryContainer,
+                                      child: const Icon(Icons.movie),
+                                    ),
+                                  ),
+                                ),
                               ),
                             ),
-                          );
-                      },
-                      icon: const Icon(Icons.video_library),
-                      label: const Text('View Season'),
-                  ),
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: OutlinedButton.icon(
-                    onPressed: () {
-                      Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                          builder: (context) => TvShowDetailScreen(
-                            showId: episodeDetail.showId,
-                            showTitle: episodeDetail.showName,
                           ),
                         ),
-                      );
-                    },
-                    icon: const Icon(Icons.tv),
-                    label: const Text('View Series'),
+                        const SizedBox(width: 12),
+                      ],
+                      if (showImdb && hasImdbId) ...[
+                        Tooltip(
+                          message: 'View ${episodeDetail.showName} on IMDb',
+                          child: Material(
+                            color: Colors.transparent,
+                            child: InkWell(
+                              onTap: () => ExternalNavigationUtils.launchImdbTitle(
+                                context,
+                                imdbId: imdbId!,
+                              ),
+                              borderRadius: BorderRadius.circular(8),
+                              child: Container(
+                                width: 48,
+                                height: 48,
+                                decoration: BoxDecoration(
+                                  borderRadius: BorderRadius.circular(8),
+                                  border: Border.all(
+                                    color: Theme.of(context).colorScheme.outline.withOpacity(0.3),
+                                  ),
+                                ),
+                                child: ClipRRect(
+                                  borderRadius: BorderRadius.circular(7),
+                                  child: Image.asset(
+                                    brightness == Brightness.light
+                                        ? 'assets/images/imdb_square_gold.png'
+                                        : 'assets/images/imdb_square_black.png',
+                                    fit: BoxFit.contain,
+                                    errorBuilder: (context, error, stackTrace) => Container(
+                                      color: const Color(0xFFF5C518),
+                                      child: const Center(
+                                        child: Text(
+                                          'I',
+                                          style: TextStyle(
+                                            color: Colors.black,
+                                            fontSize: 20,
+                                            fontWeight: FontWeight.bold,
+                                          ),
+                                        ),
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ],
                   ),
-                ),
-            ],
-        ),
-        const SizedBox(height: 12),
-        SizedBox(
-          width: double.infinity,
-          child: OutlinedButton.icon(
-            onPressed: () {
-              ExternalNavigationUtils.launchTmdbTitle(
-                context,
-                tmdbId: episodeDetail.showId,
-                isTV: true,
-              );
-            },
-            icon: const Icon(Icons.open_in_new),
-            label: const Text('View Show on TMDB'),
-          ),
-        ),
-      ],
+                ],
+              ),
+            );
+          },
+          loading: () => const SizedBox.shrink(),
+          error: (_, __) => const SizedBox.shrink(),
+        );
+      },
     );
   }
 

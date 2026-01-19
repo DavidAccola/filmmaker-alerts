@@ -144,7 +144,7 @@ class _WorkWidgetState extends State<WorkWidget> {
                     ),
   
                     // Date or Rating in Bottom-Left
-                    if ((widget.showDateInPoster) || (!widget.showDateInPoster && widget.showRating && !widget.hideRatings && work.tmdbRating != null && work.voteCount != null && work.voteCount! > 0))
+                    if ((widget.showDateInPoster && work.releaseDate != null) || (!widget.showDateInPoster && widget.showRating && !widget.hideRatings && work.tmdbRating != null && work.voteCount != null && work.voteCount! > 0))
                       Positioned(
                         bottom: 8,
                         left: 8,
@@ -155,26 +155,14 @@ class _WorkWidgetState extends State<WorkWidget> {
                             borderRadius: BorderRadius.circular(4),
                           ),
                           child: widget.showDateInPoster 
-                            ? (work.releaseDate != null 
-                                ? Text(
-                                    _formatReleaseDate(work.releaseDate!),
-                                    style: theme.textTheme.labelSmall?.copyWith(
-                                      color: Colors.white,
-                                      fontWeight: FontWeight.bold,
-                                      fontSize: 10,
-                                    ),
-                                  )
-                                : const Tooltip(
-                                    message: 'To be announced',
-                                    child: Text(
-                                      'TBA',
-                                      style: TextStyle(
-                                        color: Colors.white,
-                                        fontWeight: FontWeight.bold,
-                                        fontSize: 10,
-                                      ),
-                                    ),
-                                  ))
+                            ? Text(
+                                _formatReleaseDate(work.releaseDate!),
+                                style: theme.textTheme.labelSmall?.copyWith(
+                                  color: Colors.white,
+                                  fontWeight: FontWeight.bold,
+                                  fontSize: 10,
+                                ),
+                              )
                             : Row(
                                 mainAxisSize: MainAxisSize.min,
                                 children: [

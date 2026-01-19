@@ -188,6 +188,57 @@ class TmdbService {
     }
   }
 
+  /// Fetches upcoming movies and TV shows for a company
+  /// Uses discover endpoint with future release/air dates
+  Future<Map<String, dynamic>> getCompanyUpcomingWorks(int id) async {
+    final today = DateTime.now();
+    final todayStr = '${today.year}-${today.month.toString().padLeft(2, '0')}-${today.day.toString().padLeft(2, '0')}';
+    
+    try {
+      // Fetch upcoming movies
+      final movieResponse = await _dio.get('/discover/movie', queryParameters: {
+        'with_companies': id,
+        'primary_release_date.gte': todayStr,
+        'sort_by': 'primary_release_date.asc',
+        'page': 1,
+      });
+      
+      final movieResults = movieResponse.data['results'] as List? ?? [];
+      
+      // Fetch upcoming TV shows
+      final tvResponse = await _dio.get('/discover/tv', queryParameters: {
+        'with_companies': id,
+        'first_air_date.gte': todayStr,
+        'sort_by': 'first_air_date.asc',
+        'page': 1,
+      });
+      
+      final tvResults = tvResponse.data['results'] as List? ?? [];
+      
+      // Map TV results to use 'title' field (TV uses 'name')
+      final mappedTvResults = tvResults.map((t) {
+        t['title'] = t['name'];
+        t['media_type'] = 'tv';
+        return t;
+      }).toList();
+      
+      // Combine and sort by date
+      final allResults = [...movieResults, ...mappedTvResults];
+      allResults.sort((a, b) {
+        final dateA = a['primary_release_date'] ?? a['first_air_date'] ?? '';
+        final dateB = b['primary_release_date'] ?? b['first_air_date'] ?? '';
+        return dateA.compareTo(dateB);
+      });
+      
+      return {
+        'results': allResults,
+        'total_results': allResults.length,
+      };
+    } catch (_) {
+      return {'results': []};
+    }
+  }
+
   Future<Map<String, dynamic>> getMovieDetails(int id) async {
     final endpoint = '/movie/$id';
     final params = {'append_to_response': 'release_dates,external_ids'};
@@ -364,6 +415,35 @@ class TmdbService {
 
   Future<Map<String, dynamic>> getTvEpisodeCredits(int showId, int seasonNumber, int episodeNumber) async {
     final endpoint = '/tv/$showId/season/$seasonNumber/episode/$episodeNumber/credits';
+    _logApiCall(endpoint);
+    final response = await _dio.get(endpoint);
+    return response.data;
+  }
+
+  // --- Watch Providers ---
+  
+  /// Get watch providers for a movie
+  /// Returns provider data organized by region
+  Future<Map<String, dynamic>> getMovieWatchProviders(int id) async {
+    final endpoint = '/movie/$id/watch/providers';
+    _logApiCall(endpoint);
+    final response = await _dio.get(endpoint);
+    return response.data;
+  }
+
+  /// Get watch providers for a TV show
+  /// Returns provider data organized by region
+  Future<Map<String, dynamic>> getTvWatchProviders(int id) async {
+    final endpoint = '/tv/$id/watch/providers';
+    _logApiCall(endpoint);
+    final response = await _dio.get(endpoint);
+    return response.data;
+  }
+
+  /// Get available watch provider regions
+  /// Returns list of supported regions/countries
+  Future<Map<String, dynamic>> getWatchProviderRegions() async {
+    final endpoint = '/watch/providers/regions';
     _logApiCall(endpoint);
     final response = await _dio.get(endpoint);
     return response.data;

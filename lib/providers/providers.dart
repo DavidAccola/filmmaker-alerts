@@ -15,6 +15,7 @@ import '../data/repositories/preferences_repository.dart';
 import '../data/repositories/streaming_repository.dart';
 import '../data/services/tmdb_service.dart';
 import '../data/services/justwatch_service.dart';
+import '../data/services/streaming_service.dart';
 import '../logic/contributor_logic.dart';
 import '../logic/latest_work_logic.dart';
 import '../logic/release_checker.dart';
@@ -87,6 +88,10 @@ final justWatchServiceProvider = Provider.autoDispose<JustWatchService>((ref) {
   return JustWatchService();
 });
 
+final streamingServiceProvider = Provider.autoDispose<StreamingService>((ref) {
+  return StreamingService(ref.watch(tmdbServiceProvider));
+});
+
 // --- Logic ---
 
 final searchLogicProvider = Provider<SearchLogic>((ref) {
@@ -112,9 +117,10 @@ final contributorLogicProvider = Provider<ContributorLogic>((ref) {
 final workLogicProvider = Provider<WorkLogic>((ref) {
   return WorkLogic(
     ref.watch(tmdbServiceProvider),
-    ref.watch(justWatchServiceProvider),
+    ref.watch(streamingServiceProvider),
     ref.watch(movieDetailRepositoryProvider),
     ref.watch(tvDetailRepositoryProvider),
+    ref.watch(contributorRepositoryProvider),
   );
 });
 

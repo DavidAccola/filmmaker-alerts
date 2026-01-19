@@ -416,9 +416,9 @@ class DebugScreen extends ConsumerWidget {
             ElevatedButton.icon(
               onPressed: () async {
                 try {
-                  await DebugLogger.instance.init();
-                  final logPath = await DebugLogger.instance.getLogPath();
-                  final logContent = await DebugLogger.instance.getLogContent();
+                  // await DebugLogger.instance.init();
+                  final logPath = 'Debug log not available';
+                  final logContent = 'Debug logging is temporarily disabled';
                   
                   if (context.mounted) {
                     showDialog(
@@ -478,6 +478,287 @@ class DebugScreen extends ConsumerWidget {
               style: ElevatedButton.styleFrom(
                 padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 16),
                 backgroundColor: Colors.green,
+                foregroundColor: Colors.white,
+              ),
+            ),
+            const SizedBox(height: 20),
+            ElevatedButton.icon(
+              onPressed: () async {
+                try {
+                  // final crashLogs = DebugLogger.instance.getCrashLogs();
+                  // final crashLogsPath = await DebugLogger.instance.getCrashLogsPath();
+                  final crashLogs = <dynamic>[];
+                  final crashLogsPath = 'Crash logs not available';
+                  
+                  if (context.mounted) {
+                    showDialog(
+                      context: context,
+                      builder: (context) => AlertDialog(
+                        title: const Text('Crash Logs'),
+                        content: SizedBox(
+                          width: double.maxFinite,
+                          height: 400,
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text('Location: $crashLogsPath', 
+                                style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
+                              Text('Total crashes: ${crashLogs.length}',
+                                style: const TextStyle(fontSize: 12)),
+                              const SizedBox(height: 10),
+                              if (crashLogs.isEmpty)
+                                const Expanded(
+                                  child: Center(
+                                    child: Text('No crashes recorded', style: TextStyle(color: Colors.grey)),
+                                  ),
+                                )
+                              else
+                                Expanded(
+                                  child: SingleChildScrollView(
+                                    child: SelectableText(
+                                      crashLogs.map((log) => log.toString()).join('\n'),
+                                      style: const TextStyle(fontFamily: 'monospace', fontSize: 10),
+                                    ),
+                                  ),
+                                ),
+                            ],
+                          ),
+                        ),
+                        actions: [
+                          if (crashLogs.isNotEmpty)
+                            TextButton(
+                              onPressed: () async {
+                                await Clipboard.setData(ClipboardData(
+                                  text: crashLogs.map((log) => log.toString()).join('\n'),
+                                ));
+                                if (context.mounted) {
+                                  ScaffoldMessenger.of(context).showSnackBar(
+                                    const SnackBar(content: Text('Crash logs copied to clipboard')),
+                                  );
+                                }
+                              },
+                              child: const Text('Copy'),
+                            ),
+                          if (crashLogs.isNotEmpty)
+                            TextButton(
+                              onPressed: () async {
+                                // await DebugLogger.instance.clearCrashLogs();
+                                if (context.mounted) {
+                                  Navigator.of(context).pop();
+                                  ScaffoldMessenger.of(context).showSnackBar(
+                                    const SnackBar(content: Text('Crash logs cleared')),
+                                  );
+                                }
+                              },
+                              child: const Text('Clear', style: TextStyle(color: Colors.red)),
+                            ),
+                          TextButton(
+                            onPressed: () => Navigator.of(context).pop(),
+                            child: const Text('Close'),
+                          ),
+                        ],
+                      ),
+                    );
+                  }
+                } catch (e) {
+                  if (context.mounted) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(content: Text('Error reading crash logs: $e')),
+                    );
+                  }
+                }
+              },
+              icon: const Icon(Icons.warning),
+              label: const Text('View Crash Logs'),
+              style: ElevatedButton.styleFrom(
+                padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 16),
+                backgroundColor: Colors.red,
+                foregroundColor: Colors.white,
+              ),
+            ),
+            const SizedBox(height: 20),
+            ElevatedButton.icon(
+              onPressed: () async {
+                try {
+                  // final perfLogs = DebugLogger.instance.getPerformanceLogs();
+                  // final perfLogsPath = await DebugLogger.instance.getPerformanceLogsPath();
+                  final perfLogs = <dynamic>[];
+                  final perfLogsPath = 'Performance logs not available';
+                  
+                  if (context.mounted) {
+                    showDialog(
+                      context: context,
+                      builder: (context) => AlertDialog(
+                        title: const Text('Performance Logs'),
+                        content: SizedBox(
+                          width: double.maxFinite,
+                          height: 400,
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text('Location: $perfLogsPath', 
+                                style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
+                              Text('Total events: ${perfLogs.length}',
+                                style: const TextStyle(fontSize: 12)),
+                              const SizedBox(height: 10),
+                              if (perfLogs.isEmpty)
+                                const Expanded(
+                                  child: Center(
+                                    child: Text('No performance issues recorded', style: TextStyle(color: Colors.grey)),
+                                  ),
+                                )
+                              else
+                                Expanded(
+                                  child: SingleChildScrollView(
+                                    child: SelectableText(
+                                      perfLogs.map((log) => log.toString()).join('\n'),
+                                      style: const TextStyle(fontFamily: 'monospace', fontSize: 10),
+                                    ),
+                                  ),
+                                ),
+                            ],
+                          ),
+                        ),
+                        actions: [
+                          if (perfLogs.isNotEmpty)
+                            TextButton(
+                              onPressed: () async {
+                                await Clipboard.setData(ClipboardData(
+                                  text: perfLogs.map((log) => log.toString()).join('\n'),
+                                ));
+                                if (context.mounted) {
+                                  ScaffoldMessenger.of(context).showSnackBar(
+                                    const SnackBar(content: Text('Performance logs copied to clipboard')),
+                                  );
+                                }
+                              },
+                              child: const Text('Copy'),
+                            ),
+                          if (perfLogs.isNotEmpty)
+                            TextButton(
+                              onPressed: () async {
+                                // await DebugLogger.instance.clearPerformanceLogs();
+                                if (context.mounted) {
+                                  Navigator.of(context).pop();
+                                  ScaffoldMessenger.of(context).showSnackBar(
+                                    const SnackBar(content: Text('Performance logs cleared')),
+                                  );
+                                }
+                              },
+                              child: const Text('Clear', style: TextStyle(color: Colors.red)),
+                            ),
+                          TextButton(
+                            onPressed: () => Navigator.of(context).pop(),
+                            child: const Text('Close'),
+                          ),
+                        ],
+                      ),
+                    );
+                  }
+                } catch (e) {
+                  if (context.mounted) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(content: Text('Error reading performance logs: $e')),
+                    );
+                  }
+                }
+              },
+              icon: const Icon(Icons.speed),
+              label: const Text('View Performance Logs'),
+              style: ElevatedButton.styleFrom(
+                padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 16),
+                backgroundColor: Colors.amber,
+                foregroundColor: Colors.white,
+              ),
+            ),
+            const SizedBox(height: 20),
+            ElevatedButton.icon(
+              onPressed: () async {
+                try {
+                  // final freezes = DebugLogger.instance.getFreezes();
+                  final freezes = <dynamic>[];
+                  
+                  if (context.mounted) {
+                    showDialog(
+                      context: context,
+                      builder: (context) => AlertDialog(
+                        title: const Text('Freeze Events'),
+                        content: SizedBox(
+                          width: double.maxFinite,
+                          height: 400,
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text('Total freezes: ${freezes.length}',
+                                style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
+                              const SizedBox(height: 10),
+                              if (freezes.isEmpty)
+                                const Expanded(
+                                  child: Center(
+                                    child: Text('No freezes recorded', style: TextStyle(color: Colors.grey)),
+                                  ),
+                                )
+                              else
+                                Expanded(
+                                  child: SingleChildScrollView(
+                                    child: SelectableText(
+                                      freezes.map((log) => log.toString()).join('\n'),
+                                      style: const TextStyle(fontFamily: 'monospace', fontSize: 10),
+                                    ),
+                                  ),
+                                ),
+                            ],
+                          ),
+                        ),
+                        actions: [
+                          if (freezes.isNotEmpty)
+                            TextButton(
+                              onPressed: () async {
+                                await Clipboard.setData(ClipboardData(
+                                  text: freezes.map((log) => log.toString()).join('\n'),
+                                ));
+                                if (context.mounted) {
+                                  ScaffoldMessenger.of(context).showSnackBar(
+                                    const SnackBar(content: Text('Freeze logs copied to clipboard')),
+                                  );
+                                }
+                              },
+                              child: const Text('Copy'),
+                            ),
+                          if (freezes.isNotEmpty)
+                            TextButton(
+                              onPressed: () async {
+                                // await DebugLogger.instance.clearPerformanceLogs();
+                                if (context.mounted) {
+                                  Navigator.of(context).pop();
+                                  ScaffoldMessenger.of(context).showSnackBar(
+                                    const SnackBar(content: Text('Freeze logs cleared')),
+                                  );
+                                }
+                              },
+                              child: const Text('Clear', style: TextStyle(color: Colors.red)),
+                            ),
+                          TextButton(
+                            onPressed: () => Navigator.of(context).pop(),
+                            child: const Text('Close'),
+                          ),
+                        ],
+                      ),
+                    );
+                  }
+                } catch (e) {
+                  if (context.mounted) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(content: Text('Error reading freeze logs: $e')),
+                    );
+                  }
+                }
+              },
+              icon: const Icon(Icons.pause_circle),
+              label: const Text('View Freezes'),
+              style: ElevatedButton.styleFrom(
+                padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 16),
+                backgroundColor: Colors.deepOrange,
                 foregroundColor: Colors.white,
               ),
             ),

@@ -13,7 +13,6 @@ import 'history_screen.dart';
 import 'home_screen.dart';
 import 'debug_screen.dart';
 import 'settings_screen.dart';
-import 'package:flutter_phoenix/flutter_phoenix.dart';
 import 'package:flutter/foundation.dart';
 
 class MainScreen extends ConsumerStatefulWidget {
@@ -195,7 +194,8 @@ class _MainScreenState extends ConsumerState<MainScreen> with WindowListener {
         },
         const SingleActivator(LogicalKeyboardKey.keyR, control: true): () {
           if (kDebugMode) {
-            Phoenix.rebirth(context);
+            // Phoenix.rebirth removed - use hot reload instead
+            debugPrint('[MainScreen] Hot reload with Ctrl+R');
           }
         },
       },

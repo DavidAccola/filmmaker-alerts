@@ -22,6 +22,7 @@ import '../common/shelf_with_arrows.dart';
 import '../common/filter_toggle_widget.dart';
 import 'package:collection/collection.dart';
 import '../../core/tmdb_mapping.dart';
+import '../../core/crew_constants.dart';
 
 class ContributorDetailScreen extends ConsumerStatefulWidget {
   final Contributor contributor;
@@ -341,6 +342,7 @@ class _ContributorDetailScreenState extends ConsumerState<ContributorDetailScree
       hideRatings: prefs.hideRatingsInDetails ?? false,
       onWorkTap: (work) => _onWorkTapped(work),
       onAddToWatchlist: (work) => _onAddToWatchlist(work),
+      splitByStage: false,
     );
   }
 
@@ -361,23 +363,31 @@ class _ContributorDetailScreenState extends ConsumerState<ContributorDetailScree
       hideRatings: prefs.hideRatingsInDetails ?? false,
       onWorkTap: (work) => _onWorkTapped(work),
       onAddToWatchlist: (work) => _onAddToWatchlist(work),
+      splitByStage: false,
     );
   }
 
   Widget _buildUpcomingWorksSection(Preferences prefs, ContributorDetail? detail) {
-    // TODO: Get actual contributor detail data from repository
-    // For now, return placeholder with sorting logic ready
     final List<Work> upcomingWorks = _filterByFollowedRoles(detail?.upcomingWorks ?? []); 
     
     if (upcomingWorks.isEmpty) {
       return _buildPlaceholderContent('Upcoming works will appear here');
     }
     
+    // Sort by: 1) Poster presence (has poster first), 2) Popularity (descending)
     final sortedWorks = List<Work>.from(upcomingWorks)..sort((a, b) {
-      if (a.releaseDate == null && b.releaseDate == null) return 0;
-      if (a.releaseDate == null) return 1;
-      if (b.releaseDate == null) return -1;
-      return a.releaseDate!.compareTo(b.releaseDate!); // Upcoming: Chronological (Soonest first)
+      // First: poster presence (has poster = true comes first)
+      final aHasPoster = a.posterPath != null && a.posterPath!.isNotEmpty;
+      final bHasPoster = b.posterPath != null && b.posterPath!.isNotEmpty;
+      
+      if (aHasPoster != bHasPoster) {
+        return aHasPoster ? -1 : 1; // Has poster comes first
+      }
+      
+      // Second: popularity (descending - higher popularity first)
+      final aPopularity = a.popularity ?? 0.0;
+      final bPopularity = b.popularity ?? 0.0;
+      return bPopularity.compareTo(aPopularity);
     });
     
     final sectionHeight = 310.0;
@@ -635,6 +645,14 @@ class _ContributorDetailScreenState extends ConsumerState<ContributorDetailScree
   }
 
   void _onWorkTapped(Work work) {
+    debugPrint('[ContributorDetailScreen] === _onWorkTapped CALLED ===');
+    debugPrint('[ContributorDetailScreen] work.type: ${work.type}');
+    debugPrint('[ContributorDetailScreen] work.title: "${work.title}"');
+    debugPrint('[ContributorDetailScreen] work.showName: "${work.showName}"');
+    debugPrint('[ContributorDetailScreen] work.showId: ${work.showId}');
+    debugPrint('[ContributorDetailScreen] work.seasonNumber: ${work.seasonNumber}');
+    debugPrint('[ContributorDetailScreen] work.episodeNumber: ${work.episodeNumber}');
+    
     if (work.type == WorkType.movie) {
       Navigator.push(
         context,
@@ -656,14 +674,41 @@ class _ContributorDetailScreenState extends ConsumerState<ContributorDetailScree
         ),
       );
     } else if (work.type == WorkType.tvEpisode) {
+      debugPrint('[ContributorDetailScreen] === EPISODE NAVIGATION DEBUG ===');
+      debugPrint('[ContributorDetailScreen] work.title: "${work.title}"');
+      debugPrint('[ContributorDetailScreen] work.showName: "${work.showName}"');
+      debugPrint('[ContributorDetailScreen] work.showId: ${work.showId}');
+      debugPrint('[ContributorDetailScreen] work.tmdbId: ${work.tmdbId}');
+      debugPrint('[ContributorDetailScreen] work.seasonNumber: ${work.seasonNumber}');
+      debugPrint('[ContributorDetailScreen] work.episodeNumber: ${work.episodeNumber}');
+      
+      final finalShowId = work.showId ?? work.tmdbId;
+      
+      // Extract show name: prefer work.showName, otherwise extract from episode title
+      String finalShowName = work.showName ?? '';
+      if (finalShowName.isEmpty) {
+        // Episode title format is typically "Show Name - S##E## - Episode Name"
+        // Extract just the show name (everything before the first " - ")
+        final dashIndex = work.title.indexOf(' - ');
+        if (dashIndex > 0) {
+          finalShowName = work.title.substring(0, dashIndex).trim();
+        } else {
+          finalShowName = work.title;
+        }
+      }
+      
+      debugPrint('[ContributorDetailScreen] FINAL showId: $finalShowId');
+      debugPrint('[ContributorDetailScreen] FINAL showName: "$finalShowName"');
+      debugPrint('[ContributorDetailScreen] Navigating to TvEpisodeDetailScreen...');
+      
       Navigator.push(
         context,
         MaterialPageRoute(
           builder: (context) => TvEpisodeDetailScreen(
-            showId: work.showId ?? work.tmdbId, // Use showId, fallback to tmdbId (legacy/quick-creation)
+            showId: finalShowId,
             seasonNumber: work.seasonNumber ?? 1,
             episodeNumber: work.episodeNumber ?? 1,
-            showName: work.title, // Actually show name in this context
+            showName: finalShowName,
           ),
         ),
       );
@@ -728,38 +773,131 @@ class _ContributorDetailScreenState extends ConsumerState<ContributorDetailScree
   }
 
   Widget _buildExternalLinks() {
-    return Column(
-      children: [
-        SizedBox(
-          width: double.infinity,
-          child: OutlinedButton.icon(
-            onPressed: () {
-              ExternalNavigationUtils.launchTmdbPerson(
-                context,
-                tmdbId: widget.contributor.tmdbId,
-              );
-            },
-            icon: const Icon(Icons.open_in_new),
-            label: const Text('See all credits on TMDB'),
-          ),
-        ),
-        const SizedBox(height: 8),
-        SizedBox(
-          width: double.infinity,
-          child: OutlinedButton.icon(
-            onPressed: widget.contributor.imdbId != null && widget.contributor.imdbId!.isNotEmpty
-                ? () {
-                    ExternalNavigationUtils.launchImdbPerson(
-                      context,
-                      imdbId: widget.contributor.imdbId!,
-                    );
-                  }
-                : null,
-            icon: const Icon(Icons.open_in_new),
-            label: const Text('See all credits on IMDB'),
-          ),
-        ),
-      ],
+    return Consumer(
+      builder: (context, ref, child) {
+        final prefsAsync = ref.watch(preferencesProvider);
+        return prefsAsync.when(
+          data: (prefs) {
+            final movieDetailsPreference = prefs.movieDetailsPreference ?? 'both';
+            final brightness = Theme.of(context).brightness;
+            
+            // Determine which links to show based on preference
+            final showTmdb = movieDetailsPreference == 'tmdb' || movieDetailsPreference == 'both';
+            final showImdb = movieDetailsPreference == 'imdb' || movieDetailsPreference == 'both';
+            final hasImdbId = widget.contributor.imdbId != null && widget.contributor.imdbId!.isNotEmpty;
+            
+            if (!showTmdb && !showImdb) {
+              return const SizedBox.shrink();
+            }
+            
+            return Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16.0),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'More Details',
+                    style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  Row(
+                    children: [
+                      if (showTmdb) ...[
+                        Tooltip(
+                          message: 'View ${widget.contributor.name} on TMDB',
+                          child: Material(
+                            color: Colors.transparent,
+                            child: InkWell(
+                              onTap: () => ExternalNavigationUtils.launchTmdbPerson(
+                                context,
+                                tmdbId: widget.contributor.tmdbId,
+                              ),
+                              borderRadius: BorderRadius.circular(8),
+                              child: Container(
+                                width: 48,
+                                height: 48,
+                                decoration: BoxDecoration(
+                                  borderRadius: BorderRadius.circular(8),
+                                  border: Border.all(
+                                    color: Theme.of(context).colorScheme.outline.withOpacity(0.3),
+                                  ),
+                                ),
+                                child: ClipRRect(
+                                  borderRadius: BorderRadius.circular(7),
+                                  child: Image.asset(
+                                    'assets/images/tmdb_square.png',
+                                    fit: BoxFit.contain,
+                                    errorBuilder: (context, error, stackTrace) => Container(
+                                      color: Theme.of(context).colorScheme.primaryContainer,
+                                      child: const Icon(Icons.movie),
+                                    ),
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 12),
+                      ],
+                      if (showImdb && hasImdbId) ...[
+                        Tooltip(
+                          message: 'View ${widget.contributor.name} on IMDb',
+                          child: Material(
+                            color: Colors.transparent,
+                            child: InkWell(
+                              onTap: () => ExternalNavigationUtils.launchImdbPerson(
+                                context,
+                                imdbId: widget.contributor.imdbId!,
+                              ),
+                              borderRadius: BorderRadius.circular(8),
+                              child: Container(
+                                width: 48,
+                                height: 48,
+                                decoration: BoxDecoration(
+                                  borderRadius: BorderRadius.circular(8),
+                                  border: Border.all(
+                                    color: Theme.of(context).colorScheme.outline.withOpacity(0.3),
+                                  ),
+                                ),
+                                child: ClipRRect(
+                                  borderRadius: BorderRadius.circular(7),
+                                  child: Image.asset(
+                                    brightness == Brightness.light
+                                        ? 'assets/images/imdb_square_gold.png'
+                                        : 'assets/images/imdb_square_black.png',
+                                    fit: BoxFit.contain,
+                                    errorBuilder: (context, error, stackTrace) => Container(
+                                      color: const Color(0xFFF5C518),
+                                      child: const Center(
+                                        child: Text(
+                                          'I',
+                                          style: TextStyle(
+                                            color: Colors.black,
+                                            fontSize: 20,
+                                            fontWeight: FontWeight.bold,
+                                          ),
+                                        ),
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ],
+                  ),
+                ],
+              ),
+            );
+          },
+          loading: () => const SizedBox.shrink(),
+          error: (_, __) => const SizedBox.shrink(),
+        );
+      },
     );
   }
 
@@ -837,6 +975,37 @@ class _ContributorDetailScreenState extends ConsumerState<ContributorDetailScree
       return const SizedBox.shrink();
     }
 
+    // Organize roles by Stage 1, Stage 2, then others
+    final stage1Roles = <String>[];
+    final stage2Roles = <String>[];
+    final otherRoles = <String>[];
+    
+    for (final role in roles) {
+      // Check if it's a crew role (Stage 1 or Stage 2)
+      bool isStage1 = false;
+      bool isStage2 = false;
+      
+      // Check all departments for Stage 1/Stage 2
+      for (final dept in ['Directing', 'Writing', 'Production', 'Sound']) {
+        if (CrewConstants.isStage1(dept, role)) {
+          isStage1 = true;
+          break;
+        }
+        if (CrewConstants.isStage2(dept, role)) {
+          isStage2 = true;
+          break;
+        }
+      }
+      
+      if (isStage1) {
+        stage1Roles.add(role);
+      } else if (isStage2) {
+        stage2Roles.add(role);
+      } else {
+        otherRoles.add(role);
+      }
+    }
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -849,11 +1018,32 @@ class _ContributorDetailScreenState extends ConsumerState<ContributorDetailScree
           ),
         ),
         const SizedBox(height: 4),
-        Wrap(
-          spacing: 6,
-          runSpacing: 6,
-          children: roles.map((role) => _buildRoleChip(role, Theme.of(context).colorScheme.secondary)).toList(),
-        ),
+        // Stage 1 roles
+        if (stage1Roles.isNotEmpty) ...[
+          Wrap(
+            spacing: 6,
+            runSpacing: 6,
+            children: stage1Roles.map((role) => _buildRoleChip(role, Theme.of(context).colorScheme.secondary)).toList(),
+          ),
+          const SizedBox(height: 4),
+        ],
+        // Stage 2 roles
+        if (stage2Roles.isNotEmpty) ...[
+          Wrap(
+            spacing: 6,
+            runSpacing: 6,
+            children: stage2Roles.map((role) => _buildRoleChip(role, Theme.of(context).colorScheme.tertiary)).toList(),
+          ),
+          const SizedBox(height: 4),
+        ],
+        // Other roles (cast, etc.)
+        if (otherRoles.isNotEmpty) ...[
+          Wrap(
+            spacing: 6,
+            runSpacing: 6,
+            children: otherRoles.map((role) => _buildRoleChip(role, Theme.of(context).colorScheme.outline)).toList(),
+          ),
+        ],
       ],
     );
   }

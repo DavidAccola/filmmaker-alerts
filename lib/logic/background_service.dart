@@ -16,6 +16,7 @@ import '../data/repositories/preferences_repository.dart';
 import '../data/repositories/tv_cache_repository.dart';
 import '../data/services/notification_service.dart';
 import '../data/services/tmdb_service.dart';
+import '../utils/debug_logger.dart';
 import 'release_checker.dart';
 import 'notification_logic.dart';
 import '../utils/debug_logger.dart';
@@ -153,11 +154,11 @@ class BackgroundTaskProcessor {
 
       for (final release in newReleases) {
         // A. Update History
-        DebugLogger.instance.logBackground('Adding notification to history: tmdbId=${release.tmdbId}, mediaType=${release.mediaType}');
-        DebugLogger.instance.logBackground('  seasonNumber=${release.seasonNumber}, episodeNumber=${release.episodeNumber}');
-        DebugLogger.instance.logBackground('  episodeTitle="${release.episodeTitle}", tvNotificationType=${release.tvNotificationType}');
+        // DebugLogger.instance.logBackground('Adding notification to history: tmdbId=${release.tmdbId}, mediaType=${release.mediaType}');
+        // DebugLogger.instance.logBackground('  seasonNumber=${release.seasonNumber}, episodeNumber=${release.episodeNumber}');
+        // DebugLogger.instance.logBackground('  episodeTitle="${release.episodeTitle}", tvNotificationType=${release.tvNotificationType}');
         await historyRepo.addNotificationToHistory(release);
-        DebugLogger.instance.logBackground('✅ Successfully added to history: tmdbId=${release.tmdbId}');
+        // DebugLogger.instance.logBackground('✅ Successfully added to history: tmdbId=${release.tmdbId}');
 
         // B. Get Movie/TV Show Details for Notification Text
         String? title;
@@ -165,19 +166,19 @@ class BackgroundTaskProcessor {
           // Get TV show title from TV cache
           final tvShow = tvCacheRepoInstance.getShow(release.tmdbId);
           title = tvShow?.name;
-          DebugLogger.instance.logBackground('TV show lookup: tmdbId=${release.tmdbId}, found=${tvShow != null}, title="$title"');
+          // DebugLogger.instance.logBackground('TV show lookup: tmdbId=${release.tmdbId}, found=${tvShow != null}, title="$title"');
         } else {
           // Get movie title from movie cache
           final movie = movieCacheRepo.getMovie(release.tmdbId);
           title = movie?.title;
-          DebugLogger.instance.logBackground('Movie lookup: tmdbId=${release.tmdbId}, found=${movie != null}, title="$title"');
+          // DebugLogger.instance.logBackground('Movie lookup: tmdbId=${release.tmdbId}, found=${movie != null}, title="$title"');
         }
         
         if (title != null) {
           movieTitles.add(title);
-          DebugLogger.instance.logBackground('Added title to notification: "$title"');
+          // DebugLogger.instance.logBackground('Added title to notification: "$title"');
         } else {
-          DebugLogger.instance.logBackground('WARNING: No title found for ${release.mediaType} with tmdbId=${release.tmdbId}');
+          // DebugLogger.instance.logBackground('WARNING: No title found for ${release.mediaType} with tmdbId=${release.tmdbId}');
         }
 
         // C. Update Latest Work for Contributors (only for movies, not TV shows)
@@ -221,27 +222,27 @@ class BackgroundTaskProcessor {
       // 6. Send Notification
       if (movieTitles.isNotEmpty) {
         // Initialize logger
-        await DebugLogger.instance.init();
+        // await DebugLogger.instance.init();
         
-        DebugLogger.instance.logBackground('=== NOTIFICATION DEBUG ===');
-        DebugLogger.instance.logBackground('Movie titles: $movieTitles');
-        DebugLogger.instance.logBackground('New releases count: ${newReleases.length}');
+        // DebugLogger.instance.logBackground('=== NOTIFICATION DEBUG ===');
+        // DebugLogger.instance.logBackground('Movie titles: $movieTitles');
+        // DebugLogger.instance.logBackground('New releases count: ${newReleases.length}');
         
-        for (int i = 0; i < newReleases.length; i++) {
-          final release = newReleases[i];
-          DebugLogger.instance.logBackground('Release $i:');
-          DebugLogger.instance.logBackground('  tmdbId: ${release.tmdbId}');
-          DebugLogger.instance.logBackground('  mediaType: ${release.mediaType}');
-          DebugLogger.instance.logBackground('  tvNotificationType: ${release.tvNotificationType}');
-          DebugLogger.instance.logBackground('  seasonNumber: ${release.seasonNumber}');
-          DebugLogger.instance.logBackground('  episodeNumber: ${release.episodeNumber}');
-          DebugLogger.instance.logBackground('  episodeTitle: "${release.episodeTitle}"');
-          DebugLogger.instance.logBackground('  notificationEvents.length: ${release.notificationEvents.length}');
-          for (int j = 0; j < release.notificationEvents.length; j++) {
-            final event = release.notificationEvents[j];
-            DebugLogger.instance.logBackground('  event[$j]: releaseType="${event.releaseType}", releaseDate="${event.releaseDate}"');
-          }
-        }
+        // for (int i = 0; i < newReleases.length; i++) {
+        //   final release = newReleases[i];
+        //   DebugLogger.instance.logBackground('Release $i:');
+        //   DebugLogger.instance.logBackground('  tmdbId: ${release.tmdbId}');
+        //   DebugLogger.instance.logBackground('  mediaType: ${release.mediaType}');
+        //   DebugLogger.instance.logBackground('  tvNotificationType: ${release.tvNotificationType}');
+        //   DebugLogger.instance.logBackground('  seasonNumber: ${release.seasonNumber}');
+        //   DebugLogger.instance.logBackground('  episodeNumber: ${release.episodeNumber}');
+        //   DebugLogger.instance.logBackground('  episodeTitle: "${release.episodeTitle}"');
+        //   DebugLogger.instance.logBackground('  notificationEvents.length: ${release.notificationEvents.length}');
+        //   for (int j = 0; j < release.notificationEvents.length; j++) {
+        //     final event = release.notificationEvents[j];
+        //     DebugLogger.instance.logBackground('  event[$j]: releaseType="${event.releaseType}", releaseDate="${event.releaseDate}"');
+        //   }
+        // }
         
         final title = NotificationLogic.formatTitle(movieTitles, entries: newReleases);
         final body = NotificationLogic.formatBody(movieTitles, newReleases, 
@@ -256,8 +257,8 @@ class BackgroundTaskProcessor {
             }
           });
 
-        DebugLogger.instance.logBackground('Formatted title: "$title"');
-        DebugLogger.instance.logBackground('Formatted body: "$body"');
+        // DebugLogger.instance.logBackground('Formatted title: "$title"');
+        // DebugLogger.instance.logBackground('Formatted body: "$body"');
 
         // Action Logic: Single Movie opens URL, Multiple opens History
         String? payload;
@@ -266,10 +267,10 @@ class BackgroundTaskProcessor {
           final isTV = entry.mediaType == 'tv' || entry.notificationEvents.any((e) => e.releaseType.toLowerCase() == 'tv');
           final typePath = isTV ? 'tv' : 'movie';
           payload = 'https://www.themoviedb.org/$typePath/${entry.tmdbId}';
-          DebugLogger.instance.logBackground('Single release payload: $payload (isTV: $isTV)');
+          // DebugLogger.instance.logBackground('Single release payload: $payload (isTV: $isTV)');
         } else {
           payload = 'app://history';
-          DebugLogger.instance.logBackground('Multiple releases payload: $payload');
+          // DebugLogger.instance.logBackground('Multiple releases payload: $payload');
         }
 
         // Image Logic: Collect up to 4 poster images from the releases
@@ -283,16 +284,16 @@ class BackgroundTaskProcessor {
             final tvShow = tvCacheRepoInstance.getShow(release.tmdbId);
             if (tvShow?.posterPath != null && tvShow!.posterPath!.isNotEmpty) {
               posterPath = tvShow.posterPath;
-              DebugLogger.instance.logBackground('TV show poster found: ${tvShow.posterPath}');
+              // DebugLogger.instance.logBackground('TV show poster found: ${tvShow.posterPath}');
             } else {
-              DebugLogger.instance.logBackground('No TV show poster found for tmdbId=${release.tmdbId}');
+              // DebugLogger.instance.logBackground('No TV show poster found for tmdbId=${release.tmdbId}');
             }
             // TODO: Add season-specific poster logic when available
           } else {
             // For movies, get movie poster
             final movie = movieCacheRepo.getMovie(release.tmdbId);
             posterPath = movie?.posterPath;
-            DebugLogger.instance.logBackground('Movie poster: ${movie?.posterPath}');
+            // DebugLogger.instance.logBackground('Movie poster: ${movie?.posterPath}');
           }
           
           if (posterPath != null && posterPath.isNotEmpty) {
@@ -301,23 +302,23 @@ class BackgroundTaskProcessor {
           }
         }
         
-        DebugLogger.instance.logBackground('Image paths: $imagePaths');
+        // DebugLogger.instance.logBackground('Image paths: $imagePaths');
 
         // Get priority-based release dates for 2-3 movie notifications
         List<String>? releaseDates;
         if (newReleases.length >= 2 && newReleases.length <= 3) {
           releaseDates = NotificationLogic.getPriorityReleaseDates(movieTitles, newReleases);
-          DebugLogger.instance.logBackground('Release dates: $releaseDates');
+          // DebugLogger.instance.logBackground('Release dates: $releaseDates');
         }
 
-        DebugLogger.instance.logBackground('About to call showNotification...');
-        DebugLogger.instance.logBackground('  id: ${DateTime.now().millisecondsSinceEpoch ~/ 1000}');
-        DebugLogger.instance.logBackground('  title: "$title"');
-        DebugLogger.instance.logBackground('  body: "$body"');
-        DebugLogger.instance.logBackground('  payload: $payload');
-        DebugLogger.instance.logBackground('  imagePaths: $imagePaths');
-        DebugLogger.instance.logBackground('  releaseDates: $releaseDates');
-        DebugLogger.instance.logBackground('  totalMovieCount: ${newReleases.length}');
+        // DebugLogger.instance.logBackground('About to call showNotification...');
+        // DebugLogger.instance.logBackground('  id: ${DateTime.now().millisecondsSinceEpoch ~/ 1000}');
+        // DebugLogger.instance.logBackground('  title: "$title"');
+        // DebugLogger.instance.logBackground('  body: "$body"');
+        // DebugLogger.instance.logBackground('  payload: $payload');
+        // DebugLogger.instance.logBackground('  imagePaths: $imagePaths');
+        // DebugLogger.instance.logBackground('  releaseDates: $releaseDates');
+        // DebugLogger.instance.logBackground('  totalMovieCount: ${newReleases.length}');
         
         try {
           await notificationService.showNotification(
@@ -329,19 +330,19 @@ class BackgroundTaskProcessor {
             releaseDates: releaseDates,
             totalMovieCount: newReleases.length,
           );
-          DebugLogger.instance.logBackground('✅ showNotification completed successfully');
+          // DebugLogger.instance.logBackground('✅ showNotification completed successfully');
         } catch (e, stackTrace) {
-          DebugLogger.instance.logBackground('❌ showNotification failed: $e');
-          DebugLogger.instance.logBackground('Stack trace: ${stackTrace.toString().substring(0, 500)}...');
+          // DebugLogger.instance.logBackground('❌ showNotification failed: $e');
+          // DebugLogger.instance.logBackground('Stack trace: ${stackTrace.toString().substring(0, 500)}...');
           rethrow;
         }
       } else {
-        DebugLogger.instance.logBackground('❌ No movie titles found - notification not sent');
-        DebugLogger.instance.logBackground('New releases count: ${newReleases.length}');
-        for (int i = 0; i < newReleases.length; i++) {
-          final release = newReleases[i];
-          DebugLogger.instance.logBackground('Release $i: tmdbId=${release.tmdbId}, mediaType=${release.mediaType}');
-        }
+        // DebugLogger.instance.logBackground('❌ No movie titles found - notification not sent');
+        // DebugLogger.instance.logBackground('New releases count: ${newReleases.length}');
+        // for (int i = 0; i < newReleases.length; i++) {
+        //   final release = newReleases[i];
+        //   DebugLogger.instance.logBackground('Release $i: tmdbId=${release.tmdbId}, mediaType=${release.mediaType}');
+        // }
       }
 
       return true;

@@ -3,30 +3,33 @@ import '../data/models/movie_detail.dart';
 import '../data/models/tv_detail.dart';
 import '../data/models/contributor_detail.dart';
 import '../data/services/tmdb_service.dart';
-import '../data/services/justwatch_service.dart';
+import '../data/services/streaming_service.dart';
 import '../data/repositories/movie_detail_repository.dart';
 import '../data/repositories/tv_detail_repository.dart';
+import '../data/repositories/contributor_repository.dart';
 
 class WorkLogic {
   final TmdbService _tmdbService;
-  final JustWatchService _justWatchService;
+  final StreamingService _streamingService;
   final MovieDetailRepository _movieDetailRepository;
   final TvDetailRepository _tvDetailRepository;
+  final ContributorRepository _contributorRepository;
 
   WorkLogic(
     this._tmdbService,
-    this._justWatchService,
+    this._streamingService,
     this._movieDetailRepository,
     this._tvDetailRepository,
+    this._contributorRepository,
   );
 
-  Future<MovieDetail?> fetchAndCacheMovieDetail(int tmdbId, {String countryCode = 'US'}) async {
+  Future<MovieDetail?> fetchAndCacheMovieDetail(int tmdbId, {String regionCode = 'US'}) async {
     try {
       // Fetch movie details, credits, and streaming options in parallel
       final results = await Future.wait([
         _tmdbService.getMovieDetails(tmdbId),
         _tmdbService.getMovieCredits(tmdbId),
-        _justWatchService.getMovieStreamingOptions(tmdbId: tmdbId, countryCode: countryCode),
+        _streamingService.getMovieStreamingOptions(tmdbId: tmdbId, regionCode: regionCode),
       ]);
 
       final movieData = results[0] as Map<String, dynamic>;
@@ -34,22 +37,32 @@ class WorkLogic {
       final streamingOptions = results[2] as List<StreamingOption>;
 
       // Parse cast
-      final cast = (creditsData['cast'] as List? ?? []).take(20).map((c) => CastMember(
-        tmdbId: c['id'],
-        name: c['name'],
-        profilePath: c['profile_path'],
-        character: c['character'] ?? '',
-        order: c['order'] ?? 0,
-      )).toList();
+      final cast = (creditsData['cast'] as List? ?? []).take(20).map((c) {
+        final tmdbId = c['id'] as int;
+        final isFollowed = _contributorRepository.isFollowed(tmdbId);
+        return CastMember(
+          tmdbId: tmdbId,
+          name: c['name'],
+          profilePath: c['profile_path'],
+          character: c['character'] ?? '',
+          order: c['order'] ?? 0,
+          isFollowed: isFollowed,
+        );
+      }).toList();
 
       // Parse crew
-      final crew = (creditsData['crew'] as List? ?? []).map((c) => CrewMember(
-        tmdbId: c['id'],
-        name: c['name'],
-        profilePath: c['profile_path'],
-        job: c['job'] ?? '',
-        department: c['department'] ?? '',
-      )).toList();
+      final crew = (creditsData['crew'] as List? ?? []).map((c) {
+        final tmdbId = c['id'] as int;
+        final isFollowed = _contributorRepository.isFollowed(tmdbId);
+        return CrewMember(
+          tmdbId: tmdbId,
+          name: c['name'],
+          profilePath: c['profile_path'],
+          job: c['job'] ?? '',
+          department: c['department'] ?? '',
+          isFollowed: isFollowed,
+        );
+      }).toList();
 
       final detail = MovieDetail(
         tmdbId: tmdbId,
@@ -78,33 +91,43 @@ class WorkLogic {
     }
   }
 
-  Future<TvShowDetail?> fetchAndCacheTvShowDetail(int tmdbId, {String countryCode = 'US'}) async {
+  Future<TvShowDetail?> fetchAndCacheTvShowDetail(int tmdbId, {String regionCode = 'US'}) async {
     try {
       final results = await Future.wait([
         _tmdbService.getTvDetails(tmdbId),
         _tmdbService.getTvCredits(tmdbId),
-        _justWatchService.getTvStreamingOptions(tmdbId: tmdbId, countryCode: countryCode),
+        _streamingService.getTvStreamingOptions(tmdbId: tmdbId, regionCode: regionCode),
       ]);
 
       final showData = results[0] as Map<String, dynamic>;
       final creditsData = results[1] as Map<String, dynamic>;
       final streamingOptions = results[2] as List<StreamingOption>;
 
-      final cast = (creditsData['cast'] as List? ?? []).take(20).map((c) => CastMember(
-        tmdbId: c['id'],
-        name: c['name'],
-        profilePath: c['profile_path'],
-        character: c['character'] ?? '',
-        order: c['order'] ?? 0,
-      )).toList();
+      final cast = (creditsData['cast'] as List? ?? []).take(20).map((c) {
+        final tmdbId = c['id'] as int;
+        final isFollowed = _contributorRepository.isFollowed(tmdbId);
+        return CastMember(
+          tmdbId: tmdbId,
+          name: c['name'],
+          profilePath: c['profile_path'],
+          character: c['character'] ?? '',
+          order: c['order'] ?? 0,
+          isFollowed: isFollowed,
+        );
+      }).toList();
 
-      final crew = (creditsData['crew'] as List? ?? []).map((c) => CrewMember(
-        tmdbId: c['id'],
-        name: c['name'],
-        profilePath: c['profile_path'],
-        job: c['job'] ?? '',
-        department: c['department'] ?? '',
-      )).toList();
+      final crew = (creditsData['crew'] as List? ?? []).map((c) {
+        final tmdbId = c['id'] as int;
+        final isFollowed = _contributorRepository.isFollowed(tmdbId);
+        return CrewMember(
+          tmdbId: tmdbId,
+          name: c['name'],
+          profilePath: c['profile_path'],
+          job: c['job'] ?? '',
+          department: c['department'] ?? '',
+          isFollowed: isFollowed,
+        );
+      }).toList();
 
       final seasons = (showData['seasons'] as List? ?? []).map((s) => TvSeason(
         tmdbId: s['id'],
@@ -152,6 +175,9 @@ class WorkLogic {
     required int episodeNumber,
   }) async {
     try {
+      debugPrint('[WorkLogic] === FETCH EPISODE DETAIL START ===');
+      debugPrint('[WorkLogic] showId=$showId, season=$seasonNumber, episode=$episodeNumber');
+      
       final results = await Future.wait([
         _tmdbService.getTvEpisodeDetails(showId, seasonNumber, episodeNumber),
         _tmdbService.getTvEpisodeCredits(showId, seasonNumber, episodeNumber),
@@ -161,6 +187,10 @@ class WorkLogic {
       final epData = results[0] as Map<String, dynamic>;
       final creditsData = results[1] as Map<String, dynamic>;
       final showData = results[2] as Map<String, dynamic>;
+
+      debugPrint('[WorkLogic] Episode data received: name="${epData['name']}", id=${epData['id']}');
+      debugPrint('[WorkLogic] Show data received: name="${showData['name']}", id=${showData['id']}');
+      debugPrint('[WorkLogic] Episode fetch successful');
 
       final guestStars = (creditsData['guest_stars'] as List? ?? []).map((c) => CastMember(
         tmdbId: c['id'],
@@ -178,13 +208,18 @@ class WorkLogic {
         order: c['order'] ?? 0,
       )).toList();
 
-      final crew = (creditsData['crew'] as List? ?? []).map((c) => CrewMember(
-        tmdbId: c['id'],
-        name: c['name'],
-        profilePath: c['profile_path'],
-        job: c['job'] ?? '',
-        department: c['department'] ?? '',
-      )).toList();
+      final crew = (creditsData['crew'] as List? ?? []).map((c) {
+        final tmdbId = c['id'] as int;
+        final isFollowed = _contributorRepository.isFollowed(tmdbId);
+        return CrewMember(
+          tmdbId: tmdbId,
+          name: c['name'] ?? '',
+          profilePath: c['profile_path'],
+          job: c['job'] ?? '',
+          department: c['department'] ?? '',
+          isFollowed: isFollowed,
+        );
+      }).toList();
 
       final detail = TvEpisodeDetail(
         tmdbId: epData['id'],
@@ -206,9 +241,10 @@ class WorkLogic {
       );
 
       await _tvDetailRepository.cacheTvEpisodeDetail(detail);
+      debugPrint('[WorkLogic] Episode detail cached successfully');
       return detail;
     } catch (e) {
-      debugPrint('[WorkLogic] Error fetching TV episode details: $e');
+      debugPrint('[WorkLogic] Error fetching TV episode details for showId=$showId, season=$seasonNumber, episode=$episodeNumber: $e');
       return null;
     }
   }
@@ -221,13 +257,18 @@ class WorkLogic {
       final seasonData = await _tmdbService.getTvSeasonDetails(showId, seasonNumber);
 
       final episodes = (seasonData['episodes'] as List? ?? []).map((e) {
-        final epCrew = (e['crew'] as List? ?? []).map((c) => CrewMember(
-          tmdbId: c['id'],
-          name: c['name'],
-          profilePath: c['profile_path'],
-          job: c['job'] ?? '',
-          department: c['department'] ?? '',
-        )).toList();
+        final epCrew = (e['crew'] as List? ?? []).map((c) {
+          final tmdbId = c['id'] as int;
+          final isFollowed = _contributorRepository.isFollowed(tmdbId);
+          return CrewMember(
+            tmdbId: tmdbId,
+            name: c['name'],
+            profilePath: c['profile_path'],
+            job: c['job'] ?? '',
+            department: c['department'] ?? '',
+            isFollowed: isFollowed,
+          );
+        }).toList();
 
         return SeasonEpisode(
           tmdbId: e['id'],

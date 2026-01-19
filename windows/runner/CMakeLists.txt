@@ -1,6 +1,13 @@
 cmake_minimum_required(VERSION 3.14)
 project(runner LANGUAGES CXX)
 
+# Pre-build step: Kill any running instances to prevent linker lock conflicts
+# This ensures the executable isn't locked when we try to link
+add_custom_target(kill_running_instances ALL
+  COMMAND taskkill /IM ${BINARY_NAME}.exe /F 2>nul || true
+  COMMENT "Killing any running instances of ${BINARY_NAME}.exe to prevent linker conflicts"
+)
+
 # Define the application target. To change its name, change BINARY_NAME in the
 # top-level CMakeLists.txt, not the value here, or `flutter run` will no longer
 # work.
@@ -37,4 +44,4 @@ target_link_libraries(${BINARY_NAME} PRIVATE "dwmapi.lib")
 target_include_directories(${BINARY_NAME} PRIVATE "${CMAKE_SOURCE_DIR}")
 
 # Run the Flutter tool portions of the build. This must not be removed.
-add_dependencies(${BINARY_NAME} flutter_assemble)
+add_dependencies(${BINARY_NAME} flutter_assemble kill_running_instances)

@@ -79,7 +79,13 @@ class ContributorLogic {
       credits = [...(data['cast'] ?? []), ...(data['crew'] ?? [])];
     } else if (contributor.type == ContributorType.company) {
       final data = await _tmdbService.getCompanyTopWorks(contributor.tmdbId);
-      credits = data['results'] ?? [];
+      final topWorks = data['results'] as List? ?? [];
+      
+      // Also fetch upcoming works
+      final upcomingData = await _tmdbService.getCompanyUpcomingWorks(contributor.tmdbId);
+      final upcomingWorks = upcomingData['results'] as List? ?? [];
+      
+      credits = [...upcomingWorks, ...topWorks];
     } else if (contributor.type == ContributorType.movie) {
       credits = [await _tmdbService.getMovieDetails(contributor.tmdbId)];
     } else if (contributor.type == ContributorType.tvShow) {
@@ -333,9 +339,16 @@ class ContributorLogic {
           await _contributorRepository.updateContributor(updated);
           
           try {
+            // Fetch both top works and upcoming works for companies
             final topWorksResponse = await _tmdbService.getCompanyTopWorks(contributor.tmdbId);
             final topWorks = topWorksResponse['results'] as List? ?? [];
-            await updateContributorDetail(updated, topWorks);
+            
+            final upcomingResponse = await _tmdbService.getCompanyUpcomingWorks(contributor.tmdbId);
+            final upcomingWorks = upcomingResponse['results'] as List? ?? [];
+            
+            // Combine both lists for processing
+            final allWorks = [...upcomingWorks, ...topWorks];
+            await updateContributorDetail(updated, allWorks);
           } catch (e) {
             debugPrint('[ContributorLogic] Error refreshing company detail: $e');
           }
@@ -482,6 +495,7 @@ class ContributorLogic {
                   seasonNumber: seasonNum,
                   episodeNumber: episodeNum,
                   status: credit['status'] as String?,
+                  showName: (first['name'] ?? first['title'] ?? 'Unknown') as String,
                 ));
             }
           }
@@ -722,6 +736,7 @@ class ContributorLogic {
                 imdbId: show.imdbId,
                 seasonNumber: ep['season_number'],
                 episodeNumber: ep['episode_number'],
+                showName: show.title,
               ));
             }
           } catch (e) {

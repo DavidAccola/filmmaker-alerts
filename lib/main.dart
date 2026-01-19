@@ -18,17 +18,28 @@ import 'data/models/tv_detail.dart';
 import 'ui/screens/main_screen.dart';
 import 'ui/common/rate_limit_listener.dart';
 import 'logic/background_service.dart';
-import 'package:flutter_phoenix/flutter_phoenix.dart';
+import 'logic/single_instance_manager.dart';
 import 'providers/providers.dart';
-
 import 'package:path_provider/path_provider.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
+  // Check for single instance lock
+  final canRun = await SingleInstanceManager.acquireLock();
+  if (!canRun) {
+    debugPrint('[Main] Another instance is already running. Exiting.');
+    exit(1);
+  }
+
   // Configure image cache to prevent unbounded memory growth
   imageCache.maximumSize = 100; // Maximum number of images to cache
   imageCache.maximumSizeBytes = 50 * 1024 * 1024; // 50MB maximum cache size
+
+  // Reduce GC pressure by being more aggressive with memory cleanup
+  // This helps prevent the 4-second freeze after idle
+  imageCache.clear();
+  imageCache.clearLiveImages();
 
   // 0. Initialize window manager (Windows only)
   if (Platform.isWindows) {
@@ -100,18 +111,14 @@ void main() async {
   Hive.registerAdapter(TvSeasonDetailAdapter());
   Hive.registerAdapter(SeasonEpisodeAdapter());
 
-  // 4. Open Boxes
-  await Hive.openBox<Contributor>(AppConstants.contributorsBox);
-  await Hive.openBox<Preferences>(AppConstants.preferencesBox);
-  await Hive.openBox<NotificationHistoryEntry>(AppConstants.historyBox);
-  await Hive.openBox<MovieCacheEntry>(AppConstants.movieCacheBox);
-  
-  // Open new boxes for contributor details
-  await Hive.openBox<ContributorDetail>(AppConstants.contributorDetailsBox);
-  await Hive.openBox<MovieDetail>(AppConstants.movieDetailsBox);
-  await Hive.openBox<TvShowDetail>(AppConstants.tvDetailsBox);
-  await Hive.openBox<TvEpisodeDetail>(AppConstants.tvEpisodeDetailsBox);
-  await Hive.openBox<TvSeasonDetail>(AppConstants.tvSeasonDetailsBox);
+  // 4. Open Boxes with error handling for lock conflicts
+  try {
+    await _openHiveBoxes();
+  } catch (e) {
+    debugPrint('[Main] ERROR: Failed to open Hive boxes: $e');
+    // Continue anyway - the app will show an error dialog when it tries to access data
+    // This allows the UI to load and display a helpful error message
+  }
 
   // 5. Initialize Riverpod Container
   final container = ProviderContainer();
@@ -142,7 +149,6 @@ void main() async {
     debugPrint('[Main] Skipping system tray - not Windows platform');
   }
 
-  // 9. Initialize Workmanager (Mobile only)
   if (!kIsWeb && (Platform.isAndroid || Platform.isIOS)) {
     await Workmanager().initialize(
       callbackDispatcher,
@@ -173,11 +179,68 @@ void main() async {
   runApp(
     UncontrolledProviderScope(
       container: container,
-      child: Phoenix(
-        child: const MyApp(),
-      ),
+      child: const MyApp(),
     ),
   );
+}
+
+/// Opens all Hive boxes with retry logic for lock conflicts
+Future<void> _openHiveBoxes() async {
+  const maxRetries = 3;
+  const retryDelay = Duration(milliseconds: 500);
+  
+  final boxes = [
+    (AppConstants.contributorsBox, Contributor),
+    (AppConstants.preferencesBox, Preferences),
+    (AppConstants.historyBox, NotificationHistoryEntry),
+    (AppConstants.movieCacheBox, MovieCacheEntry),
+    (AppConstants.contributorDetailsBox, ContributorDetail),
+    (AppConstants.movieDetailsBox, MovieDetail),
+    (AppConstants.tvDetailsBox, TvShowDetail),
+    (AppConstants.tvEpisodeDetailsBox, TvEpisodeDetail),
+    (AppConstants.tvSeasonDetailsBox, TvSeasonDetail),
+  ];
+
+  for (final (boxName, _) in boxes) {
+    int retryCount = 0;
+    while (retryCount < maxRetries) {
+      try {
+        debugPrint('[Main] Opening Hive box: $boxName (attempt ${retryCount + 1}/$maxRetries)');
+        
+        // Use dynamic typing to open boxes without needing specific type info
+        if (boxName == AppConstants.contributorsBox) {
+          await Hive.openBox<Contributor>(boxName);
+        } else if (boxName == AppConstants.preferencesBox) {
+          await Hive.openBox<Preferences>(boxName);
+        } else if (boxName == AppConstants.historyBox) {
+          await Hive.openBox<NotificationHistoryEntry>(boxName);
+        } else if (boxName == AppConstants.movieCacheBox) {
+          await Hive.openBox<MovieCacheEntry>(boxName);
+        } else if (boxName == AppConstants.contributorDetailsBox) {
+          await Hive.openBox<ContributorDetail>(boxName);
+        } else if (boxName == AppConstants.movieDetailsBox) {
+          await Hive.openBox<MovieDetail>(boxName);
+        } else if (boxName == AppConstants.tvDetailsBox) {
+          await Hive.openBox<TvShowDetail>(boxName);
+        } else if (boxName == AppConstants.tvEpisodeDetailsBox) {
+          await Hive.openBox<TvEpisodeDetail>(boxName);
+        } else if (boxName == AppConstants.tvSeasonDetailsBox) {
+          await Hive.openBox<TvSeasonDetail>(boxName);
+        }
+        
+        debugPrint('[Main] Successfully opened Hive box: $boxName');
+        break; // Success, move to next box
+      } catch (e) {
+        retryCount++;
+        if (retryCount >= maxRetries) {
+          debugPrint('[Main] FAILED to open Hive box after $maxRetries attempts: $boxName - $e');
+          rethrow; // Give up after max retries
+        }
+        debugPrint('[Main] Retry $retryCount/$maxRetries for box $boxName after delay...');
+        await Future.delayed(retryDelay);
+      }
+    }
+  }
 }
 
 class MyApp extends ConsumerWidget {
@@ -187,53 +250,154 @@ class MyApp extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final prefsAsync = ref.watch(preferencesProvider);
     
-    return prefsAsync.when(
-      data: (prefs) {
-        final useDarkMode = prefs.useDarkMode ?? false;
-        
-        return MaterialApp(
-          title: 'Filmmaker Alerts',
-          theme: ThemeData(
-            colorScheme: ColorScheme.fromSeed(seedColor: Colors.deepPurple),
-            useMaterial3: true,
-            snackBarTheme: const SnackBarThemeData(
-              behavior: SnackBarBehavior.floating,
-            ),
-          ),
-          darkTheme: ThemeData(
-            colorScheme: ColorScheme.fromSeed(
-              seedColor: Colors.deepPurple,
-              brightness: Brightness.dark,
-            ),
-            useMaterial3: true,
-            snackBarTheme: const SnackBarThemeData(
-              behavior: SnackBarBehavior.floating,
-            ),
-          ),
-          themeMode: useDarkMode ? ThemeMode.dark : ThemeMode.light,
-          home: const RateLimitListener(child: MainScreen()),
-        );
-      },
-      loading: () => MaterialApp(
-        title: 'Filmmaker Alerts',
-        theme: ThemeData(
-          colorScheme: ColorScheme.fromSeed(seedColor: Colors.deepPurple),
-          useMaterial3: true,
-        ),
-        home: const Scaffold(
-          body: Center(child: CircularProgressIndicator()),
+    return MaterialApp(
+      title: 'Filmmaker Alerts',
+      theme: ThemeData(
+        colorScheme: ColorScheme.fromSeed(seedColor: Colors.deepPurple),
+        useMaterial3: true,
+        snackBarTheme: const SnackBarThemeData(
+          behavior: SnackBarBehavior.floating,
         ),
       ),
-      error: (err, stack) => MaterialApp(
-        title: 'Filmmaker Alerts',
-        theme: ThemeData(
-          colorScheme: ColorScheme.fromSeed(seedColor: Colors.deepPurple),
-          useMaterial3: true,
+      darkTheme: ThemeData(
+        colorScheme: ColorScheme.fromSeed(
+          seedColor: Colors.deepPurple,
+          brightness: Brightness.dark,
         ),
-        home: Scaffold(
-          body: Center(child: Text('Error: $err')),
+        useMaterial3: true,
+        snackBarTheme: const SnackBarThemeData(
+          behavior: SnackBarBehavior.floating,
         ),
+      ),
+      themeMode: prefsAsync.maybeWhen(
+        data: (prefs) => prefs.useDarkMode ?? false ? ThemeMode.dark : ThemeMode.light,
+        orElse: () => ThemeMode.light,
+      ),
+      home: prefsAsync.when(
+        data: (prefs) {
+          return _AppLifecycleWrapper(
+            child: RateLimitListener(child: MainScreen()),
+          );
+        },
+        loading: () => const Scaffold(
+          body: Center(child: CircularProgressIndicator()),
+        ),
+        error: (err, stack) {
+          // Check if it's a Hive lock error
+          final isLockError = err.toString().contains('lock failed') || 
+                              err.toString().contains('PathAccessException');
+          
+          return Scaffold(
+            body: Center(
+              child: Padding(
+                padding: const EdgeInsets.all(24.0),
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    const Icon(Icons.error_outline, size: 64, color: Colors.red),
+                    const SizedBox(height: 24),
+                    const Text(
+                      'Database Error',
+                      style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
+                    ),
+                    const SizedBox(height: 16),
+                    if (isLockError) ...[
+                      const Text(
+                        'The app database is locked. This usually happens when multiple instances of the app are running.',
+                        textAlign: TextAlign.center,
+                        style: TextStyle(fontSize: 16),
+                      ),
+                      const SizedBox(height: 16),
+                      const Text(
+                        'Please close all other instances of Filmmaker Alerts and restart the app.',
+                        textAlign: TextAlign.center,
+                        style: TextStyle(fontSize: 14, color: Colors.grey),
+                      ),
+                    ] else ...[
+                      Text(
+                        'An error occurred while loading the app: $err',
+                        textAlign: TextAlign.center,
+                        style: const TextStyle(fontSize: 14),
+                      ),
+                    ],
+                    const SizedBox(height: 24),
+                    ElevatedButton(
+                      onPressed: () {
+                        // Restart the app by exiting
+                        exit(0);
+                      },
+                      child: const Text('Exit App'),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          );
+        },
       ),
     );
   }
+}
+
+/// Wrapper to handle app lifecycle and clear caches on resume
+class _AppLifecycleWrapper extends StatefulWidget {
+  final Widget child;
+
+  const _AppLifecycleWrapper({required this.child});
+
+  @override
+  State<_AppLifecycleWrapper> createState() => _AppLifecycleWrapperState();
+}
+
+class _AppLifecycleWrapperState extends State<_AppLifecycleWrapper>
+    with WidgetsBindingObserver {
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addObserver(this);
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    _closeHiveBoxes();
+    _releaseSingleInstanceLock();
+    super.dispose();
+  }
+
+  /// Releases the single-instance lock
+  Future<void> _releaseSingleInstanceLock() async {
+    await SingleInstanceManager.releaseLock();
+  }
+
+  /// Properly close all Hive boxes to release locks
+  Future<void> _closeHiveBoxes() async {
+    try {
+      debugPrint('[Main] Closing Hive boxes on app exit...');
+      await Hive.close();
+      debugPrint('[Main] Hive boxes closed successfully');
+    } catch (e) {
+      debugPrint('[Main] Error closing Hive boxes: $e');
+    }
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) {
+      // Clear image cache when app resumes to prevent GC pause
+      debugPrint('[Main] App resumed - clearing image cache to prevent GC pause');
+      imageCache.clear();
+      imageCache.clearLiveImages();
+    } else if (state == AppLifecycleState.paused) {
+      // Optionally clear on pause too
+      debugPrint('[Main] App paused');
+    } else if (state == AppLifecycleState.detached) {
+      debugPrint('[Main] App detached - closing Hive boxes and releasing lock');
+      _closeHiveBoxes();
+      _releaseSingleInstanceLock();
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) => widget.child;
 }

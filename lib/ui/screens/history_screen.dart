@@ -197,9 +197,13 @@ class HistoryScreen extends ConsumerWidget {
                 color: !isRecentBatch 
                     ? Theme.of(context).colorScheme.surface.withOpacity(0.6) // De-emphasized older items
                     : null, // New items look normal
-                child: Padding(
-                  padding: const EdgeInsets.all(12.0),
-                  child: Row(
+                child: Material(
+                  color: Colors.transparent,
+                  child: InkWell(
+                    onTap: () => _navigateToInternalDetail(context, entry, item.title),
+                    child: Padding(
+                      padding: const EdgeInsets.all(12.0),
+                      child: Row(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       // Poster
@@ -324,34 +328,10 @@ class HistoryScreen extends ConsumerWidget {
                                             hasImdbId = imdbId != null && imdbId.isNotEmpty;
                                           }
                                           
-                                          // Determine primary provider (poster/title click)
-                                          String primaryTooltip;
-                                          VoidCallback primaryAction;
-                                          
-                                          if (movieDetailsPreference == 'imdb' && hasImdbId) {
-                                            primaryTooltip = 'View on IMDb';
-                                            primaryAction = () => _launchImdbUrl(context, imdbId!);
-                                          } else {
-                                            // Title link also goes to internal detail
-                                            primaryTooltip = 'View Details';
-                                            primaryAction = () => _navigateToInternalDetail(context, entry, item.title);
-                                          }
-                                          
-                                          return Tooltip(
-                                            message: primaryTooltip,
-                                            waitDuration: const Duration(milliseconds: 800),
-                                            child: Material(
-                                              color: Colors.transparent,
-                                              child: InkWell(
-                                                onTap: primaryAction,
-                                                child: Text(
-                                                  item.title, 
-                                                  style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                                                    fontWeight: FontWeight.bold,
-                                                    color: Theme.of(context).colorScheme.primary,
-                                                  ),
-                                                ),
-                                              ),
+                                          return Text(
+                                            item.title, 
+                                            style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                                              fontWeight: FontWeight.bold,
                                             ),
                                           );
                                         },
@@ -392,123 +372,37 @@ class HistoryScreen extends ConsumerWidget {
                       Column(
                         mainAxisAlignment: MainAxisAlignment.center,
                         children: [
-                          // Get preferences to determine which buttons to show
-                          Consumer(
-                            builder: (context, ref, child) {
-                              final prefsAsync = ref.watch(preferencesProvider);
-                              return prefsAsync.when(
-                                data: (prefs) {
-                                  final movieDetailsPreference = prefs.movieDetailsPreference ?? 'both';
-                                  
-                                  // Get IMDb ID based on media type
-                                  String? imdbId;
-                                  bool hasImdbId = false;
-                                  
-                                  if (entry.mediaType == 'tv') {
-                                    // TV show - get from TV cache
-                                    final tvCacheRepo = ref.read(tvCacheRepositoryProvider);
-                                    final tvShow = tvCacheRepo.getShow(entry.tmdbId);
-                                    imdbId = tvShow?.imdbId;
-                                    hasImdbId = imdbId != null && imdbId.isNotEmpty;
-                                  } else {
-                                    // Movie - get from movie cache
-                                    final movieCacheRepo = ref.read(movieCacheRepositoryProvider);
-                                    final movie = movieCacheRepo.getMovie(entry.tmdbId);
-                                    imdbId = movie?.imdbId;
-                                    hasImdbId = imdbId != null && imdbId.isNotEmpty;
+                          // Delete button (debug mode only)
+                          if (kDebugMode)
+                            IconButton(
+                              icon: const Icon(Icons.delete, color: Colors.red),
+                              tooltip: 'Remove (Debug)',
+                              onPressed: () async {
+                                final historyRepo = ref.read(historyRepositoryProvider);
+                                final success = await historyRepo.removeNotificationFromHistory(entry.tmdbId);
+                                if (success) {
+                                  ref.invalidate(historyProvider);
+                                  if (context.mounted) {
+                                    showRemovalSnackBar(
+                                      context,
+                                      message: 'Removed "${item.title}" from history',
+                                      onUndo: () {
+                                        // Re-add the entry
+                                        historyRepo.addNotificationToHistory(entry);
+                                        ref.invalidate(historyProvider);
+                                      },
+                                    );
                                   }
-                                  
-                                  // Only show button in "both" mode for Provider B (IMDb)
-                                  final showImdbButton = movieDetailsPreference == 'both' && hasImdbId;
-                                  
-                                  return Column(
-                                    children: [
-                                      // View on IMDb button (Provider B in "both" mode)
-                                      if (showImdbButton)
-                                        Container(
-                                          margin: const EdgeInsets.only(bottom: 4),
-                                          child: Tooltip(
-                                            message: 'View on IMDb',
-                                            waitDuration: const Duration(milliseconds: 800),
-                                            child: Material(
-                                              color: Colors.transparent,
-                                              borderRadius: BorderRadius.circular(4),
-                                              child: InkWell(
-                                                borderRadius: BorderRadius.circular(4),
-                                                onTap: () => _launchImdbUrl(context, imdbId!),
-                                                child: Container(
-                                                  width: 36,
-                                                  height: 36,
-                                                  decoration: BoxDecoration(
-                                                    border: Border.all(color: Colors.white, width: 1),
-                                                    borderRadius: BorderRadius.circular(4),
-                                                  ),
-                                                  child: ClipRRect(
-                                                    borderRadius: BorderRadius.circular(3),
-                                                    child: Image.asset(
-                                                      'assets/images/imdb_square_gold.png',
-                                                      width: 36,
-                                                      height: 36,
-                                                      fit: BoxFit.cover,
-                                                      errorBuilder: (context, error, stackTrace) => Container(
-                                                        width: 36,
-                                                        height: 36,
-                                                        color: const Color(0xFFF5C518),
-                                                        child: const Center(
-                                                          child: Text(
-                                                            'I',
-                                                            style: TextStyle(
-                                                              color: Colors.black,
-                                                              fontSize: 16,
-                                                              fontWeight: FontWeight.bold,
-                                                            ),
-                                                          ),
-                                                        ),
-                                                      ),
-                                                    ),
-                                                  ),
-                                                ),
-                                              ),
-                                            ),
-                                          ),
-                                        ),
-                                      // Delete button (debug mode only)
-                                      if (kDebugMode)
-                                        IconButton(
-                                          icon: const Icon(Icons.delete, color: Colors.red),
-                                          tooltip: 'Remove (Debug)',
-                                          onPressed: () async {
-                                            final historyRepo = ref.read(historyRepositoryProvider);
-                                            final success = await historyRepo.removeNotificationFromHistory(entry.tmdbId);
-                                            if (success) {
-                                              ref.invalidate(historyProvider);
-                                              if (context.mounted) {
-                                                showRemovalSnackBar(
-                                                  context,
-                                                  message: 'Removed "${item.title}" from history',
-                                                  onUndo: () {
-                                                    // Re-add the entry
-                                                    historyRepo.addNotificationToHistory(entry);
-                                                    ref.invalidate(historyProvider);
-                                                  },
-                                                );
-                                              }
-                                            }
-                                          },
-                                        ),
-                                    ],
-                                  );
-                                },
-                                loading: () => const SizedBox.shrink(),
-                                error: (_, __) => const SizedBox.shrink(),
-                              );
-                            },
-                          ),
+                                }
+                              },
+                            ),
                         ],
                       ),
                     ],
                   ),
                 ),
+                    ),
+                  ),
               );
             },
             childCount: history.length,
@@ -570,19 +464,19 @@ class HistoryScreen extends ConsumerWidget {
     if (entry.mediaType != 'tv') return [];
     
     // Initialize logger and log entry details
-    DebugLogger.instance.init();
-    DebugLogger.instance.logHistory('=== TV Episode Debug ===');
-    DebugLogger.instance.logHistory('tmdbId: ${entry.tmdbId}');
-    DebugLogger.instance.logHistory('mediaType: ${entry.mediaType}');
-    DebugLogger.instance.logHistory('tvNotificationType: ${entry.tvNotificationType}');
-    DebugLogger.instance.logHistory('seasonNumber: ${entry.seasonNumber}');
-    DebugLogger.instance.logHistory('episodeNumber: ${entry.episodeNumber}');
-    DebugLogger.instance.logHistory('episodeTitle: "${entry.episodeTitle}"');
-    DebugLogger.instance.logHistory('notificationEvents.length: ${entry.notificationEvents.length}');
-    for (int i = 0; i < entry.notificationEvents.length; i++) {
-      final event = entry.notificationEvents[i];
-      DebugLogger.instance.logHistory('event[$i]: releaseType="${event.releaseType}", releaseDate="${event.releaseDate}"');
-    }
+    // DebugLogger.instance.init();
+    // DebugLogger.instance.logHistory('=== TV Episode Debug ===');
+    // DebugLogger.instance.logHistory('tmdbId: ${entry.tmdbId}');
+    // DebugLogger.instance.logHistory('mediaType: ${entry.mediaType}');
+    // DebugLogger.instance.logHistory('tvNotificationType: ${entry.tvNotificationType}');
+    // DebugLogger.instance.logHistory('seasonNumber: ${entry.seasonNumber}');
+    // DebugLogger.instance.logHistory('episodeNumber: ${entry.episodeNumber}');
+    // DebugLogger.instance.logHistory('episodeTitle: "${entry.episodeTitle}"');
+    // DebugLogger.instance.logHistory('notificationEvents.length: ${entry.notificationEvents.length}');
+    // for (int i = 0; i < entry.notificationEvents.length; i++) {
+    //   final event = entry.notificationEvents[i];
+    //   DebugLogger.instance.logHistory('event[$i]: releaseType="${event.releaseType}", releaseDate="${event.releaseDate}"');
+    // }
     
     final List<Widget> episodeWidgets = [];
     
@@ -591,31 +485,31 @@ class HistoryScreen extends ConsumerWidget {
     final isGroupedByCount = entry.notificationEvents.length > 1;
     final isGroupedByTitle = entry.episodeTitle != null && entry.episodeTitle!.contains('episodes');
     
-    DebugLogger.instance.logHistory('isGroupedByType: $isGroupedByType');
-    DebugLogger.instance.logHistory('isGroupedByCount: $isGroupedByCount');
-    DebugLogger.instance.logHistory('isGroupedByTitle: $isGroupedByTitle');
+    // DebugLogger.instance.logHistory('isGroupedByType: $isGroupedByType');
+    // DebugLogger.instance.logHistory('isGroupedByCount: $isGroupedByCount');
+    // DebugLogger.instance.logHistory('isGroupedByTitle: $isGroupedByTitle');
     
     if ((isGroupedByType || isGroupedByCount || isGroupedByTitle) && 
         entry.notificationEvents.isNotEmpty) {
-      DebugLogger.instance.logHistory('Using GROUPED episode logic');
+      // DebugLogger.instance.logHistory('Using GROUPED episode logic');
       
       // For grouped episodes, create one widget per episode
       if (entry.notificationEvents.length > 1) {
-        DebugLogger.instance.logHistory('Multiple events format (${entry.notificationEvents.length} events)');
+        // DebugLogger.instance.logHistory('Multiple events format (${entry.notificationEvents.length} events)');
         // New format: multiple notification events with individual episode data
         for (int i = 0; i < entry.notificationEvents.length; i++) {
           final event = entry.notificationEvents[i];
-          DebugLogger.instance.logHistory('Processing event $i: ${event.releaseType}');
+          // DebugLogger.instance.logHistory('Processing event $i: ${event.releaseType}');
           
           // Parse episode info from releaseType: "episode_type|season|episode|title"
           final releaseTypeParts = event.releaseType.split('|');
           if (releaseTypeParts.length >= 4) {
-            DebugLogger.instance.logHistory('Using pipe format parsing');
+            // DebugLogger.instance.logHistory('Using pipe format parsing');
             final seasonNum = int.tryParse(releaseTypeParts[1]) ?? 1;
             final episodeNum = int.tryParse(releaseTypeParts[2]) ?? 1;
             final episodeTitle = releaseTypeParts[3];
             
-            DebugLogger.instance.logHistory('Parsed: S${seasonNum}E${episodeNum} - "$episodeTitle"');
+            // DebugLogger.instance.logHistory('Parsed: S${seasonNum}E${episodeNum} - "$episodeTitle"');
             
             // Format the air date
             final formattedDate = _formatDateForHistory(event.releaseDate);
@@ -631,11 +525,11 @@ class HistoryScreen extends ConsumerWidget {
               ),
             );
           } else {
-            DebugLogger.instance.logHistory('Using underscore format parsing');
+            // DebugLogger.instance.logHistory('Using underscore format parsing');
             // Fallback for old format or unparseable data
             final underscoreParts = event.releaseType.split('_');
             if (underscoreParts.length >= 4) {
-              DebugLogger.instance.logHistory('Underscore parts: $underscoreParts');
+              // DebugLogger.instance.logHistory('Underscore parts: $underscoreParts');
               
               // Handle different old formats:
               // Format 1: episode_37_14_Title
@@ -649,16 +543,16 @@ class HistoryScreen extends ConsumerWidget {
                 seasonNum = int.tryParse(underscoreParts[1]) ?? 1;
                 episodeNum = int.tryParse(underscoreParts[2]) ?? 1;
                 titleStartIndex = 3;
-                DebugLogger.instance.logHistory('Format 1: episode_season_episode_title');
+                // DebugLogger.instance.logHistory('Format 1: episode_season_episode_title');
               } else if (underscoreParts.length >= 5 && 
                          (underscoreParts[0] == 'season' || underscoreParts[0] == 'series')) {
                 // Format: season_finale_37_15_Title or series_premiere_1_1_Title
                 seasonNum = int.tryParse(underscoreParts[2]) ?? 1;
                 episodeNum = int.tryParse(underscoreParts[3]) ?? 1;
                 titleStartIndex = 4;
-                DebugLogger.instance.logHistory('Format 2: season_type_season_episode_title');
+                // DebugLogger.instance.logHistory('Format 2: season_type_season_episode_title');
               } else {
-                DebugLogger.instance.logHistory('Format 3: fallback numeric search');
+                // DebugLogger.instance.logHistory('Format 3: fallback numeric search');
                 // Fallback: assume last two numeric parts are season/episode
                 for (int j = 1; j < underscoreParts.length - 1; j++) {
                   final num1 = int.tryParse(underscoreParts[j]);
@@ -667,7 +561,7 @@ class HistoryScreen extends ConsumerWidget {
                     seasonNum = num1;
                     episodeNum = num2;
                     titleStartIndex = j + 2;
-                    DebugLogger.instance.logHistory('Found numbers at positions $j,${j+1}: $seasonNum,$episodeNum');
+                    // DebugLogger.instance.logHistory('Found numbers at positions $j,${j+1}: $seasonNum,$episodeNum');
                     break;
                   }
                 }
@@ -679,7 +573,7 @@ class HistoryScreen extends ConsumerWidget {
                 episodeTitle = underscoreParts.sublist(titleStartIndex).join(' ');
               }
               
-              DebugLogger.instance.logHistory('Final parsed: S${seasonNum}E${episodeNum} - "$episodeTitle"');
+              // DebugLogger.instance.logHistory('Final parsed: S${seasonNum}E${episodeNum} - "$episodeTitle"');
               
               // Format the air date
               final formattedDate = _formatDateForHistory(event.releaseDate);
@@ -695,12 +589,12 @@ class HistoryScreen extends ConsumerWidget {
                 ),
               );
             } else {
-              DebugLogger.instance.logHistory('Could not parse event: ${event.releaseType}');
+              // DebugLogger.instance.logHistory('Could not parse event: ${event.releaseType}');
             }
           }
         }
       } else {
-        DebugLogger.instance.logHistory('Single event format, generating from episode count');
+        // DebugLogger.instance.logHistory('Single event format, generating from episode count');
         // Old format: single notification event but multiple episodes
         // Generate episode widgets based on episode count
         final episodeCount = entry.episodeNumber ?? 1;
@@ -709,7 +603,7 @@ class HistoryScreen extends ConsumerWidget {
         final airDate = entry.notificationEvents.first.releaseDate;
         final formattedDate = _formatDateForHistory(airDate);
         
-        DebugLogger.instance.logHistory('Generating $episodeCount episodes starting from S${seasonNum}E${baseEpisodeNum}');
+        // DebugLogger.instance.logHistory('Generating $episodeCount episodes starting from S${seasonNum}E${baseEpisodeNum}');
         
         for (int i = 0; i < episodeCount; i++) {
           final episodeNum = baseEpisodeNum + i;
@@ -736,10 +630,10 @@ class HistoryScreen extends ConsumerWidget {
         }
       }
       
-      DebugLogger.instance.logHistory('Created ${spacedWidgets.length} widgets (${episodeWidgets.length} episodes + spacing)');
+      // DebugLogger.instance.logHistory('Created ${spacedWidgets.length} widgets (${episodeWidgets.length} episodes + spacing)');
       return spacedWidgets;
     } else {
-      DebugLogger.instance.logHistory('Using SINGLE episode logic');
+      // DebugLogger.instance.logHistory('Using SINGLE episode logic');
       // Single episode - create one widget
       final List<String> parts = [];
       
@@ -747,26 +641,26 @@ class HistoryScreen extends ConsumerWidget {
           entry.episodeTitle!.isNotEmpty && 
           !entry.episodeTitle!.contains('episodes')) {
         parts.add('"${entry.episodeTitle}"');
-        DebugLogger.instance.logHistory('Added episode title: "${entry.episodeTitle}"');
+        // DebugLogger.instance.logHistory('Added episode title: "${entry.episodeTitle}"');
       } else {
-        DebugLogger.instance.logHistory('No episode title (empty or contains "episodes")');
+        // DebugLogger.instance.logHistory('No episode title (empty or contains "episodes")');
       }
       
       // Add episode format (S#E#)
       if (entry.seasonNumber != null && entry.episodeNumber != null) {
         parts.add('S${entry.seasonNumber}E${entry.episodeNumber.toString().padLeft(2, '0')}');
-        DebugLogger.instance.logHistory('Added S#E#: S${entry.seasonNumber}E${entry.episodeNumber}');
+        // DebugLogger.instance.logHistory('Added S#E#: S${entry.seasonNumber}E${entry.episodeNumber}');
       }
       
       // Add the air date
       if (entry.notificationEvents.isNotEmpty) {
         final formattedDate = _formatDateForHistory(entry.notificationEvents.first.releaseDate);
         parts.add(formattedDate);
-        DebugLogger.instance.logHistory('Added date: $formattedDate');
+        // DebugLogger.instance.logHistory('Added date: $formattedDate');
       }
       
       final finalText = parts.join(' - ');
-      DebugLogger.instance.logHistory('Final single episode text: "$finalText"');
+      // DebugLogger.instance.logHistory('Final single episode text: "$finalText"');
       
       if (parts.isNotEmpty) {
         return [
@@ -781,7 +675,7 @@ class HistoryScreen extends ConsumerWidget {
       }
     }
     
-    DebugLogger.instance.logHistory('Returning empty widget list');
+    // DebugLogger.instance.logHistory('Returning empty widget list');
     return [];
   }
 

@@ -90,15 +90,6 @@ class _TvShowDetailScreenState extends ConsumerState<TvShowDetailScreen> {
           const SizedBox(height: 24),
           _buildSynopsisSection(showDetail),
           const SizedBox(height: 24),
-          if (showDetail.streamingOptions.isNotEmpty)
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 16.0),
-              child: StreamingOptionsWidget(
-                streamingOptions: showDetail.streamingOptions,
-              ),
-            ),
-          if (showDetail.streamingOptions.isNotEmpty)
-            const SizedBox(height: 24),
           
           if (showDetail.seasons.isNotEmpty)
             _buildSeasonsSection(showDetail),
@@ -136,123 +127,211 @@ class _TvShowDetailScreenState extends ConsumerState<TvShowDetailScreen> {
           ),
         ),
       ),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          // Poster
-          Container(
-            width: 100,
-            height: 150,
-            decoration: BoxDecoration(
-              color: Theme.of(context).colorScheme.surfaceContainerHighest,
-              borderRadius: BorderRadius.circular(8),
-            ),
-            child: ClipRRect(
-              borderRadius: BorderRadius.circular(8),
-              child: showDetail.posterPath != null
-                  ? CachedNetworkImage(
-                      imageUrl: 'https://image.tmdb.org/t/p/w300${showDetail.posterPath}',
-                      fit: BoxFit.cover,
-                      placeholder: (context, url) => const Icon(Icons.tv, size: 40),
-                      errorWidget: (context, url, error) => const Icon(Icons.tv, size: 40),
-                    )
-                  : const Icon(Icons.tv, size: 40),
-            ),
-          ),
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          final isWideScreen = constraints.maxWidth > 800;
           
-          const SizedBox(width: 16),
-          
-          // Basic Info
-          Expanded(
-            child: Column(
+          if (isWideScreen) {
+            // Wide screen layout: poster + info on left, streaming on right
+            return Row(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                AdaptiveTooltipText(
-                  showDetail.name,
-                  style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-                    fontWeight: FontWeight.bold,
-                  ),
-                  maxLines: 2,
-                ),
-                const SizedBox(height: 8),
-                
-                // Years and Status
-                Row(
-                  children: [
-                    Text(
-                      _formatYearRange(showDetail),
-                      style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                        color: Theme.of(context).colorScheme.onSurfaceVariant,
+                // Left side: Poster and basic info
+                Expanded(
+                  flex: 1,
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      // Poster
+                      Container(
+                        width: 100,
+                        height: 150,
+                        decoration: BoxDecoration(
+                          color: Theme.of(context).colorScheme.surfaceContainerHighest,
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        child: ClipRRect(
+                          borderRadius: BorderRadius.circular(8),
+                          child: showDetail.posterPath != null
+                              ? CachedNetworkImage(
+                                  imageUrl: 'https://image.tmdb.org/t/p/w300${showDetail.posterPath}',
+                                  fit: BoxFit.cover,
+                                  placeholder: (context, url) => const Icon(Icons.tv, size: 40),
+                                  errorWidget: (context, url, error) => const Icon(Icons.tv, size: 40),
+                                )
+                              : const Icon(Icons.tv, size: 40),
+                        ),
                       ),
+                      
+                      const SizedBox(width: 16),
+                      
+                      // Basic Info
+                      Expanded(
+                        child: _buildShowInfo(showDetail, prefs),
+                      ),
+                    ],
+                  ),
+                ),
+                
+                const SizedBox(width: 24),
+                
+                // Right side: Streaming options
+                if (showDetail.streamingOptions.isNotEmpty)
+                  SizedBox(
+                    width: 350,
+                    child: StreamingOptionsWidget(
+                      streamingOptions: showDetail.streamingOptions,
+                      tmdbId: showDetail.tmdbId,
+                      isTV: true,
+                      isCompact: true,
+                      locale: prefs.streamingCountry,
                     ),
-                    if (showDetail.status != null) ...[
-                      Padding(
-                        padding: const EdgeInsets.symmetric(horizontal: 4.0),
-                        child: Text('•', style: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant)),
-                      ),
-                      Text(
-                        showDetail.status!,
-                        style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                           color: Theme.of(context).colorScheme.onSurfaceVariant,
-                        ),
-                      ),
-                    ],
-                  ],
-                ),
-                const SizedBox(height: 4),
-                
-                if (showDetail.numberOfSeasons != null)
-                  Row(
-                    children: [
-                      Text(
-                        '${showDetail.numberOfSeasons} Seasons',
-                        style: Theme.of(context).textTheme.bodySmall?.copyWith(color: Theme.of(context).colorScheme.onSurfaceVariant),
-                      ),
-                      if (showDetail.numberOfEpisodes != null) ...[
-                        Padding(
-                           padding: const EdgeInsets.symmetric(horizontal: 4.0),
-                           child: Text('•', style: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant)),
-                        ),
-                        Text(
-                          '${showDetail.numberOfEpisodes} Episodes',
-                          style: Theme.of(context).textTheme.bodySmall?.copyWith(color: Theme.of(context).colorScheme.onSurfaceVariant),
-                        ),
-                      ],
-                      if (showDetail.episodeRunTime.isNotEmpty) ...[
-                        Padding(
-                           padding: const EdgeInsets.symmetric(horizontal: 4.0),
-                           child: Text('•', style: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant)),
-                        ),
-                        RuntimeDisplay(
-                          runtime: showDetail.episodeRunTime.first,
-                          isUpcoming: showDetail.status?.toLowerCase() != 'ended',
-                          style: Theme.of(context).textTheme.bodySmall?.copyWith(color: Theme.of(context).colorScheme.onSurfaceVariant),
-                        ),
-                      ],
-                    ],
-                  ),
-                
-                const SizedBox(height: 12),
-                
-                // Rating
-                if (showDetail.tmdbRating != null && (showDetail.voteCount ?? 0) > 0 && !(prefs.hideRatingsInDetails ?? false))
-                  Row(
-                    children: [
-                      const Icon(Icons.star, color: Colors.amber, size: 16),
-                      const SizedBox(width: 4),
-                      Text(
-                        showDetail.tmdbRating!.toStringAsFixed(1),
-                        style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                          fontWeight: FontWeight.w600,
-                        ),
-                      ),
-                    ],
                   ),
               ],
-            ),
-          ),
-        ],
+            );
+          } else {
+            // Narrow screen layout: traditional stacked layout
+            return Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    // Poster
+                    Container(
+                      width: 100,
+                      height: 150,
+                      decoration: BoxDecoration(
+                        color: Theme.of(context).colorScheme.surfaceContainerHighest,
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: ClipRRect(
+                        borderRadius: BorderRadius.circular(8),
+                        child: showDetail.posterPath != null
+                            ? CachedNetworkImage(
+                                imageUrl: 'https://image.tmdb.org/t/p/w300${showDetail.posterPath}',
+                                fit: BoxFit.cover,
+                                placeholder: (context, url) => const Icon(Icons.tv, size: 40),
+                                errorWidget: (context, url, error) => const Icon(Icons.tv, size: 40),
+                              )
+                            : const Icon(Icons.tv, size: 40),
+                      ),
+                    ),
+                    
+                    const SizedBox(width: 16),
+                    
+                    // Basic Info
+                    Expanded(
+                      child: _buildShowInfo(showDetail, prefs),
+                    ),
+                  ],
+                ),
+                
+                // Streaming options below on small screens
+                if (showDetail.streamingOptions.isNotEmpty) ...[
+                  const SizedBox(height: 16),
+                  StreamingOptionsWidget(
+                    streamingOptions: showDetail.streamingOptions,
+                    tmdbId: showDetail.tmdbId,
+                    isTV: true,
+                    isCompact: true,
+                    locale: prefs.streamingCountry,
+                  ),
+                ],
+              ],
+            );
+          }
+        },
       ),
+    );
+  }
+
+  Widget _buildShowInfo(TvShowDetail showDetail, Preferences prefs) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        AdaptiveTooltipText(
+          showDetail.name,
+          style: Theme.of(context).textTheme.headlineSmall?.copyWith(
+            fontWeight: FontWeight.bold,
+          ),
+          maxLines: 2,
+        ),
+        const SizedBox(height: 8),
+        
+        // Years and Status
+        Row(
+          children: [
+            Text(
+              _formatYearRange(showDetail),
+              style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                color: Theme.of(context).colorScheme.onSurfaceVariant,
+              ),
+            ),
+            if (showDetail.status != null) ...[
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 4.0),
+                child: Text('•', style: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant)),
+              ),
+              Text(
+                showDetail.status!,
+                style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                   color: Theme.of(context).colorScheme.onSurfaceVariant,
+                ),
+              ),
+            ],
+          ],
+        ),
+        const SizedBox(height: 4),
+        
+        if (showDetail.numberOfSeasons != null)
+          Row(
+            children: [
+              Text(
+                '${showDetail.numberOfSeasons} Seasons',
+                style: Theme.of(context).textTheme.bodySmall?.copyWith(color: Theme.of(context).colorScheme.onSurfaceVariant),
+              ),
+              if (showDetail.numberOfEpisodes != null) ...[
+                Padding(
+                   padding: const EdgeInsets.symmetric(horizontal: 4.0),
+                   child: Text('•', style: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant)),
+                ),
+                Text(
+                  '${showDetail.numberOfEpisodes} Episodes',
+                  style: Theme.of(context).textTheme.bodySmall?.copyWith(color: Theme.of(context).colorScheme.onSurfaceVariant),
+                ),
+              ],
+              if (showDetail.episodeRunTime.isNotEmpty) ...[
+                Padding(
+                   padding: const EdgeInsets.symmetric(horizontal: 4.0),
+                   child: Text('•', style: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant)),
+                ),
+                RuntimeDisplay(
+                  runtime: showDetail.episodeRunTime.first,
+                  isUpcoming: showDetail.status?.toLowerCase() != 'ended',
+                  style: Theme.of(context).textTheme.bodySmall?.copyWith(color: Theme.of(context).colorScheme.onSurfaceVariant),
+                ),
+              ],
+            ],
+          ),
+        
+        const SizedBox(height: 12),
+        
+        // Rating
+        if (showDetail.tmdbRating != null && (showDetail.voteCount ?? 0) > 0 && !(prefs.hideRatingsInDetails ?? false))
+          Row(
+            children: [
+              const Icon(Icons.star, color: Colors.amber, size: 16),
+              const SizedBox(width: 4),
+              Text(
+                showDetail.tmdbRating!.toStringAsFixed(1),
+                style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ],
+          ),
+      ],
     );
   }
 
@@ -537,42 +616,132 @@ class _TvShowDetailScreenState extends ConsumerState<TvShowDetailScreen> {
 
 
   Widget _buildExternalLinks(TvShowDetail showDetail) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 16.0),
-      child: Column(
-        children: [
-          SizedBox(
-            width: double.infinity,
-            child: OutlinedButton.icon(
-              onPressed: () {
-                ExternalNavigationUtils.launchTmdbTitle(
-                  context,
-                  tmdbId: showDetail.tmdbId,
-                  isTV: true,
-                );
-              },
-              icon: const Icon(Icons.open_in_new),
-              label: const Text('View on TMDB'),
-            ),
-          ),
-          if (showDetail.imdbId != null) ...[
-            const SizedBox(height: 8),
-            SizedBox(
-              width: double.infinity,
-              child: OutlinedButton.icon(
-                onPressed: () {
-                  ExternalNavigationUtils.launchImdbTitle(
-                    context,
-                    imdbId: showDetail.imdbId!,
-                  );
-                },
-                icon: const Icon(Icons.open_in_new),
-                label: const Text('View on IMDb'),
+    return Consumer(
+      builder: (context, ref, child) {
+        final prefsAsync = ref.watch(preferencesProvider);
+        return prefsAsync.when(
+          data: (prefs) {
+            final movieDetailsPreference = prefs.movieDetailsPreference ?? 'both';
+            final brightness = Theme.of(context).brightness;
+            
+            // Determine which links to show based on preference
+            final showTmdb = movieDetailsPreference == 'tmdb' || movieDetailsPreference == 'both';
+            final showImdb = movieDetailsPreference == 'imdb' || movieDetailsPreference == 'both';
+            final hasImdbId = showDetail.imdbId != null && showDetail.imdbId!.isNotEmpty;
+            
+            if (!showTmdb && !showImdb) {
+              return const SizedBox.shrink();
+            }
+            
+            return Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16.0),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'More Details',
+                    style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  Row(
+                    children: [
+                      if (showTmdb) ...[
+                        Tooltip(
+                          message: 'View ${showDetail.name} on TMDB',
+                          child: Material(
+                            color: Colors.transparent,
+                            child: InkWell(
+                              onTap: () => ExternalNavigationUtils.launchTmdbTitle(
+                                context,
+                                tmdbId: showDetail.tmdbId,
+                                isTV: true,
+                              ),
+                              borderRadius: BorderRadius.circular(8),
+                              child: Container(
+                                width: 48,
+                                height: 48,
+                                decoration: BoxDecoration(
+                                  borderRadius: BorderRadius.circular(8),
+                                  border: Border.all(
+                                    color: Theme.of(context).colorScheme.outline.withOpacity(0.3),
+                                  ),
+                                ),
+                                child: ClipRRect(
+                                  borderRadius: BorderRadius.circular(7),
+                                  child: Image.asset(
+                                    'assets/images/tmdb_square.png',
+                                    fit: BoxFit.contain,
+                                    errorBuilder: (context, error, stackTrace) => Container(
+                                      color: Theme.of(context).colorScheme.primaryContainer,
+                                      child: const Icon(Icons.movie),
+                                    ),
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 12),
+                      ],
+                      if (showImdb && hasImdbId) ...[
+                        Tooltip(
+                          message: 'View ${showDetail.name} on IMDb',
+                          child: Material(
+                            color: Colors.transparent,
+                            child: InkWell(
+                              onTap: () => ExternalNavigationUtils.launchImdbTitle(
+                                context,
+                                imdbId: showDetail.imdbId!,
+                              ),
+                              borderRadius: BorderRadius.circular(8),
+                              child: Container(
+                                width: 48,
+                                height: 48,
+                                decoration: BoxDecoration(
+                                  borderRadius: BorderRadius.circular(8),
+                                  border: Border.all(
+                                    color: Theme.of(context).colorScheme.outline.withOpacity(0.3),
+                                  ),
+                                ),
+                                child: ClipRRect(
+                                  borderRadius: BorderRadius.circular(7),
+                                  child: Image.asset(
+                                    brightness == Brightness.light
+                                        ? 'assets/images/imdb_square_gold.png'
+                                        : 'assets/images/imdb_square_black.png',
+                                    fit: BoxFit.contain,
+                                    errorBuilder: (context, error, stackTrace) => Container(
+                                      color: const Color(0xFFF5C518),
+                                      child: const Center(
+                                        child: Text(
+                                          'I',
+                                          style: TextStyle(
+                                            color: Colors.black,
+                                            fontSize: 20,
+                                            fontWeight: FontWeight.bold,
+                                          ),
+                                        ),
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ],
+                  ),
+                ],
               ),
-            ),
-          ],
-        ],
-      ),
+            );
+          },
+          loading: () => const SizedBox.shrink(),
+          error: (_, __) => const SizedBox.shrink(),
+        );
+      },
     );
   }
 

@@ -111,6 +111,32 @@ void showRemovalSnackBar(
   );
 }
 
+void showAlreadyFollowedSnackBar(
+  BuildContext context, {
+  required String contributorName,
+  required VoidCallback onUnfollow,
+  Function(bool)? onSnackBarVisibilityChanged,
+}) {
+  onSnackBarVisibilityChanged?.call(true);
+
+  ScaffoldMessenger.of(context).clearSnackBars();
+  ScaffoldMessenger.of(context).showSnackBar(
+    SnackBar(
+      duration: const Duration(hours: 1),
+      backgroundColor: Colors.transparent,
+      elevation: 0,
+      padding: EdgeInsets.zero,
+      content: _TimerSnackBarContent(
+        message: '$contributorName already followed',
+        duration: const Duration(seconds: 4),
+        onDismiss: () => onSnackBarVisibilityChanged?.call(false),
+        actionLabel: 'UNFOLLOW',
+        onAction: onUnfollow,
+      ),
+    ),
+  );
+}
+
 class _TimerSnackBarContent extends StatefulWidget {
   final String message;
   final Duration duration;

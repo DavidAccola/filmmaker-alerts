@@ -87,30 +87,37 @@ class _ContributorHoverCardState extends State<ContributorHoverCard> {
                           : const Center(child: Icon(Icons.person, size: 40)),
                     ),
                     
-                    // Hover Mask + Center Follow Button
-                    AnimatedOpacity(
-                      opacity: _isHovered ? 1.0 : 0.0,
-                      duration: const Duration(milliseconds: 200),
-                      child: Container(
-                        decoration: BoxDecoration(
-                           color: Colors.blue.withOpacity(0.4),
-                           borderRadius: const BorderRadius.only(
-                            topLeft: Radius.circular(8),
-                            topRight: Radius.circular(8),
-                           ),
-                        ),
-                        child: Center(
-                          child: IconButton(
-                            icon: Icon(
-                              widget.isFollowed ? Icons.remove_circle : Icons.add_circle,
-                              size: 32,
-                              color: Colors.white,
+                    // Follow/Checkmark button in upper-right corner
+                    Positioned(
+                      top: 4,
+                      right: 4,
+                      child: widget.isFollowed
+                          ? Container(
+                              decoration: BoxDecoration(
+                                color: theme.colorScheme.primary,
+                                shape: BoxShape.circle,
+                              ),
+                              padding: const EdgeInsets.all(4),
+                              child: Icon(
+                                Icons.check,
+                                size: 20,
+                                color: theme.colorScheme.onPrimary,
+                              ),
+                            )
+                          : IconButton(
+                              icon: Icon(
+                                Icons.add_circle,
+                                size: 28,
+                                color: theme.colorScheme.primary,
+                              ),
+                              onPressed: widget.onFollow,
+                              tooltip: 'Follow',
+                              padding: EdgeInsets.zero,
+                              constraints: const BoxConstraints(
+                                minWidth: 32,
+                                minHeight: 32,
+                              ),
                             ),
-                            onPressed: widget.onFollow,
-                            tooltip: widget.isFollowed ? 'Unfollow' : 'Follow',
-                          ),
-                        ),
-                      ),
                     ),
                   ],
                 ),

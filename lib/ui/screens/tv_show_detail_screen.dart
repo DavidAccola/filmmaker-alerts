@@ -748,6 +748,7 @@ class _TvShowDetailScreenState extends ConsumerState<TvShowDetailScreen> {
   Future<void> _handleFollowPerson(dynamic member, WidgetRef ref) async {
     try {
       final contributorLogic = ref.read(contributorLogicProvider);
+      final repo = ref.read(contributorRepositoryProvider);
       
       // Determine knownFor based on member type (CastMember vs CrewMember)
       String knownFor = '';
@@ -824,7 +825,29 @@ class _TvShowDetailScreenState extends ConsumerState<TvShowDetailScreen> {
           },
         );
       } else if (mounted) {
-        showSimpleSnackBar(context, 'Person already followed.');
+        // Person already followed - show new snackbar with unfollow option
+        showAlreadyFollowedSnackBar(
+          context,
+          contributorName: member.name,
+          onUnfollow: () async {
+            await repo.removeContributor(member.tmdbId);
+            ref.invalidate(contributorsProvider);
+            
+            if (mounted) {
+              showRemovalSnackBar(
+                context,
+                message: 'Unfollowed ${member.name}',
+                onUndo: () async {
+                  final existingContributor = repo.getContributor(member.tmdbId);
+                  if (existingContributor != null) {
+                    await repo.addContributor(existingContributor);
+                    ref.invalidate(contributorsProvider);
+                  }
+                },
+              );
+            }
+          },
+        );
       }
     } catch (e) {
       debugPrint('Error following person: $e');

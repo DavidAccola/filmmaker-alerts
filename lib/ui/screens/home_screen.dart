@@ -749,7 +749,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with SingleTickerProvid
     if (context.mounted) {
       showRemovalSnackBar(
         context,
-        message: 'Removed ${contributor.name}',
+        message: 'Unfollowed ${contributor.name}',
         onSnackBarVisibilityChanged: (isVisible) {
           setState(() {
             _fabBottomPadding = isVisible ? 70.0 : 0.0;

@@ -98,6 +98,184 @@ class DebugScreen extends ConsumerWidget {
             ),
             
             const SizedBox(height: 20),
+            
+            // Watchlist Migration Section
+            Card(
+              margin: const EdgeInsets.symmetric(horizontal: 32),
+              child: Padding(
+                padding: const EdgeInsets.all(16),
+                child: Column(
+                  children: [
+                    const Text(
+                      'Watchlist Migration (Phase 8)',
+                      style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                    ),
+                    const SizedBox(height: 8),
+                    const Text(
+                      'Migrate movie/TV show/collection contributors to watchlist',
+                      style: TextStyle(fontSize: 12, color: Colors.grey),
+                    ),
+                    const SizedBox(height: 16),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                      children: [
+                        ElevatedButton(
+                          onPressed: () async {
+                            try {
+                              final migrationLogic = ref.read(watchlistMigrationLogicProvider);
+                              final stats = await migrationLogic.migrateContributorsToWatchlist();
+                              
+                              if (context.mounted) {
+                                showDialog(
+                                  context: context,
+                                  builder: (context) => AlertDialog(
+                                    title: const Text('Migration Results'),
+                                    content: Column(
+                                      mainAxisSize: MainAxisSize.min,
+                                      crossAxisAlignment: CrossAxisAlignment.start,
+                                      children: [
+                                        Text('Total media contributors: ${stats['total']}'),
+                                        Text('Migrated: ${stats['migrated']}'),
+                                        Text('Skipped (already in watchlist): ${stats['skipped']}'),
+                                        Text('Errors: ${stats['errors']}'),
+                                      ],
+                                    ),
+                                    actions: [
+                                      TextButton(
+                                        onPressed: () => Navigator.pop(context),
+                                        child: const Text('OK'),
+                                      ),
+                                    ],
+                                  ),
+                                );
+                              }
+                            } catch (e) {
+                              if (context.mounted) {
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  SnackBar(
+                                    content: Text('Migration error: $e'),
+                                    backgroundColor: Colors.red,
+                                  ),
+                                );
+                              }
+                            }
+                          },
+                          child: const Text('Migrate'),
+                        ),
+                        ElevatedButton(
+                          onPressed: () async {
+                            try {
+                              final migrationLogic = ref.read(watchlistMigrationLogicProvider);
+                              final validation = await migrationLogic.validateMigration();
+                              
+                              if (context.mounted) {
+                                showDialog(
+                                  context: context,
+                                  builder: (context) => AlertDialog(
+                                    title: const Text('Validation Results'),
+                                    content: Column(
+                                      mainAxisSize: MainAxisSize.min,
+                                      crossAxisAlignment: CrossAxisAlignment.start,
+                                      children: [
+                                        Text('Media contributors: ${validation['totalMediaContributors']}'),
+                                        Text('In watchlist: ${validation['contributorsInWatchlist']}'),
+                                        Text('Orphaned: ${validation['orphanedContributors']}'),
+                                        Text('Watchlist entries: ${validation['totalWatchlistEntries']}'),
+                                        Text('Consistent: ${validation['isConsistent']}'),
+                                        if (validation['orphanedNames'].isNotEmpty) ...[
+                                          const SizedBox(height: 8),
+                                          const Text('Orphaned items:', style: TextStyle(fontWeight: FontWeight.bold)),
+                                          ...validation['orphanedNames'].map<Widget>((name) => Text('• $name')),
+                                        ],
+                                      ],
+                                    ),
+                                    actions: [
+                                      TextButton(
+                                        onPressed: () => Navigator.pop(context),
+                                        child: const Text('OK'),
+                                      ),
+                                    ],
+                                  ),
+                                );
+                              }
+                            } catch (e) {
+                              if (context.mounted) {
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  SnackBar(
+                                    content: Text('Validation error: $e'),
+                                    backgroundColor: Colors.red,
+                                  ),
+                                );
+                              }
+                            }
+                          },
+                          child: const Text('Validate'),
+                        ),
+                        ElevatedButton(
+                          onPressed: () async {
+                            // Show confirmation dialog
+                            final confirmed = await showDialog<bool>(
+                              context: context,
+                              builder: (context) => AlertDialog(
+                                title: const Text('Confirm Cleanup'),
+                                content: const Text(
+                                  'This will permanently remove movie/TV show/collection contributors '
+                                  'that have been migrated to watchlist. This action cannot be undone.\n\n'
+                                  'Make sure to run validation first!'
+                                ),
+                                actions: [
+                                  TextButton(
+                                    onPressed: () => Navigator.pop(context, false),
+                                    child: const Text('Cancel'),
+                                  ),
+                                  TextButton(
+                                    onPressed: () => Navigator.pop(context, true),
+                                    style: TextButton.styleFrom(foregroundColor: Colors.red),
+                                    child: const Text('Cleanup'),
+                                  ),
+                                ],
+                              ),
+                            );
+                            
+                            if (confirmed == true) {
+                              try {
+                                final migrationLogic = ref.read(watchlistMigrationLogicProvider);
+                                final removed = await migrationLogic.cleanupMigratedContributors();
+                                
+                                // Refresh contributors provider
+                                ref.invalidate(contributorsProvider);
+                                
+                                if (context.mounted) {
+                                  ScaffoldMessenger.of(context).showSnackBar(
+                                    SnackBar(
+                                      content: Text('Cleanup complete: removed $removed contributors'),
+                                      backgroundColor: Colors.green,
+                                    ),
+                                  );
+                                }
+                              } catch (e) {
+                                if (context.mounted) {
+                                  ScaffoldMessenger.of(context).showSnackBar(
+                                    SnackBar(
+                                      content: Text('Cleanup error: $e'),
+                                      backgroundColor: Colors.red,
+                                    ),
+                                  );
+                                }
+                              }
+                            }
+                          },
+                          style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
+                          child: const Text('Cleanup'),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+            ),
+            
+            const SizedBox(height: 20),
             const Text(
               'Click the buttons below to test notifications.',
               textAlign: TextAlign.center,

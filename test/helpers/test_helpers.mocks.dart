@@ -316,6 +316,17 @@ class MockTmdbService extends _i1.Mock implements _i4.TmdbService {
       ) as _i5.Future<Map<String, dynamic>>);
 
   @override
+  _i5.Future<Map<String, dynamic>> getCompanyUpcomingWorks(int? id) =>
+      (super.noSuchMethod(
+        Invocation.method(
+          #getCompanyUpcomingWorks,
+          [id],
+        ),
+        returnValue:
+            _i5.Future<Map<String, dynamic>>.value(<String, dynamic>{}),
+      ) as _i5.Future<Map<String, dynamic>>);
+
+  @override
   _i5.Future<Map<String, dynamic>> getMovieDetails(int? id) =>
       (super.noSuchMethod(
         Invocation.method(
@@ -482,6 +493,39 @@ class MockTmdbService extends _i1.Mock implements _i4.TmdbService {
             seasonNumber,
             episodeNumber,
           ],
+        ),
+        returnValue:
+            _i5.Future<Map<String, dynamic>>.value(<String, dynamic>{}),
+      ) as _i5.Future<Map<String, dynamic>>);
+
+  @override
+  _i5.Future<Map<String, dynamic>> getMovieWatchProviders(int? id) =>
+      (super.noSuchMethod(
+        Invocation.method(
+          #getMovieWatchProviders,
+          [id],
+        ),
+        returnValue:
+            _i5.Future<Map<String, dynamic>>.value(<String, dynamic>{}),
+      ) as _i5.Future<Map<String, dynamic>>);
+
+  @override
+  _i5.Future<Map<String, dynamic>> getTvWatchProviders(int? id) =>
+      (super.noSuchMethod(
+        Invocation.method(
+          #getTvWatchProviders,
+          [id],
+        ),
+        returnValue:
+            _i5.Future<Map<String, dynamic>>.value(<String, dynamic>{}),
+      ) as _i5.Future<Map<String, dynamic>>);
+
+  @override
+  _i5.Future<Map<String, dynamic>> getWatchProviderRegions() =>
+      (super.noSuchMethod(
+        Invocation.method(
+          #getWatchProviderRegions,
+          [],
         ),
         returnValue:
             _i5.Future<Map<String, dynamic>>.value(<String, dynamic>{}),

@@ -11,6 +11,10 @@ class AppConstants {
   static const String tvDetailsBox = 'tv_details';
   static const String tvEpisodeDetailsBox = 'tv_episode_details';
   static const String tvSeasonDetailsBox = 'tv_season_details';
+  static const String watchlistEntriesBox = 'watchlist_entries';
+  static const String episodeStatusesBox = 'episode_statuses';
+  static const String seasonStatusesBox = 'season_statuses';
+  static const String movieStatusesBox = 'movie_statuses';
 
   // Department Order (Critical for UI consistency)
   // This is used for broad categorization priority if specific roles aren't found

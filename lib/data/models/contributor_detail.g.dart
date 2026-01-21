@@ -69,13 +69,14 @@ class StreamingOptionAdapter extends TypeAdapter<StreamingOption> {
       type: fields[3] as StreamingType,
       price: fields[4] as String?,
       deepLink: fields[5] as String,
+      watchLink: fields[6] as String?,
     );
   }
 
   @override
   void write(BinaryWriter writer, StreamingOption obj) {
     writer
-      ..writeByte(6)
+      ..writeByte(7)
       ..writeByte(0)
       ..write(obj.providerId)
       ..writeByte(1)
@@ -87,7 +88,9 @@ class StreamingOptionAdapter extends TypeAdapter<StreamingOption> {
       ..writeByte(4)
       ..write(obj.price)
       ..writeByte(5)
-      ..write(obj.deepLink);
+      ..write(obj.deepLink)
+      ..writeByte(6)
+      ..write(obj.watchLink);
   }
 
   @override

@@ -2,6 +2,8 @@ import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../data/models/contributor.dart';
+import '../../data/models/contributor_detail.dart';
+import '../../data/models/watchlist_entry.dart';
 import '../../providers/providers.dart';
 import '../common/department_selection_dialog.dart';
 import '../common/snackbar_utils.dart';
@@ -143,21 +145,92 @@ class _SearchResultsScreenState extends ConsumerState<SearchResultsScreen> {
         );
       }
       
-      final success = await contributorLogic.addEnrichedContributor(
-        contributor,
-        overrideNotifyDepts: selectedDepts,
-        overrideAvailableDepts: availableDepts,
-        allRolesSelected: isAllSelected,
-      );
+      bool success;
+      
+      // Route movies, TV shows, and collections to watchlist directly
+      if (contributor.type == ContributorType.movie || 
+          contributor.type == ContributorType.tvShow || 
+          contributor.type == ContributorType.collection) {
+        
+        final watchlistLogic = ref.read(watchlistLogicProvider);
+        
+        // Create contributor snapshot
+        final contributorSnapshot = ContributorSnapshot(
+          contributorId: contributor.tmdbId,
+          name: contributor.name,
+          role: contributor.type == ContributorType.movie ? 'Movie' : 
+                contributor.type == ContributorType.tvShow ? 'TV Show' : 'Collection',
+        );
+
+        // Determine work type and release type
+        WorkType workType;
+        ReleaseType releaseType;
+        
+        if (contributor.type == ContributorType.movie) {
+          workType = WorkType.movie;
+          releaseType = ReleaseType.theatrical;
+        } else if (contributor.type == ContributorType.tvShow) {
+          workType = WorkType.tvShow;
+          releaseType = ReleaseType.streaming;
+        } else {
+          workType = WorkType.movie; // Collections are treated as movies
+          releaseType = ReleaseType.theatrical;
+        }
+
+        try {
+          await watchlistLogic.addWorkToWatchlist(
+            tmdbId: contributor.tmdbId,
+            type: workType,
+            title: contributor.name,
+            posterPath: contributor.profilePath,
+            releaseDate: null, // Will be populated from TMDB data if needed
+            releaseType: releaseType,
+            followedContributors: [contributorSnapshot],
+          );
+          success = true;
+        } catch (e) {
+          if (e.toString().contains('already exists')) {
+            success = false; // Already in watchlist
+          } else {
+            rethrow;
+          }
+        }
+      } else {
+        // Use regular method for people and companies
+        success = await contributorLogic.addEnrichedContributor(
+          contributor,
+          overrideNotifyDepts: selectedDepts,
+          overrideAvailableDepts: availableDepts,
+          allRolesSelected: isAllSelected,
+        );
+      }
       
       if (mounted) {
         Navigator.pop(context); // Close loading
         
         if (success) {
-          ref.invalidate(contributorsProvider);
-          showSimpleSnackBar(context, 'Added ${contributor.name}');
+          // Refresh the appropriate providers based on what was added
+          if (contributor.type == ContributorType.movie || 
+              contributor.type == ContributorType.tvShow || 
+              contributor.type == ContributorType.collection) {
+            // Refresh watchlist providers
+            ref.invalidate(watchlistEntriesProvider);
+          } else {
+            // Refresh contributors provider for people/companies
+            ref.invalidate(contributorsProvider);
+          }
+          
+          final itemType = contributor.type == ContributorType.movie ? 'Movie' :
+                          contributor.type == ContributorType.tvShow ? 'TV show' :
+                          contributor.type == ContributorType.collection ? 'Collection' :
+                          'Contributor';
+          showSimpleSnackBar(context, 'Added ${contributor.name} to ${itemType == 'Movie' || itemType == 'TV show' || itemType == 'Collection' ? 'Watchlist' : 'Contributors'}');
         } else {
-          showSimpleSnackBar(context, 'Already following.');
+          final itemType = contributor.type == ContributorType.movie ? 'Movie' :
+                          contributor.type == ContributorType.tvShow ? 'TV show' :
+                          contributor.type == ContributorType.collection ? 'Collection' :
+                          'Contributor';
+          showSimpleSnackBar(context, '$itemType already followed.');
         }
       }
     } catch (e) {
@@ -271,7 +344,36 @@ class _SearchResultsScreenState extends ConsumerState<SearchResultsScreen> {
                               )
                             : Icon(contributor.type == ContributorType.person ? Icons.person : Icons.business),
                       ),
-                      title: Text(contributor.name, style: const TextStyle(fontWeight: FontWeight.bold)),
+                      title: Row(
+                        children: [
+                          Expanded(
+                            child: Text(contributor.name, style: const TextStyle(fontWeight: FontWeight.bold)),
+                          ),
+                          if (!isFollowed) ...[
+                            const SizedBox(width: 8),
+                            Tooltip(
+                              message: (contributor.type == ContributorType.movie || 
+                                       contributor.type == ContributorType.tvShow || 
+                                       contributor.type == ContributorType.collection)
+                                  ? 'Will be added to Watchlist'
+                                  : 'Will be added to Contributors',
+                              child: Icon(
+                                (contributor.type == ContributorType.movie || 
+                                 contributor.type == ContributorType.tvShow || 
+                                 contributor.type == ContributorType.collection)
+                                    ? Icons.bookmark_add
+                                    : Icons.person_add,
+                                size: 16,
+                                color: (contributor.type == ContributorType.movie || 
+                                       contributor.type == ContributorType.tvShow || 
+                                       contributor.type == ContributorType.collection)
+                                    ? theme.colorScheme.primary
+                                    : theme.colorScheme.secondary,
+                              ),
+                            ),
+                          ],
+                        ],
+                      ),
                       subtitle: Text(contributor.knownFor, maxLines: 2, overflow: TextOverflow.ellipsis),
                       trailing: isFollowed
                           ? Column(
@@ -283,7 +385,14 @@ class _SearchResultsScreenState extends ConsumerState<SearchResultsScreen> {
                             )
                           : FilledButton.icon(
                               onPressed: () => _addContributor(contributor),
-                              icon: const Icon(Icons.add, size: 18),
+                              icon: Icon(
+                                (contributor.type == ContributorType.movie || 
+                                 contributor.type == ContributorType.tvShow || 
+                                 contributor.type == ContributorType.collection)
+                                    ? Icons.bookmark_add
+                                    : Icons.person_add,
+                                size: 18,
+                              ),
                               label: const Text('Add'),
                             ),
                     ),

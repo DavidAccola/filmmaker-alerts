@@ -4,6 +4,10 @@ import '../data/models/contributor.dart';
 import '../data/models/contributor_detail.dart';
 import '../data/models/movie_detail.dart';
 import '../data/models/tv_detail.dart';
+import '../data/models/watchlist_entry.dart';
+import '../data/models/episode_status_entry.dart';
+import '../data/models/season_status_entry.dart';
+import '../data/models/movie_status_entry.dart';
 import '../data/repositories/contributor_repository.dart';
 import '../data/repositories/contributor_detail_repository.dart';
 import '../data/repositories/history_repository.dart';
@@ -13,6 +17,10 @@ import '../data/repositories/tv_cache_repository.dart';
 import '../data/repositories/tv_detail_repository.dart';
 import '../data/repositories/preferences_repository.dart';
 import '../data/repositories/streaming_repository.dart';
+import '../data/repositories/watchlist_repository.dart';
+import '../data/repositories/episode_status_repository.dart';
+import '../data/repositories/season_status_repository.dart';
+import '../data/repositories/movie_status_repository.dart';
 import '../data/services/tmdb_service.dart';
 import '../data/services/justwatch_service.dart';
 import '../data/services/streaming_service.dart';
@@ -24,9 +32,13 @@ import '../logic/work_sorting_logic.dart';
 import '../logic/tv_show_display_logic.dart';
 import '../logic/multiple_role_display_logic.dart';
 import '../logic/work_logic.dart';
+import '../logic/watchlist_logic.dart';
+import '../logic/watchlist_migration_logic.dart';
 import '../data/services/notification_service.dart';
 import '../data/services/system_tray_service.dart';
 import '../data/models/preferences.dart';
+import 'package:hive/hive.dart';
+import '../core/constants.dart';
 
 // --- Repositories ---
 
@@ -64,6 +76,26 @@ final movieDetailRepositoryProvider = Provider<MovieDetailRepository>((ref) {
 
 final tvDetailRepositoryProvider = Provider<TvDetailRepository>((ref) {
   return TvDetailRepository();
+});
+
+final watchlistRepositoryProvider = Provider<WatchlistRepository>((ref) {
+  final box = Hive.box<WatchlistEntry>(AppConstants.watchlistEntriesBox);
+  return WatchlistRepository(box);
+});
+
+final episodeStatusRepositoryProvider = Provider<EpisodeStatusRepository>((ref) {
+  final box = Hive.box<EpisodeStatusEntry>(AppConstants.episodeStatusesBox);
+  return EpisodeStatusRepository(box);
+});
+
+final seasonStatusRepositoryProvider = Provider<SeasonStatusRepository>((ref) {
+  final box = Hive.box<SeasonStatusEntry>(AppConstants.seasonStatusesBox);
+  return SeasonStatusRepository(box);
+});
+
+final movieStatusRepositoryProvider = Provider<MovieStatusRepository>((ref) {
+  final box = Hive.box<MovieStatusEntry>(AppConstants.movieStatusesBox);
+  return MovieStatusRepository(box);
 });
 
 // --- Services ---
@@ -148,6 +180,21 @@ final multipleRoleDisplayLogicProvider = Provider<MultipleRoleDisplayLogic>((ref
   return MultipleRoleDisplayLogic();
 });
 
+final watchlistLogicProvider = Provider<WatchlistLogic>((ref) {
+  return WatchlistLogic(
+    ref.watch(watchlistRepositoryProvider),
+    ref.watch(episodeStatusRepositoryProvider),
+    ref.watch(seasonStatusRepositoryProvider),
+  );
+});
+
+final watchlistMigrationLogicProvider = Provider<WatchlistMigrationLogic>((ref) {
+  return WatchlistMigrationLogic(
+    ref.watch(contributorRepositoryProvider),
+    ref.watch(watchlistLogicProvider),
+  );
+});
+
 // --- Data Streams (For UI) ---
 
 /// Contributors provider - fetches followed contributors list
@@ -155,6 +202,18 @@ final multipleRoleDisplayLogicProvider = Provider<MultipleRoleDisplayLogic>((ref
 final contributorsProvider = FutureProvider<List<Contributor>>((ref) async {
   final repo = ref.watch(contributorRepositoryProvider);
   return repo.getContributors();
+});
+
+/// Provider that listens for contributor changes and updates watchlist snapshots
+final contributorSnapshotUpdaterProvider = Provider<void>((ref) {
+  // Listen to contributor changes
+  ref.listen<AsyncValue<List<Contributor>>>(contributorsProvider, (previous, next) {
+    next.whenData((contributors) async {
+      // Update all watchlist entry snapshots when contributors change
+      final watchlistLogic = ref.read(watchlistLogicProvider);
+      await watchlistLogic.updateAllContributorSnapshots(contributors);
+    });
+  });
 });
 
 final preferencesProvider = FutureProvider<Preferences>((ref) async {
@@ -281,3 +340,31 @@ final tvEpisodeDetailProvider = FutureProvider.autoDispose.family<TvEpisodeDetai
 
 // --- UI State ---
 final selectedTabProvider = StateProvider<int>((ref) => 0);
+
+// --- Watchlist Providers ---
+
+/// Watchlist entries provider - fetches all watchlist entries
+final watchlistEntriesProvider = FutureProvider<List<WatchlistEntry>>((ref) async {
+  final logic = ref.watch(watchlistLogicProvider);
+  return logic.getWatchlistWorks();
+});
+
+/// Watchlist movies provider - fetches only movies
+final watchlistMoviesProvider = FutureProvider<List<WatchlistEntry>>((ref) async {
+  final logic = ref.watch(watchlistLogicProvider);
+  return logic.getWorksByType(WorkType.movie);
+});
+
+/// Watchlist shows provider - fetches only TV shows
+final watchlistShowsProvider = FutureProvider<List<WatchlistEntry>>((ref) async {
+  final logic = ref.watch(watchlistLogicProvider);
+  return logic.getWorksByType(WorkType.tvShow);
+});
+
+/// Check if a work is in the watchlist
+typedef WorkParams = ({int tmdbId, WorkType type});
+
+final isWorkInWatchlistProvider = FutureProvider.family<bool, WorkParams>((ref, params) async {
+  final logic = ref.watch(watchlistLogicProvider);
+  return logic.isWorkInWatchlist(params.tmdbId, params.type);
+});

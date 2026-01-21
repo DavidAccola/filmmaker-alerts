@@ -1,12 +1,14 @@
 import 'package:flutter/foundation.dart';
 import '../data/models/contributor.dart';
 import '../data/models/contributor_detail.dart';
+import '../data/models/watchlist_entry.dart';
 import '../data/repositories/contributor_repository.dart';
 import '../data/repositories/contributor_detail_repository.dart';
 import '../data/repositories/preferences_repository.dart';
 import '../data/services/tmdb_service.dart';
 import 'latest_work_logic.dart';
 import 'work_sorting_logic.dart';
+import 'watchlist_logic.dart';
 import '../core/tmdb_mapping.dart';
 import 'tv_show_display_logic.dart';
 
@@ -113,12 +115,21 @@ class ContributorLogic {
   }
 
   /// Enriches a sparse contributor and adds it to the repository.
+  /// NOTE: Movies, TV shows, and collections should be added to watchlist instead
   Future<bool> addEnrichedContributor(
     Contributor sparseContributor, {
     List<String>? overrideNotifyDepts,
     List<String>? overrideAvailableDepts,
     bool allRolesSelected = false,
   }) async {
+    // Reject media types - they should go to watchlist
+    if (sparseContributor.type == ContributorType.movie || 
+        sparseContributor.type == ContributorType.tvShow ||
+        sparseContributor.type == ContributorType.collection) {
+      debugPrint('[ContributorLogic] ERROR: Movies/TV shows/collections should be added to watchlist, not contributors');
+      throw ArgumentError('Movies/TV shows/collections should be added to watchlist, not contributors. Use WatchlistLogic.addWorkToWatchlist() instead.');
+    }
+
     final prefs = _preferencesRepository.getPreferences();
 
     debugPrint('[ContributorLogic] addEnrichedContributor called for ${sparseContributor.name}');
@@ -216,6 +227,75 @@ class ContributorLogic {
     }
 
     return await _contributorRepository.addContributor(enrichedContributor);
+  }
+
+  /// Adds a movie or TV show contributor to both the contributor repository and the watchlist
+  /// DEPRECATED: This method creates duplicate systems. Use watchlist directly for movies/shows/collections.
+  @Deprecated('Use watchlist directly for movies/shows/collections instead of contributor system')
+  Future<bool> addEnrichedContributorWithWatchlist(
+    Contributor sparseContributor, {
+    List<String>? overrideNotifyDepts,
+    List<String>? overrideAvailableDepts,
+    bool allRolesSelected = false,
+    required WatchlistLogic watchlistLogic,
+  }) async {
+    debugPrint('[ContributorLogic] WARNING: addEnrichedContributorWithWatchlist is deprecated');
+    debugPrint('[ContributorLogic] Movies/shows/collections should be added directly to watchlist');
+    
+    // For now, just add to watchlist only (not to contributors)
+    if (sparseContributor.type == ContributorType.movie || 
+        sparseContributor.type == ContributorType.tvShow ||
+        sparseContributor.type == ContributorType.collection) {
+      
+      // Create contributor snapshot for the watchlist entry
+      final contributorSnapshot = ContributorSnapshot(
+        contributorId: sparseContributor.tmdbId,
+        name: sparseContributor.name,
+        role: sparseContributor.type == ContributorType.movie ? 'Movie' : 
+              sparseContributor.type == ContributorType.tvShow ? 'TV Show' : 'Collection',
+      );
+
+      // Determine work type and release type
+      WorkType workType;
+      ReleaseType releaseType = ReleaseType.theatrical; // Default
+      
+      if (sparseContributor.type == ContributorType.movie) {
+        workType = WorkType.movie;
+        releaseType = ReleaseType.theatrical;
+      } else if (sparseContributor.type == ContributorType.tvShow) {
+        workType = WorkType.tvShow;
+        releaseType = ReleaseType.streaming;
+      } else {
+        workType = WorkType.movie; // Collections are treated as movies
+        releaseType = ReleaseType.theatrical;
+      }
+
+      try {
+        await watchlistLogic.addWorkToWatchlist(
+          tmdbId: sparseContributor.tmdbId,
+          type: workType,
+          title: sparseContributor.name,
+          posterPath: sparseContributor.profilePath,
+          releaseDate: null, // Will be populated from TMDB data if needed
+          releaseType: releaseType,
+          followedContributors: [contributorSnapshot],
+        );
+        
+        debugPrint('[ContributorLogic] Added ${sparseContributor.name} to watchlist only');
+        return true;
+      } catch (e) {
+        debugPrint('[ContributorLogic] Error adding ${sparseContributor.name} to watchlist: $e');
+        return false;
+      }
+    }
+
+    // For non-media types, fall back to regular method
+    return await addEnrichedContributor(
+      sparseContributor,
+      overrideNotifyDepts: overrideNotifyDepts,
+      overrideAvailableDepts: overrideAvailableDepts,
+      allRolesSelected: allRolesSelected,
+    );
   }
 
   /// Updates a contributor's followed roles and recalculates their latest work.

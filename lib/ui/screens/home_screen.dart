@@ -15,6 +15,7 @@ import 'settings_screen.dart';
 import 'contributor_detail_screen.dart';
 import 'movie_detail_screen.dart';
 import 'tv_show_detail_screen.dart';
+import 'watchlist_screen.dart';
 
 class HomeScreen extends ConsumerStatefulWidget {
   const HomeScreen({super.key});
@@ -23,15 +24,24 @@ class HomeScreen extends ConsumerStatefulWidget {
   ConsumerState<HomeScreen> createState() => _HomeScreenState();
 }
 
-class _HomeScreenState extends ConsumerState<HomeScreen> with SingleTickerProviderStateMixin {
+class _HomeScreenState extends ConsumerState<HomeScreen> with TickerProviderStateMixin {
   final ScrollController _scrollController = ScrollController();
   final GlobalKey _newContributorKey = GlobalKey();
   int? _newlyAddedContributorId; // Track the newly added contributor
   double _fabBottomPadding = 0.0; // Track FAB padding for snackbar avoidance
+  
+  late TabController _tabController;
+
+  @override
+  void initState() {
+    super.initState();
+    _tabController = TabController(length: 2, vsync: this); // People and Watchlist tabs
+  }
 
   @override
   void dispose() {
     _scrollController.dispose();
+    _tabController.dispose();
     super.dispose();
   }
 
@@ -190,6 +200,13 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with SingleTickerProvid
             error: (_, __) => const SizedBox.shrink(),
           ),
         ],
+        bottom: TabBar(
+          controller: _tabController,
+          tabs: const [
+            Tab(text: 'People'),
+            Tab(text: 'Watchlist'),
+          ],
+        ),
       ),
       body: contributorsAsync.when(
         loading: () => const Center(child: CircularProgressIndicator()),
@@ -209,164 +226,19 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with SingleTickerProvid
           }
 
           final prefs = prefsAsync.value ?? Preferences();
-          final sortedList = _sortContributors(contributors, prefs.homeSortOrder ?? 'dateAdded');
-
-          return LayoutBuilder(
-            builder: (context, constraints) {
-              final isLargeScreen = constraints.maxWidth >= 600;
-              final useGrid = isLargeScreen && (prefs.useGridView ?? true);
-              final isGrouped = prefs.groupByType ?? true; // Default to true
-
-              if (isGrouped) {
-                // Grouping Logic
-                final Map<ContributorType, List<Contributor>> groups = {};
-                for (var c in sortedList) {
-                  groups.putIfAbsent(c.type, () => []).add(c);
-                }
-
-                // Sort types for consistent display (Person first, then Movie, etc.)
-                final displayTypes = [
-                  ContributorType.person,
-                  ContributorType.movie,
-                  ContributorType.collection,
-                  ContributorType.tvShow,
-                  ContributorType.company,
-                ].where((t) => groups.containsKey(t)).toList();
-
-                return CustomScrollView(
-                  controller: _scrollController,
-                  slivers: [
-                    for (var type in displayTypes) ...[
-                      SliverToBoxAdapter(
-                        child: Padding(
-                          padding: const EdgeInsets.fromLTRB(16, 24, 16, 8),
-                          child: Text(
-                            _getTypeLabel(type).toUpperCase(),
-                            style: Theme.of(context).textTheme.labelLarge?.copyWith(
-                              color: Theme.of(context).colorScheme.primary,
-                              fontWeight: FontWeight.bold,
-                              letterSpacing: 1.2,
-                            ),
-                          ),
-                        ),
-                      ),
-                      if (useGrid)
-                        SliverPadding(
-                          padding: const EdgeInsets.symmetric(horizontal: 16),
-                          sliver: SliverGrid(
-                            gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
-                              maxCrossAxisExtent: 420,
-                              childAspectRatio: 2.7,
-                              crossAxisSpacing: 10,
-                              mainAxisSpacing: 10,
-                            ),
-                            delegate: SliverChildBuilderDelegate(
-                              (context, index) {
-                                final contributor = groups[type]![index];
-                                return ContributorCard(
-                                  key: contributor.tmdbId == _newlyAddedContributorId 
-                                      ? _newContributorKey 
-                                      : ValueKey(contributor.tmdbId),
-                                  contributor: contributor,
-                                  onTap: () => _navigateToDetail(contributor),
-                                  onRemove: () => _removeContributor(context, ref, contributor),
-                                  onEditRoles: () => _editRoles(context, ref, contributor),
-                                );
-                              },
-                              childCount: groups[type]!.length,
-                            ),
-                          ),
-                        )
-                      else
-                        SliverList(
-                          delegate: SliverChildBuilderDelegate(
-                            (context, index) {
-                              final contributor = groups[type]![index];
-                              return Padding(
-                                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
-                                child: ContributorCard(
-                                  key: contributor.tmdbId == _newlyAddedContributorId 
-                                      ? _newContributorKey 
-                                      : ValueKey(contributor.tmdbId),
-                                  contributor: contributor,
-                                  onTap: () => _navigateToDetail(contributor),
-                                  onRemove: () => _removeContributor(context, ref, contributor),
-                                  onEditRoles: () => _editRoles(context, ref, contributor),
-                                ),
-                              );
-                            },
-                            childCount: groups[type]!.length,
-                          ),
-                        ),
-                    ],
-                    const SliverToBoxAdapter(child: SizedBox(height: 80)),
-                    const SliverToBoxAdapter(child: TmdbAttribution()),
-                  ],
-                );
-              }
-
-              // Normal Flat View
-              if (useGrid) {
-                return CustomScrollView(
-                  controller: _scrollController,
-                  slivers: [
-                    SliverPadding(
-                      padding: const EdgeInsets.all(16),
-                      sliver: SliverGrid(
-                        gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
-                          maxCrossAxisExtent: 420,
-                          childAspectRatio: 2.7,
-                          crossAxisSpacing: 10,
-                          mainAxisSpacing: 10,
-                        ),
-                        delegate: SliverChildBuilderDelegate(
-                          (context, index) {
-                            final contributor = sortedList[index];
-                            return ContributorCard(
-                              key: contributor.tmdbId == _newlyAddedContributorId 
-                                  ? _newContributorKey 
-                                  : ValueKey(contributor.tmdbId),
-                              contributor: contributor,
-                              onTap: () => _navigateToDetail(contributor),
-                              onRemove: () => _removeContributor(context, ref, contributor),
-                              onEditRoles: () => _editRoles(context, ref, contributor),
-                            );
-                          },
-                          childCount: sortedList.length,
-                        ),
-                      ),
-                    ),
-                    const SliverToBoxAdapter(child: TmdbAttribution()),
-                  ],
-                );
-              } else {
-                return ListView.builder(
-                  controller: _scrollController,
-                  padding: const EdgeInsets.all(8),
-                  itemCount: sortedList.length + 1, // +1 for attribution
-                  itemBuilder: (context, index) {
-                    if (index == sortedList.length) {
-                      // Show attribution at the end
-                      return const TmdbAttribution();
-                    }
-                    
-                    final contributor = sortedList[index];
-                    return Padding(
-                      padding: const EdgeInsets.only(bottom: 8.0),
-                      child: ContributorCard(
-                        key: contributor.tmdbId == _newlyAddedContributorId 
-                            ? _newContributorKey 
-                            : ValueKey(contributor.tmdbId),
-                        contributor: contributor,
-                        onTap: () => _navigateToDetail(contributor),
-                        onRemove: () => _removeContributor(context, ref, contributor),
-                        onEditRoles: () => _editRoles(context, ref, contributor),
-                      ),
-                    );
-                  },
-                );
-              }
-            },
+          
+          // Separate contributors by type
+          final peopleContributors = _filterPeopleContributors(contributors);
+          final watchlistContributors = _filterWatchlistContributors(contributors);
+          
+          return TabBarView(
+            controller: _tabController,
+            children: [
+              // People tab - only show person/company contributors
+              _buildContributorsList(peopleContributors, prefs),
+              // Watchlist tab
+              const WatchlistScreen(),
+            ],
           );
         },
       ),
@@ -701,6 +573,192 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with SingleTickerProvid
     });
   }
   
+  Widget _buildContributorsList(List<Contributor> contributors, Preferences prefs) {
+    if (contributors.isEmpty) {
+      return const Center(
+        child: Text('No items in this category yet.'),
+      );
+    }
+
+    final sortedList = _sortContributors(contributors, prefs.homeSortOrder ?? 'dateAdded');
+
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final isLargeScreen = constraints.maxWidth >= 600;
+        final useGrid = isLargeScreen && (prefs.useGridView ?? true);
+        final isGrouped = prefs.groupByType ?? true; // Default to true
+
+        if (isGrouped) {
+          // Grouping Logic
+          final Map<ContributorType, List<Contributor>> groups = {};
+          for (var c in sortedList) {
+            groups.putIfAbsent(c.type, () => []).add(c);
+          }
+
+          // Sort types for consistent display (Person first, then Movie, etc.)
+          final displayTypes = [
+            ContributorType.person,
+            ContributorType.movie,
+            ContributorType.collection,
+            ContributorType.tvShow,
+            ContributorType.company,
+          ].where((t) => groups.containsKey(t)).toList();
+
+          return CustomScrollView(
+            controller: _scrollController,
+            slivers: [
+              for (var type in displayTypes) ...[
+                SliverToBoxAdapter(
+                  child: Padding(
+                    padding: const EdgeInsets.fromLTRB(16, 24, 16, 8),
+                    child: Text(
+                      _getTypeLabel(type).toUpperCase(),
+                      style: Theme.of(context).textTheme.labelLarge?.copyWith(
+                        color: Theme.of(context).colorScheme.primary,
+                        fontWeight: FontWeight.bold,
+                        letterSpacing: 1.2,
+                      ),
+                    ),
+                  ),
+                ),
+                if (useGrid)
+                  SliverPadding(
+                    padding: const EdgeInsets.symmetric(horizontal: 16),
+                    sliver: SliverGrid(
+                      gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
+                        maxCrossAxisExtent: 420,
+                        childAspectRatio: 2.7,
+                        crossAxisSpacing: 10,
+                        mainAxisSpacing: 10,
+                      ),
+                      delegate: SliverChildBuilderDelegate(
+                        (context, index) {
+                          final contributor = groups[type]![index];
+                          return ContributorCard(
+                            key: contributor.tmdbId == _newlyAddedContributorId 
+                                ? _newContributorKey 
+                                : ValueKey(contributor.tmdbId),
+                            contributor: contributor,
+                            onTap: () => _navigateToDetail(contributor),
+                            onRemove: () => _removeContributor(context, ref, contributor),
+                            onEditRoles: () => _editRoles(context, ref, contributor),
+                          );
+                        },
+                        childCount: groups[type]!.length,
+                      ),
+                    ),
+                  )
+                else
+                  SliverList(
+                    delegate: SliverChildBuilderDelegate(
+                      (context, index) {
+                        final contributor = groups[type]![index];
+                        return Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+                          child: ContributorCard(
+                            key: contributor.tmdbId == _newlyAddedContributorId 
+                                ? _newContributorKey 
+                                : ValueKey(contributor.tmdbId),
+                            contributor: contributor,
+                            onTap: () => _navigateToDetail(contributor),
+                            onRemove: () => _removeContributor(context, ref, contributor),
+                            onEditRoles: () => _editRoles(context, ref, contributor),
+                          ),
+                        );
+                      },
+                      childCount: groups[type]!.length,
+                    ),
+                  ),
+              ],
+              const SliverToBoxAdapter(child: SizedBox(height: 80)),
+              const SliverToBoxAdapter(child: TmdbAttribution()),
+            ],
+          );
+        }
+
+        // Normal Flat View
+        if (useGrid) {
+          return CustomScrollView(
+            controller: _scrollController,
+            slivers: [
+              SliverPadding(
+                padding: const EdgeInsets.all(16),
+                sliver: SliverGrid(
+                  gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
+                    maxCrossAxisExtent: 420,
+                    childAspectRatio: 2.7,
+                    crossAxisSpacing: 10,
+                    mainAxisSpacing: 10,
+                  ),
+                  delegate: SliverChildBuilderDelegate(
+                    (context, index) {
+                      final contributor = sortedList[index];
+                      return ContributorCard(
+                        key: contributor.tmdbId == _newlyAddedContributorId 
+                            ? _newContributorKey 
+                            : ValueKey(contributor.tmdbId),
+                        contributor: contributor,
+                        onTap: () => _navigateToDetail(contributor),
+                        onRemove: () => _removeContributor(context, ref, contributor),
+                        onEditRoles: () => _editRoles(context, ref, contributor),
+                      );
+                    },
+                    childCount: sortedList.length,
+                  ),
+                ),
+              ),
+              const SliverToBoxAdapter(child: TmdbAttribution()),
+            ],
+          );
+        } else {
+          return ListView.builder(
+            controller: _scrollController,
+            padding: const EdgeInsets.all(8),
+            itemCount: sortedList.length + 1, // +1 for attribution
+            itemBuilder: (context, index) {
+              if (index == sortedList.length) {
+                // Show attribution at the end
+                return const TmdbAttribution();
+              }
+              
+              final contributor = sortedList[index];
+              return Padding(
+                padding: const EdgeInsets.only(bottom: 8.0),
+                child: ContributorCard(
+                  key: contributor.tmdbId == _newlyAddedContributorId 
+                      ? _newContributorKey 
+                      : ValueKey(contributor.tmdbId),
+                  contributor: contributor,
+                  onTap: () => _navigateToDetail(contributor),
+                  onRemove: () => _removeContributor(context, ref, contributor),
+                  onEditRoles: () => _editRoles(context, ref, contributor),
+                ),
+              );
+            },
+          );
+        }
+      },
+    );
+  }
+
+  List<Contributor> _filterPeopleContributors(List<Contributor> contributors) {
+    return contributors.where((c) => 
+      c.type == ContributorType.person || 
+      c.type == ContributorType.company
+    ).toList();
+  }
+
+  List<Contributor> _filterWatchlistContributors(List<Contributor> contributors) {
+    // DEPRECATED: This method should no longer be used
+    // Movies/TV shows/collections should be in the actual watchlist, not contributors
+    debugPrint('[HomeScreen] WARNING: _filterWatchlistContributors is deprecated');
+    return contributors.where((c) => 
+      c.type == ContributorType.movie || 
+      c.type == ContributorType.tvShow || 
+      c.type == ContributorType.collection
+    ).toList();
+  }
+
   List<Contributor> _sortContributors(List<Contributor> list, String sortOrder) {
     final sorted = List<Contributor>.from(list);
     switch (sortOrder) {

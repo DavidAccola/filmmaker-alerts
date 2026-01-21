@@ -3,6 +3,8 @@ import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../data/models/contributor.dart';
+import '../../data/models/contributor_detail.dart';
+import '../../data/models/watchlist_entry.dart';
 import '../../providers/providers.dart';
 import '../common/snackbar_utils.dart';
 import 'search_results_screen.dart';
@@ -175,16 +177,77 @@ class _AddContributorScreenState extends ConsumerState<AddContributorScreen> {
 
       setState(() => _isLoading = true);
       
-      final success = await contributorLogic.addEnrichedContributor(
-        contributor,
-        overrideNotifyDepts: selectedDepts,
-        overrideAvailableDepts: availableDepts,
-        allRolesSelected: isAllSelected,
-      );
+      bool success;
+      
+      // Route movies, TV shows, and collections to watchlist directly
+      if (contributor.type == ContributorType.movie || 
+          contributor.type == ContributorType.tvShow || 
+          contributor.type == ContributorType.collection) {
+        
+        final watchlistLogic = ref.read(watchlistLogicProvider);
+        
+        // Create contributor snapshot
+        final contributorSnapshot = ContributorSnapshot(
+          contributorId: contributor.tmdbId,
+          name: contributor.name,
+          role: contributor.type == ContributorType.movie ? 'Movie' : 
+                contributor.type == ContributorType.tvShow ? 'TV Show' : 'Collection',
+        );
+
+        // Determine work type and release type
+        WorkType workType;
+        ReleaseType releaseType;
+        
+        if (contributor.type == ContributorType.movie) {
+          workType = WorkType.movie;
+          releaseType = ReleaseType.theatrical;
+        } else if (contributor.type == ContributorType.tvShow) {
+          workType = WorkType.tvShow;
+          releaseType = ReleaseType.streaming;
+        } else {
+          workType = WorkType.movie; // Collections are treated as movies
+          releaseType = ReleaseType.theatrical;
+        }
+
+        try {
+          await watchlistLogic.addWorkToWatchlist(
+            tmdbId: contributor.tmdbId,
+            type: workType,
+            title: contributor.name,
+            posterPath: contributor.profilePath,
+            releaseDate: null, // Will be populated from TMDB data if needed
+            releaseType: releaseType,
+            followedContributors: [contributorSnapshot],
+          );
+          success = true;
+        } catch (e) {
+          if (e.toString().contains('already exists')) {
+            success = false; // Already in watchlist
+          } else {
+            rethrow;
+          }
+        }
+      } else {
+        // Use regular method for people and companies
+        success = await contributorLogic.addEnrichedContributor(
+          contributor,
+          overrideNotifyDepts: selectedDepts,
+          overrideAvailableDepts: availableDepts,
+          allRolesSelected: isAllSelected,
+        );
+      }
       
       if (success) {
-        // Refresh the list in Home Screen
-        ref.invalidate(contributorsProvider);
+        // Refresh the appropriate providers based on what was added
+        if (contributor.type == ContributorType.movie || 
+            contributor.type == ContributorType.tvShow || 
+            contributor.type == ContributorType.collection) {
+          // Refresh watchlist providers
+          ref.invalidate(watchlistEntriesProvider);
+        } else {
+          // Refresh contributors provider for people/companies
+          ref.invalidate(contributorsProvider);
+        }
         
         if (mounted) {
           // Return a map to indicate success and provide data for SnackBar
@@ -199,7 +262,11 @@ class _AddContributorScreenState extends ConsumerState<AddContributorScreen> {
       } else {
         if (mounted) {
            setState(() => _isLoading = false);
-           showSimpleSnackBar(context, 'Contributor already followed.');
+           final itemType = contributor.type == ContributorType.movie ? 'Movie' :
+                           contributor.type == ContributorType.tvShow ? 'TV show' :
+                           contributor.type == ContributorType.collection ? 'Collection' :
+                           'Contributor';
+           showSimpleSnackBar(context, '$itemType already followed.');
         }
       }
     } catch (e) {
@@ -287,6 +354,10 @@ class _AddContributorScreenState extends ConsumerState<AddContributorScreen> {
                 }
 
                 final contributor = _results[index];
+                final isWatchlistItem = contributor.type == ContributorType.movie || 
+                                       contributor.type == ContributorType.tvShow || 
+                                       contributor.type == ContributorType.collection;
+                
                 return ListTile(
                   leading: Container(
                     width: 40,
@@ -302,9 +373,39 @@ class _AddContributorScreenState extends ConsumerState<AddContributorScreen> {
                           )
                         : const Icon(Icons.person),
                   ),
-                  title: Text(contributor.name),
+                  title: Row(
+                    children: [
+                      Expanded(child: Text(contributor.name)),
+                      if (isWatchlistItem) ...[
+                        const SizedBox(width: 8),
+                        Tooltip(
+                          message: 'Will be added to Watchlist',
+                          child: Icon(
+                            Icons.bookmark_add,
+                            size: 16,
+                            color: Theme.of(context).colorScheme.primary,
+                          ),
+                        ),
+                      ] else ...[
+                        const SizedBox(width: 8),
+                        Tooltip(
+                          message: 'Will be added to Contributors',
+                          child: Icon(
+                            Icons.person_add,
+                            size: 16,
+                            color: Theme.of(context).colorScheme.secondary,
+                          ),
+                        ),
+                      ],
+                    ],
+                  ),
                   subtitle: Text(contributor.knownFor),
-                  trailing: const Icon(Icons.add),
+                  trailing: Icon(
+                    isWatchlistItem ? Icons.bookmark_add : Icons.person_add,
+                    color: isWatchlistItem 
+                        ? Theme.of(context).colorScheme.primary
+                        : Theme.of(context).colorScheme.secondary,
+                  ),
                   onTap: () => _addContributor(contributor),
                 );
               },

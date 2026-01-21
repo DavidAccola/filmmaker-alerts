@@ -15,6 +15,11 @@ import 'data/models/tv_cache.dart';
 import 'data/models/notification_history.dart';
 import 'data/models/preferences.dart';
 import 'data/models/tv_detail.dart';
+import 'data/models/watchlist_entry.dart';
+import 'data/models/status_record.dart';
+import 'data/models/episode_status_entry.dart';
+import 'data/models/season_status_entry.dart';
+import 'data/models/movie_status_entry.dart';
 import 'ui/screens/main_screen.dart';
 import 'ui/common/rate_limit_listener.dart';
 import 'logic/background_service.dart';
@@ -111,6 +116,15 @@ void main() async {
   Hive.registerAdapter(TvSeasonDetailAdapter());
   Hive.registerAdapter(SeasonEpisodeAdapter());
 
+  // Register watchlist adapters
+  Hive.registerAdapter(WatchlistEntryAdapter());
+  Hive.registerAdapter(ContributorSnapshotAdapter());
+  Hive.registerAdapter(StatusRecordAdapter());
+  Hive.registerAdapter(WatchStatusAdapter());
+  Hive.registerAdapter(EpisodeStatusEntryAdapter());
+  Hive.registerAdapter(SeasonStatusEntryAdapter());
+  Hive.registerAdapter(MovieStatusEntryAdapter());
+
   // 4. Open Boxes with error handling for lock conflicts
   try {
     await _openHiveBoxes();
@@ -199,6 +213,10 @@ Future<void> _openHiveBoxes() async {
     (AppConstants.tvDetailsBox, TvShowDetail),
     (AppConstants.tvEpisodeDetailsBox, TvEpisodeDetail),
     (AppConstants.tvSeasonDetailsBox, TvSeasonDetail),
+    (AppConstants.watchlistEntriesBox, WatchlistEntry),
+    (AppConstants.episodeStatusesBox, EpisodeStatusEntry),
+    (AppConstants.seasonStatusesBox, SeasonStatusEntry),
+    (AppConstants.movieStatusesBox, MovieStatusEntry),
   ];
 
   for (final (boxName, _) in boxes) {
@@ -226,6 +244,14 @@ Future<void> _openHiveBoxes() async {
           await Hive.openBox<TvEpisodeDetail>(boxName);
         } else if (boxName == AppConstants.tvSeasonDetailsBox) {
           await Hive.openBox<TvSeasonDetail>(boxName);
+        } else if (boxName == AppConstants.watchlistEntriesBox) {
+          await Hive.openBox<WatchlistEntry>(boxName);
+        } else if (boxName == AppConstants.episodeStatusesBox) {
+          await Hive.openBox<EpisodeStatusEntry>(boxName);
+        } else if (boxName == AppConstants.seasonStatusesBox) {
+          await Hive.openBox<SeasonStatusEntry>(boxName);
+        } else if (boxName == AppConstants.movieStatusesBox) {
+          await Hive.openBox<MovieStatusEntry>(boxName);
         }
         
         debugPrint('[Main] Successfully opened Hive box: $boxName');

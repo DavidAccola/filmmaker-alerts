@@ -308,6 +308,183 @@ class _TimerSnackBarContentState extends State<_TimerSnackBarContent> with Ticke
 
 
 /// Simple snackbar content with just fade animation, no timer bar
+// Watchlist-specific snackbar utilities
+
+/// Shows snackbar when work is added to watchlist
+void showAddedToWatchlistSnackBar(
+  BuildContext context,
+  String title, {
+  Function(bool)? onSnackBarVisibilityChanged,
+}) {
+  showSimpleSnackBar(
+    context,
+    '$title added to watchlist',
+    duration: const Duration(seconds: 3),
+    onSnackBarVisibilityChanged: onSnackBarVisibilityChanged,
+  );
+}
+
+/// Shows snackbar when work is already in watchlist with REMOVE action
+void showAlreadyInWatchlistSnackBar(
+  BuildContext context,
+  String title,
+  VoidCallback onRemove, {
+  Function(bool)? onSnackBarVisibilityChanged,
+}) {
+  onSnackBarVisibilityChanged?.call(true);
+
+  ScaffoldMessenger.of(context).clearSnackBars();
+  ScaffoldMessenger.of(context).showSnackBar(
+    SnackBar(
+      duration: const Duration(hours: 1),
+      backgroundColor: Colors.transparent,
+      elevation: 0,
+      padding: EdgeInsets.zero,
+      content: _TimerSnackBarContent(
+        message: '$title already in watchlist',
+        duration: const Duration(seconds: 4),
+        onDismiss: () => onSnackBarVisibilityChanged?.call(false),
+        actionLabel: 'REMOVE',
+        onAction: onRemove,
+      ),
+    ),
+  );
+}
+
+/// Shows snackbar when work is removed from watchlist with UNDO action
+void showRemovedFromWatchlistSnackBar(
+  BuildContext context,
+  String title,
+  VoidCallback onUndo, {
+  Function(bool)? onSnackBarVisibilityChanged,
+}) {
+  showRemovalSnackBar(
+    context,
+    message: '$title removed from watchlist',
+    onUndo: onUndo,
+    onSnackBarVisibilityChanged: onSnackBarVisibilityChanged,
+  );
+}
+
+/// Shows snackbar when status is changed
+void showStatusChangedSnackBar(
+  BuildContext context,
+  String title,
+  String statusSymbol,
+  String statusText, {
+  Function(bool)? onSnackBarVisibilityChanged,
+}) {
+  showSimpleSnackBar(
+    context,
+    '$title marked as $statusSymbol $statusText',
+    duration: const Duration(seconds: 3),
+    onSnackBarVisibilityChanged: onSnackBarVisibilityChanged,
+  );
+}
+
+/// Shows warning snackbar for unreleased content
+void showUnreleasedWarningSnackBar(
+  BuildContext context,
+  String title, {
+  Function(bool)? onSnackBarVisibilityChanged,
+}) {
+  onSnackBarVisibilityChanged?.call(true);
+
+  ScaffoldMessenger.of(context).clearSnackBars();
+  ScaffoldMessenger.of(context).showSnackBar(
+    SnackBar(
+      duration: const Duration(hours: 1),
+      backgroundColor: Colors.transparent,
+      elevation: 0,
+      padding: EdgeInsets.zero,
+      content: _WarningSnackBarContent(
+        message: '⚠️ $title hasn\'t been released yet',
+        duration: const Duration(seconds: 4),
+        onDismiss: () => onSnackBarVisibilityChanged?.call(false),
+      ),
+    ),
+  );
+}
+
+/// Shows snackbar when work is snoozed with UNDO action
+void showSnoozedSnackBar(
+  BuildContext context,
+  String title,
+  VoidCallback onUndo, {
+  Function(bool)? onSnackBarVisibilityChanged,
+}) {
+  onSnackBarVisibilityChanged?.call(true);
+
+  ScaffoldMessenger.of(context).clearSnackBars();
+  ScaffoldMessenger.of(context).showSnackBar(
+    SnackBar(
+      duration: const Duration(hours: 1),
+      backgroundColor: Colors.transparent,
+      elevation: 0,
+      padding: EdgeInsets.zero,
+      content: _TimerSnackBarContent(
+        message: '$title frozen',
+        duration: const Duration(seconds: 4),
+        onDismiss: () => onSnackBarVisibilityChanged?.call(false),
+        actionLabel: 'UNDO',
+        onAction: onUndo,
+      ),
+    ),
+  );
+}
+
+/// Shows dialog prompt when unmarking "Want to watch"
+Future<String?> showWantToWatchUnmarkPrompt(
+  BuildContext context,
+  String title,
+) async {
+  return showDialog<String>(
+    context: context,
+    builder: (BuildContext context) {
+      final theme = Theme.of(context);
+      return AlertDialog(
+        title: const Text('Which do you want to do?'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop('freezer'),
+            child: const Text('FREEZER'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.of(context).pop('delete'),
+            child: const Text('DELETE'),
+          ),
+        ],
+      );
+    },
+  );
+}
+
+/// Shows warning snackbar when reordering with filters active
+void showDragReorderWarningSnackBar(
+  BuildContext context,
+  VoidCallback onShowAll, {
+  Function(bool)? onSnackBarVisibilityChanged,
+}) {
+  onSnackBarVisibilityChanged?.call(true);
+
+  ScaffoldMessenger.of(context).clearSnackBars();
+  ScaffoldMessenger.of(context).showSnackBar(
+    SnackBar(
+      duration: const Duration(hours: 1),
+      backgroundColor: Colors.transparent,
+      elevation: 0,
+      padding: EdgeInsets.zero,
+      content: _WarningSnackBarContent(
+        message: '⚠️ You have filters on. Reordering may jump over filtered items.',
+        duration: const Duration(seconds: 4),
+        onDismiss: () => onSnackBarVisibilityChanged?.call(false),
+        actionLabel: 'Show all',
+        onAction: onShowAll,
+      ),
+    ),
+  );
+}
+
 class _SimpleSnackBarContent extends StatefulWidget {
   final String message;
   final Duration duration;
@@ -375,6 +552,177 @@ class _SimpleSnackBarContentState extends State<_SimpleSnackBarContent> with Sin
           child: Text(
             widget.message,
             style: TextStyle(color: textColor),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// Warning snackbar content with yellow/orange background
+class _WarningSnackBarContent extends StatefulWidget {
+  final String message;
+  final Duration duration;
+  final VoidCallback? onDismiss;
+  final String? actionLabel;
+  final VoidCallback? onAction;
+
+  const _WarningSnackBarContent({
+    required this.message,
+    required this.duration,
+    this.onDismiss,
+    this.actionLabel,
+    this.onAction,
+  });
+
+  @override
+  State<_WarningSnackBarContent> createState() => _WarningSnackBarContentState();
+}
+
+class _WarningSnackBarContentState extends State<_WarningSnackBarContent> with TickerProviderStateMixin {
+  late AnimationController _timerController;
+  late AnimationController _fadeController;
+  late AnimationController _timerBarFadeController;
+  bool _isHovering = false;
+  double _pausedAt = 0.0;
+
+  @override
+  void initState() {
+    super.initState();
+    _timerController = AnimationController(
+      vsync: this,
+      duration: widget.duration,
+    );
+
+    _fadeController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 250),
+      value: 0.0,
+    );
+
+    _timerBarFadeController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 200),
+      value: 1.0,
+    );
+
+    // Fade in
+    _fadeController.forward();
+
+    _timerController.addStatusListener((status) {
+      if (status == AnimationStatus.completed && mounted) {
+        _dismissSnackBar();
+      }
+    });
+
+    _timerController.forward();
+  }
+
+  void _dismissSnackBar() {
+    widget.onDismiss?.call();
+    _fadeController.reverse().then((_) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).hideCurrentSnackBar(reason: SnackBarClosedReason.timeout);
+      }
+    });
+  }
+
+  @override
+  void dispose() {
+    _timerController.dispose();
+    _fadeController.dispose();
+    _timerBarFadeController.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
+    // Warning colors: yellow/orange background
+    final bgColor = isDark ? Colors.orange.shade900 : Colors.orange.shade100;
+    final textColor = isDark ? Colors.orange.shade50 : Colors.orange.shade900;
+    final timerBarColor = isDark ? Colors.orange.shade300 : Colors.orange.shade700;
+
+    return FadeTransition(
+      opacity: _fadeController,
+      child: MouseRegion(
+        onEnter: (_) {
+          setState(() => _isHovering = true);
+          _timerController.stop();
+          _timerBarFadeController.reverse();
+          _pausedAt = _timerController.value;
+        },
+        onExit: (_) {
+          setState(() => _isHovering = false);
+          _timerBarFadeController.forward();
+          if (_timerController.status != AnimationStatus.completed) {
+            // Add half of the used time back
+            final timeToAdd = _pausedAt * 0.5;
+            final newStart = (_pausedAt - timeToAdd).clamp(0.0, 1.0);
+            _timerController.forward(from: newStart);
+          }
+        },
+        child: Material(
+          color: bgColor,
+          elevation: 6,
+          borderRadius: BorderRadius.circular(4),
+          clipBehavior: Clip.antiAlias,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              // Timer bar at the very top edge with fade animation
+              AnimatedBuilder(
+                animation: Listenable.merge([_timerController, _timerBarFadeController]),
+                builder: (context, child) {
+                  return FadeTransition(
+                    opacity: _timerBarFadeController,
+                    child: SizedBox(
+                      height: 4,
+                      child: Align(
+                        alignment: Alignment.centerLeft,
+                        child: FractionallySizedBox(
+                          widthFactor: _timerController.value,
+                          child: Container(
+                            color: timerBarColor,
+                          ),
+                        ),
+                      ),
+                    ),
+                  );
+                },
+              ),
+              // Content row
+              Padding(
+                padding: const EdgeInsets.fromLTRB(16, 10, 16, 10),
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: AdaptiveTooltipText(
+                        widget.message,
+                        maxLines: 2,
+                        style: TextStyle(color: textColor),
+                      ),
+                    ),
+                    if (widget.actionLabel != null && widget.onAction != null) ...[
+                      const SizedBox(width: 8),
+                      TextButton(
+                        onPressed: () {
+                          widget.onAction?.call();
+                          ScaffoldMessenger.of(context).hideCurrentSnackBar();
+                        },
+                        style: TextButton.styleFrom(
+                          foregroundColor: textColor,
+                          padding: const EdgeInsets.symmetric(horizontal: 8),
+                        ),
+                        child: Text(widget.actionLabel!),
+                      ),
+                    ],
+                  ],
+                ),
+              ),
+            ],
           ),
         ),
       ),

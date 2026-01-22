@@ -6,7 +6,9 @@ import 'package:url_launcher/url_launcher.dart';
 import '../../data/models/contributor.dart';
 import '../../data/models/contributor_detail.dart';
 import '../../data/models/preferences.dart';
+import '../../data/models/watchlist_entry.dart';
 import '../../providers/providers.dart';
+import '../common/snackbar_utils.dart';
 import 'movie_detail_screen.dart';
 import 'tv_show_detail_screen.dart';
 import 'tv_episode_detail_screen.dart';
@@ -715,9 +717,41 @@ class _ContributorDetailScreenState extends ConsumerState<ContributorDetailScree
     }
   }
 
-  void _onAddToWatchlist(Work work) {
-    // TODO: Add work to watchlist
-    debugPrint('Add to watchlist: ${work.title}');
+  void _onAddToWatchlist(Work work) async {
+    final watchlistLogic = ref.read(watchlistLogicProvider);
+    
+    try {
+      await watchlistLogic.addWorkToWatchlist(
+        tmdbId: work.tmdbId,
+        type: work.type == WorkType.movie ? WorkType.movie : WorkType.tvShow,
+        title: work.title,
+        posterPath: work.posterPath,
+        releaseDate: work.originalReleaseDate != null 
+          ? DateTime.tryParse(work.originalReleaseDate!) 
+          : null,
+        releaseType: work.originalReleaseType == 'theatrical' 
+          ? ReleaseType.theatrical 
+          : ReleaseType.streaming,
+      );
+      
+      ref.invalidate(watchlistEntriesProvider);
+      
+      if (mounted) {
+        showSimpleSnackBar(
+          context,
+          '${work.title} added to watchlist',
+          duration: const Duration(seconds: 3),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        showSimpleSnackBar(
+          context,
+          'Failed to add to watchlist: $e',
+          duration: const Duration(seconds: 3),
+        );
+      }
+    }
   }
 
   Widget _buildSection({

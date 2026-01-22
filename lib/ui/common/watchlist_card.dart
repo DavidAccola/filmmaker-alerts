@@ -167,11 +167,11 @@ class _WatchlistCardState extends ConsumerState<WatchlistCard> {
                           },
                           itemBuilder: (context) {
                             if (entry.isSnoozed) {
-                              // Snoozed menu: Unfreeze, Did Not Finish, Delete
+                              // Hidden menu: Unhide, Did Not Finish, Delete
                               return [
                                 const PopupMenuItem(
                                   value: 'snooze',
-                                  child: Text('Unfreeze'),
+                                  child: Text('Unhide'),
                                 ),
                                 const PopupMenuItem(
                                   value: 'dnf',
@@ -183,7 +183,7 @@ class _WatchlistCardState extends ConsumerState<WatchlistCard> {
                                 ),
                               ];
                             } else {
-                              // Main watchlist menu: Pause/Unpause Notifications, Freezer, Delete
+                              // Main watchlist menu: Pause/Unpause Notifications, Hide, Delete
                               return [
                                 PopupMenuItem(
                                   value: 'toggle_notifications',
@@ -191,7 +191,7 @@ class _WatchlistCardState extends ConsumerState<WatchlistCard> {
                                 ),
                                 const PopupMenuItem(
                                   value: 'snooze',
-                                  child: Text('Freezer'),
+                                  child: Text('Hide'),
                                 ),
                                 const PopupMenuItem(
                                   value: 'delete',
@@ -223,7 +223,7 @@ class _WatchlistCardState extends ConsumerState<WatchlistCard> {
                         ),
                       ),
 
-                    // DNF indicator (in freezer)
+                    // DNF indicator (when hidden)
                     if (entry.isSnoozed && entry.statusRecords.any((r) => r.status == WatchStatus.dnf))
                       Positioned(
                         top: 8,
@@ -372,8 +372,8 @@ class _WatchlistCardState extends ConsumerState<WatchlistCard> {
     if (currentlyMarked) {
       // Show prompt for movies or entire shows
       final result = await showWantToWatchUnmarkPrompt(context, widget.entry.title);
-      if (result == 'freezer') {
-        // First remove Want to watch status, then freeze
+      if (result == 'hide') {
+        // First remove Want to watch status, then hide
         final logic = ref.read(watchlistLogicProvider);
         await logic.removeStatusFromWork(
           widget.entry.tmdbId,

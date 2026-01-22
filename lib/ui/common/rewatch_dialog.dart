@@ -165,6 +165,12 @@ class _ReWatchDialogState extends State<ReWatchDialog> {
   }
 
   void _removeWatch(int index) {
+    if (_watchDates.length == 1) {
+      // If removing the only watch, return empty list to signal "unmark as watched"
+      Navigator.of(context).pop([]);
+      return;
+    }
+    
     setState(() {
       _watchDates.removeAt(index);
     });

@@ -10,7 +10,12 @@ import '../common/snackbar_utils.dart';
 import 'search_results_screen.dart';
 
 class AddContributorScreen extends ConsumerStatefulWidget {
-  const AddContributorScreen({super.key});
+  final ContributorType? initialType;
+  
+  const AddContributorScreen({
+    super.key,
+    this.initialType,
+  });
 
   @override
   ConsumerState<AddContributorScreen> createState() => _AddContributorScreenState();
@@ -20,7 +25,7 @@ class _AddContributorScreenState extends ConsumerState<AddContributorScreen> {
   final TextEditingController _searchController = TextEditingController();
   final FocusNode _focusNode = FocusNode();
   Timer? _debounce;
-  ContributorType _selectedType = ContributorType.person;
+  late ContributorType _selectedType;
   List<Contributor> _results = [];
   int _totalPages = 0;
   int _totalResults = 0;
@@ -30,6 +35,7 @@ class _AddContributorScreenState extends ConsumerState<AddContributorScreen> {
   @override
   void initState() {
     super.initState();
+    _selectedType = widget.initialType ?? ContributorType.person;
     _loadHint();
   }
 

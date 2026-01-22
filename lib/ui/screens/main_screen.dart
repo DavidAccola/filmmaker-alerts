@@ -13,7 +13,6 @@ import 'history_screen.dart';
 import 'home_screen.dart';
 import 'debug_screen.dart';
 import 'settings_screen.dart';
-import 'watchlist_screen.dart';
 import 'package:flutter/foundation.dart';
 
 class MainScreen extends ConsumerStatefulWidget {
@@ -28,7 +27,6 @@ class _MainScreenState extends ConsumerState<MainScreen> with WindowListener {
 
   final List<Widget> _screens = const [
     HomeScreen(),
-    WatchlistScreen(),
     HistoryScreen(),
     DebugScreen(),
     SettingsScreen(),
@@ -213,11 +211,6 @@ class _MainScreenState extends ConsumerState<MainScreen> with WindowListener {
               icon: Icon(Icons.home_outlined),
               selectedIcon: Icon(Icons.home),
               label: 'Home',
-            ),
-            NavigationDestination(
-              icon: Icon(Icons.bookmark_border),
-              selectedIcon: Icon(Icons.bookmark),
-              label: 'Watchlist',
             ),
             NavigationDestination(
               icon: Icon(Icons.history_outlined),

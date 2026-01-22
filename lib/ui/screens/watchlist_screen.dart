@@ -1,12 +1,14 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../data/models/watchlist_entry.dart';
+import '../../data/models/contributor.dart';
 import '../../data/models/contributor_detail.dart';
 import '../../data/models/status_record.dart';
 import '../../providers/providers.dart';
 import '../common/watchlist_card.dart';
 import '../common/snackbar_utils.dart';
 import '../common/rewatch_dialog.dart';
+import 'add_contributor_screen.dart';
 
 enum WatchlistSortOption {
   addOrder,
@@ -34,6 +36,9 @@ class _WatchlistScreenState extends ConsumerState<WatchlistScreen>
     WatchStatus.watched,
     WatchStatus.dnf,
   };
+  
+  // Show hidden items toggle
+  bool _showHidden = false;
 
   // Sort state
   WatchlistSortOption _sortOption = WatchlistSortOption.addOrder;
@@ -82,77 +87,284 @@ class _WatchlistScreenState extends ConsumerState<WatchlistScreen>
           });
         }
 
-        return Scaffold(
-          appBar: AppBar(
-            title: const Text('Watchlist'),
-            bottom: TabBar(
-              controller: _tabController,
-              tabs: [
-                const Tab(text: 'Watchlist'),
-                if (_hasFrozenItems)
-                  const Tab(text: 'Freezer'),
-              ],
-            ),
-            actions: [
-              // Add test data button (for testing)
-              IconButton(
-                icon: const Icon(Icons.add),
-                onPressed: _addTestData,
-                tooltip: 'Add Test Data',
-              ),
-              // Filter button
-              IconButton(
-                icon: Badge(
-                  isLabelVisible: _selectedFilters.length < 4,
-                  label: Text('${_selectedFilters.length}'),
-                  child: const Icon(Icons.filter_list),
-                ),
-                onPressed: _showFilterDialog,
-                tooltip: 'Filter',
-              ),
-              // Sort button
-              PopupMenuButton<WatchlistSortOption>(
-                icon: const Icon(Icons.sort),
-                tooltip: 'Sort',
-                onSelected: (option) {
-                  setState(() {
-                    _sortOption = option;
-                  });
-                  
-                  // Show hint about drag-and-drop when user rank is selected
-                  if (option == WatchlistSortOption.userRank && mounted) {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(
-                        content: const Text('Drag and drop cards to reorder'),
-                        duration: const Duration(seconds: 2),
-                        behavior: SnackBarBehavior.floating,
+        // Calculate filtered count for badge
+        final activeEntries = entries.where((e) => !e.isSnoozed).toList();
+        final hiddenEntries = entries.where((e) => e.isSnoozed).toList();
+        
+        // Count items filtered out by status (using same logic as dialog)
+        int statusFilteredCount = 0;
+        for (final status in [WatchStatus.wantToWatch, WatchStatus.inProgress, WatchStatus.watched, WatchStatus.dnf]) {
+          if (!_selectedFilters.contains(status)) {
+            // Count items that have this status but aren't currently visible
+            // because this filter is off AND they don't have any other selected status
+            statusFilteredCount += activeEntries.where((entry) {
+              final hasThisStatus = entry.statusRecords.any((r) => r.status == status);
+              if (!hasThisStatus) return false;
+              
+              // Check if they have any other selected status
+              final hasOtherSelectedStatus = entry.statusRecords.any((r) => 
+                r.status != status && _selectedFilters.contains(r.status));
+              
+              return !hasOtherSelectedStatus;
+            }).length;
+          }
+        }
+        
+        // Add hidden count if not showing hidden
+        final hiddenCount = _showHidden ? 0 : hiddenEntries.length;
+        final filteredOutCount = statusFilteredCount + hiddenCount;
+
+        return Column(
+          children: [
+            // Toolbar with filter and sort options
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+              child: Row(
+                children: [
+                  // Add test data button (for testing)
+                  IconButton(
+                    icon: const Icon(Icons.add),
+                    onPressed: _addTestData,
+                    tooltip: 'Add Test Data',
+                  ),
+                  const Spacer(),
+                  // Filter button with dropdown menu
+                  PopupMenuButton<String>(
+                    icon: Badge(
+                      isLabelVisible: filteredOutCount > 0,
+                      label: Text('$filteredOutCount'),
+                      child: const Icon(Icons.filter_list),
+                    ),
+                    tooltip: 'Filter',
+                    onSelected: (value) {
+                      setState(() {
+                        if (value == 'wantToWatch') {
+                          if (_selectedFilters.contains(WatchStatus.wantToWatch)) {
+                            if (_selectedFilters.length > 1) {
+                              _selectedFilters.remove(WatchStatus.wantToWatch);
+                            }
+                          } else {
+                            _selectedFilters.add(WatchStatus.wantToWatch);
+                          }
+                        } else if (value == 'inProgress') {
+                          if (_selectedFilters.contains(WatchStatus.inProgress)) {
+                            if (_selectedFilters.length > 1) {
+                              _selectedFilters.remove(WatchStatus.inProgress);
+                            }
+                          } else {
+                            _selectedFilters.add(WatchStatus.inProgress);
+                          }
+                        } else if (value == 'watched') {
+                          if (_selectedFilters.contains(WatchStatus.watched)) {
+                            if (_selectedFilters.length > 1) {
+                              _selectedFilters.remove(WatchStatus.watched);
+                            }
+                          } else {
+                            _selectedFilters.add(WatchStatus.watched);
+                          }
+                        } else if (value == 'dnf') {
+                          if (_selectedFilters.contains(WatchStatus.dnf)) {
+                            if (_selectedFilters.length > 1) {
+                              _selectedFilters.remove(WatchStatus.dnf);
+                            }
+                          } else {
+                            _selectedFilters.add(WatchStatus.dnf);
+                          }
+                        } else if (value == 'showHidden') {
+                          _showHidden = !_showHidden;
+                        }
+                      });
+                    },
+                    itemBuilder: (context) {
+                      // Calculate counts for each filter option
+                      final activeEntries = entries.where((e) => !e.isSnoozed).toList();
+                      final hiddenEntries = entries.where((e) => e.isSnoozed).toList();
+                      
+                      int countForStatus(WatchStatus status) {
+                        if (_selectedFilters.contains(status)) {
+                          return 0;
+                        }
+                        
+                        // For "Want to Watch", also count items with no status records
+                        if (status == WatchStatus.wantToWatch) {
+                          return activeEntries.where((entry) {
+                            // Items with no status are treated as "Want to Watch"
+                            if (entry.statusRecords.isEmpty) {
+                              return true;
+                            }
+                            
+                            final hasThisStatus = entry.statusRecords.any((r) => r.status == status);
+                            if (!hasThisStatus) return false;
+                            final hasOtherSelectedStatus = entry.statusRecords.any((r) => 
+                              r.status != status && _selectedFilters.contains(r.status));
+                            return !hasOtherSelectedStatus;
+                          }).length;
+                        }
+                        
+                        return activeEntries.where((entry) {
+                          final hasThisStatus = entry.statusRecords.any((r) => r.status == status);
+                          if (!hasThisStatus) return false;
+                          final hasOtherSelectedStatus = entry.statusRecords.any((r) => 
+                            r.status != status && _selectedFilters.contains(r.status));
+                          return !hasOtherSelectedStatus;
+                        }).length;
+                      }
+                      
+                      final wantToWatchCount = countForStatus(WatchStatus.wantToWatch);
+                      final inProgressCount = countForStatus(WatchStatus.inProgress);
+                      final watchedCount = countForStatus(WatchStatus.watched);
+                      final dnfCount = countForStatus(WatchStatus.dnf);
+                      final hiddenCount = _showHidden ? 0 : hiddenEntries.length;
+                      
+                      return [
+                        CheckedPopupMenuItem(
+                          value: 'wantToWatch',
+                          checked: _selectedFilters.contains(WatchStatus.wantToWatch),
+                          child: Row(
+                            children: [
+                              const Text('Want to watch'),
+                              if (wantToWatchCount > 0) ...[
+                                const Spacer(),
+                                Text(
+                                  '+$wantToWatchCount',
+                                  style: TextStyle(
+                                    color: Theme.of(context).colorScheme.primary,
+                                    fontWeight: FontWeight.bold,
+                                    fontSize: 12,
+                                  ),
+                                ),
+                              ],
+                            ],
+                          ),
+                        ),
+                        CheckedPopupMenuItem(
+                          value: 'inProgress',
+                          checked: _selectedFilters.contains(WatchStatus.inProgress),
+                          child: Row(
+                            children: [
+                              const Text('In progress'),
+                              if (inProgressCount > 0) ...[
+                                const Spacer(),
+                                Text(
+                                  '+$inProgressCount',
+                                  style: TextStyle(
+                                    color: Theme.of(context).colorScheme.primary,
+                                    fontWeight: FontWeight.bold,
+                                    fontSize: 12,
+                                  ),
+                                ),
+                              ],
+                            ],
+                          ),
+                        ),
+                        CheckedPopupMenuItem(
+                          value: 'watched',
+                          checked: _selectedFilters.contains(WatchStatus.watched),
+                          child: Row(
+                            children: [
+                              const Text('Watched'),
+                              if (watchedCount > 0) ...[
+                                const Spacer(),
+                                Text(
+                                  '+$watchedCount',
+                                  style: TextStyle(
+                                    color: Theme.of(context).colorScheme.primary,
+                                    fontWeight: FontWeight.bold,
+                                    fontSize: 12,
+                                  ),
+                                ),
+                              ],
+                            ],
+                          ),
+                        ),
+                        CheckedPopupMenuItem(
+                          value: 'dnf',
+                          checked: _selectedFilters.contains(WatchStatus.dnf),
+                          child: Row(
+                            children: [
+                              const Text('Did not finish'),
+                              if (dnfCount > 0) ...[
+                                const Spacer(),
+                                Text(
+                                  '+$dnfCount',
+                                  style: TextStyle(
+                                    color: Theme.of(context).colorScheme.primary,
+                                    fontWeight: FontWeight.bold,
+                                    fontSize: 12,
+                                  ),
+                                ),
+                              ],
+                            ],
+                          ),
+                        ),
+                        const PopupMenuDivider(),
+                        CheckedPopupMenuItem(
+                          value: 'showHidden',
+                          checked: _showHidden,
+                          child: Row(
+                            children: [
+                              const Text('Show Hidden'),
+                              if (hiddenCount > 0) ...[
+                                const Spacer(),
+                                Text(
+                                  '+$hiddenCount',
+                                  style: TextStyle(
+                                    color: Theme.of(context).colorScheme.primary,
+                                    fontWeight: FontWeight.bold,
+                                    fontSize: 12,
+                                  ),
+                                ),
+                              ],
+                            ],
+                          ),
+                        ),
+                      ];
+                    },
+                  ),
+                  // Sort button
+                  PopupMenuButton<WatchlistSortOption>(
+                    icon: const Icon(Icons.sort),
+                    tooltip: 'Sort',
+                    onSelected: (option) {
+                      setState(() {
+                        _sortOption = option;
+                      });
+                      
+                      // Show hint about drag-and-drop when user rank is selected
+                      if (option == WatchlistSortOption.userRank && mounted) {
+                        showSimpleSnackBar(
+                          context,
+                          'Drag and drop cards to reorder',
+                          duration: const Duration(seconds: 2),
+                        );
+                      }
+                    },
+                    itemBuilder: (context) => [
+                      const PopupMenuItem(
+                        value: WatchlistSortOption.addOrder,
+                        child: Text('Add Order'),
                       ),
-                    );
-                  }
-                },
-                itemBuilder: (context) => [
-                  const PopupMenuItem(
-                    value: WatchlistSortOption.addOrder,
-                    child: Text('Add Order'),
-                  ),
-                  const PopupMenuItem(
-                    value: WatchlistSortOption.userRank,
-                    child: Text('User Rank'),
-                  ),
-                  const PopupMenuItem(
-                    value: WatchlistSortOption.alphabetical,
-                    child: Text('Alphabetical'),
-                  ),
-                  const PopupMenuItem(
-                    value: WatchlistSortOption.releaseDate,
-                    child: Text('Release Date'),
+                      const PopupMenuItem(
+                        value: WatchlistSortOption.userRank,
+                        child: Text('User Rank'),
+                      ),
+                      const PopupMenuItem(
+                        value: WatchlistSortOption.alphabetical,
+                        child: Text('Alphabetical'),
+                      ),
+                      const PopupMenuItem(
+                        value: WatchlistSortOption.releaseDate,
+                        child: Text('Release Date'),
+                      ),
+                    ],
                   ),
                 ],
               ),
-            ],
-          ),
-          body: _tabController.length > 0
-            ? TabBarView(
+            ),
+            
+            // Main content
+            Expanded(
+              child: TabBarView(
                 controller: _tabController,
                 children: [
                   // Watchlist tab
@@ -160,10 +372,24 @@ class _WatchlistScreenState extends ConsumerState<WatchlistScreen>
                     data: (entries) {
                       final theme = Theme.of(context);
                       final activeEntries = entries.where((e) => !e.isSnoozed).toList();
+                      final hiddenEntries = entries.where((e) => e.isSnoozed).toList();
                       final filteredEntries = _filterEntries(activeEntries);
                       final sortedEntries = _sortEntries(filteredEntries);
+                      final sortedHiddenEntries = _showHidden ? _sortEntries(hiddenEntries) : <WatchlistEntry>[];
 
-                      if (sortedEntries.isEmpty) {
+                      if (sortedEntries.isEmpty && sortedHiddenEntries.isEmpty) {
+                        // Check if there are truly no items at all (including hidden)
+                        final totalItems = entries.length;
+                        
+                        debugPrint('[WatchlistScreen] Empty state debug:');
+                        debugPrint('[WatchlistScreen]   entries.length: $totalItems');
+                        debugPrint('[WatchlistScreen]   activeEntries.length: ${activeEntries.length}');
+                        debugPrint('[WatchlistScreen]   hiddenEntries.length: ${hiddenEntries.length}');
+                        debugPrint('[WatchlistScreen]   sortedEntries.length: ${sortedEntries.length}');
+                        debugPrint('[WatchlistScreen]   sortedHiddenEntries.length: ${sortedHiddenEntries.length}');
+                        debugPrint('[WatchlistScreen]   _selectedFilters: $_selectedFilters');
+                        debugPrint('[WatchlistScreen]   _showHidden: $_showHidden');
+                        
                         return Center(
                           child: Column(
                             mainAxisAlignment: MainAxisAlignment.center,
@@ -175,14 +401,14 @@ class _WatchlistScreenState extends ConsumerState<WatchlistScreen>
                               ),
                               const SizedBox(height: 16),
                               Text(
-                                activeEntries.isEmpty 
-                                    ? 'No items in watchlist'
+                                totalItems == 0
+                                    ? 'Nothing followed yet'
                                     : 'No items match current filters',
                                 style: theme.textTheme.headlineSmall?.copyWith(
                                   color: theme.colorScheme.onSurfaceVariant,
                                 ),
                               ),
-                              if (activeEntries.isNotEmpty && _selectedFilters.length < 4) ...[
+                              if (totalItems > 0 && _selectedFilters.length < 4) ...[
                                 const SizedBox(height: 8),
                                 Text(
                                   'Try adjusting your filters to see more items',
@@ -204,19 +430,33 @@ class _WatchlistScreenState extends ConsumerState<WatchlistScreen>
                                   },
                                   child: const Text('Show All'),
                                 ),
-                              ] else if (activeEntries.isEmpty) ...[
+                              ] else if (totalItems == 0) ...[
                                 const SizedBox(height: 8),
                                 Text(
-                                  'Add movies and TV shows to get started',
+                                  'Go find something!',
                                   style: theme.textTheme.bodyMedium?.copyWith(
                                     color: theme.colorScheme.onSurfaceVariant,
                                   ),
                                 ),
                                 const SizedBox(height: 16),
                                 FilledButton.icon(
-                                  onPressed: _addTestData,
-                                  icon: const Icon(Icons.add),
-                                  label: const Text('Add Test Data'),
+                                  onPressed: () async {
+                                    // Navigate to search screen with Movie type pre-selected
+                                    final result = await Navigator.push(
+                                      context,
+                                      MaterialPageRoute(
+                                        builder: (_) => const AddContributorScreen(
+                                          initialType: ContributorType.movie,
+                                        ),
+                                      ),
+                                    );
+                                    // Handle result if needed
+                                    if (result != null && mounted) {
+                                      ref.invalidate(watchlistEntriesProvider);
+                                    }
+                                  },
+                                  icon: const Icon(Icons.search),
+                                  label: const Text('Find Something'),
                                 ),
                               ],
                             ],
@@ -285,7 +525,7 @@ class _WatchlistScreenState extends ConsumerState<WatchlistScreen>
                                                   // TODO: Navigate to detail screen
                                                 },
                                                 onDelete: () => _handleDelete(entry),
-                                                onSnooze: () => _handleSnooze(entry),
+                                                onSnooze: () => _handleHide(entry),
                                                 onToggleNotificationSnooze: () =>
                                                     _handleToggleNotificationSnooze(entry),
                                                 onStatusChanged: (status) =>
@@ -302,34 +542,113 @@ class _WatchlistScreenState extends ConsumerState<WatchlistScreen>
                                       );
                                     },
                                   )
-                                : GridView.builder(
-                                    padding: const EdgeInsets.all(16),
-                                    gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
-                                      maxCrossAxisExtent: 200,
-                                      childAspectRatio: 0.48,
-                                      crossAxisSpacing: 16,
-                                      mainAxisSpacing: 16,
-                                    ),
-                                    itemCount: sortedEntries.length,
-                                    itemBuilder: (context, index) {
-                                      final entry = sortedEntries[index];
-                                      return AnimatedSwitcher(
-                                        duration: const Duration(milliseconds: 300),
-                                        child: WatchlistCard(
-                                          key: ValueKey(entry.uniqueKey),
-                                          entry: entry,
-                                          onTap: () {
-                                            // TODO: Navigate to detail screen
-                                          },
-                                          onDelete: () => _handleDelete(entry),
-                                          onSnooze: () => _handleSnooze(entry),
-                                          onToggleNotificationSnooze: () =>
-                                              _handleToggleNotificationSnooze(entry),
-                                          onStatusChanged: (status) =>
-                                              _handleStatusChanged(entry, status),
+                                : CustomScrollView(
+                                    slivers: [
+                                      // Active items grid
+                                      SliverPadding(
+                                        padding: const EdgeInsets.all(16),
+                                        sliver: SliverGrid(
+                                          gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
+                                            maxCrossAxisExtent: 200,
+                                            childAspectRatio: 0.48,
+                                            crossAxisSpacing: 16,
+                                            mainAxisSpacing: 16,
+                                          ),
+                                          delegate: SliverChildBuilderDelegate(
+                                            (context, index) {
+                                              final entry = sortedEntries[index];
+                                              return AnimatedSwitcher(
+                                                duration: const Duration(milliseconds: 300),
+                                                child: WatchlistCard(
+                                                  key: ValueKey(entry.uniqueKey),
+                                                  entry: entry,
+                                                  onTap: () {
+                                                    // TODO: Navigate to detail screen
+                                                  },
+                                                  onDelete: () => _handleDelete(entry),
+                                                  onSnooze: () => _handleHide(entry),
+                                                  onToggleNotificationSnooze: () =>
+                                                      _handleToggleNotificationSnooze(entry),
+                                                  onStatusChanged: (status) =>
+                                                      _handleStatusChanged(entry, status),
+                                                ),
+                                              );
+                                            },
+                                            childCount: sortedEntries.length,
+                                          ),
                                         ),
-                                      );
-                                    },
+                                      ),
+                                      
+                                      // Hidden section header (if showing hidden items)
+                                      if (sortedHiddenEntries.isNotEmpty) ...[
+                                        SliverToBoxAdapter(
+                                          child: Padding(
+                                            padding: const EdgeInsets.fromLTRB(16, 24, 16, 8),
+                                            child: Row(
+                                              children: [
+                                                Expanded(
+                                                  child: Divider(
+                                                    color: theme.colorScheme.outlineVariant,
+                                                  ),
+                                                ),
+                                                Padding(
+                                                  padding: const EdgeInsets.symmetric(horizontal: 16),
+                                                  child: Text(
+                                                    'HIDDEN',
+                                                    style: theme.textTheme.labelMedium?.copyWith(
+                                                      color: theme.colorScheme.onSurfaceVariant,
+                                                    ),
+                                                  ),
+                                                ),
+                                                Expanded(
+                                                  child: Divider(
+                                                    color: theme.colorScheme.outlineVariant,
+                                                  ),
+                                                ),
+                                              ],
+                                            ),
+                                          ),
+                                        ),
+                                        
+                                        // Hidden items grid
+                                        SliverPadding(
+                                          padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+                                          sliver: SliverGrid(
+                                            gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
+                                              maxCrossAxisExtent: 200,
+                                              childAspectRatio: 0.48,
+                                              crossAxisSpacing: 16,
+                                              mainAxisSpacing: 16,
+                                            ),
+                                            delegate: SliverChildBuilderDelegate(
+                                              (context, index) {
+                                                final entry = sortedHiddenEntries[index];
+                                                return Opacity(
+                                                  opacity: 0.5,
+                                                  child: AnimatedSwitcher(
+                                                    duration: const Duration(milliseconds: 300),
+                                                    child: WatchlistCard(
+                                                      key: ValueKey(entry.uniqueKey),
+                                                      entry: entry,
+                                                      onTap: () {
+                                                        // TODO: Navigate to detail screen
+                                                      },
+                                                      onDelete: () => _handleDelete(entry),
+                                                      onSnooze: () => _handleUnhide(entry),
+                                                      onToggleNotificationSnooze: () =>
+                                                          _handleToggleNotificationSnooze(entry),
+                                                      onStatusChanged: (status) =>
+                                                          _handleStatusChanged(entry, status),
+                                                    ),
+                                                  ),
+                                                );
+                                              },
+                                              childCount: sortedHiddenEntries.length,
+                                            ),
+                                          ),
+                                        ),
+                                      ],
+                                    ],
                                   ),
                           ),
                         ],
@@ -380,66 +699,46 @@ class _WatchlistScreenState extends ConsumerState<WatchlistScreen>
                       ),
                     ),
                   ),
-
-                  // Freezer tab (only shown if frozen items exist)
-                  if (_hasFrozenItems)
-                    watchlistAsync.when(
-                      data: (entries) {
-                        final frozenEntries = entries.where((e) => e.isSnoozed).toList();
-
-                        return GridView.builder(
-                          padding: const EdgeInsets.all(16),
-                          gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
-                            maxCrossAxisExtent: 200,
-                            childAspectRatio: 0.48,
-                            crossAxisSpacing: 16,
-                            mainAxisSpacing: 16,
-                          ),
-                          itemCount: frozenEntries.length,
-                          itemBuilder: (context, index) {
-                            final entry = frozenEntries[index];
-                            return WatchlistCard(
-                              entry: entry,
-                              onTap: () {
-                                // TODO: Navigate to detail screen
-                              },
-                              onDelete: () => _handleDelete(entry),
-                              onSnooze: () => _handleUnsnooze(entry),
-                              onToggleNotificationSnooze: () =>
-                                  _handleToggleNotificationSnooze(entry),
-                              onStatusChanged: (status) =>
-                                  _handleStatusChanged(entry, status),
-                            );
-                          },
-                        );
-                      },
-                      loading: () => const Center(child: CircularProgressIndicator()),
-                      error: (error, stack) => Center(
-                        child: Text('Error: $error'),
-                      ),
-                    ),
                 ],
-              )
-            : const Center(child: CircularProgressIndicator()),
+              ),
+            ),
+          ],
         );
       },
-      loading: () => const Scaffold(
-        body: Center(child: CircularProgressIndicator()),
-      ),
-      error: (error, stack) => Scaffold(
-        body: Center(
-          child: Text('Error: $error'),
-        ),
+      loading: () => const Center(child: CircularProgressIndicator()),
+      error: (error, stack) => Center(
+        child: Text('Error: $error'),
       ),
     );
   }
 
   List<WatchlistEntry> _filterEntries(List<WatchlistEntry> entries) {
-    return entries.where((entry) {
-      // Check if entry has any of the selected statuses
-      return entry.statusRecords.any((record) =>
+    debugPrint('[WatchlistScreen] _filterEntries called with ${entries.length} entries');
+    
+    final filtered = entries.where((entry) {
+      // Items with no status records are treated as "Want to Watch"
+      if (entry.statusRecords.isEmpty) {
+        final matches = _selectedFilters.contains(WatchStatus.wantToWatch);
+        if (!matches) {
+          debugPrint('[WatchlistScreen]   Entry "${entry.title}" filtered out (no status, treated as Want to Watch)');
+        }
+        return matches;
+      }
+      
+      final hasMatchingStatus = entry.statusRecords.any((record) =>
           _selectedFilters.contains(record.status));
+      
+      if (!hasMatchingStatus) {
+        debugPrint('[WatchlistScreen]   Entry "${entry.title}" filtered out:');
+        debugPrint('[WatchlistScreen]     statusRecords: ${entry.statusRecords.map((r) => r.status).toList()}');
+        debugPrint('[WatchlistScreen]     selectedFilters: $_selectedFilters');
+      }
+      
+      return hasMatchingStatus;
     }).toList();
+    
+    debugPrint('[WatchlistScreen] _filterEntries returning ${filtered.length} entries');
+    return filtered;
   }
 
   List<WatchlistEntry> _sortEntries(List<WatchlistEntry> entries) {
@@ -478,93 +777,6 @@ class _WatchlistScreenState extends ConsumerState<WatchlistScreen>
     }
 
     return sorted;
-  }
-
-  void _showFilterDialog() {
-    showDialog(
-      context: context,
-      builder: (context) {
-        return StatefulBuilder(
-          builder: (context, setState) {
-            return AlertDialog(
-              title: const Text('Filter by Status'),
-              content: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  CheckboxListTile(
-                    title: const Text('Want to watch'),
-                    value: _selectedFilters.contains(WatchStatus.wantToWatch),
-                    onChanged: (value) {
-                      setState(() {
-                        if (value == true) {
-                          _selectedFilters.add(WatchStatus.wantToWatch);
-                        } else if (_selectedFilters.length > 1) {
-                          _selectedFilters.remove(WatchStatus.wantToWatch);
-                        }
-                      });
-                    },
-                  ),
-                  CheckboxListTile(
-                    title: const Text('In progress'),
-                    value: _selectedFilters.contains(WatchStatus.inProgress),
-                    onChanged: (value) {
-                      setState(() {
-                        if (value == true) {
-                          _selectedFilters.add(WatchStatus.inProgress);
-                        } else if (_selectedFilters.length > 1) {
-                          _selectedFilters.remove(WatchStatus.inProgress);
-                        }
-                      });
-                    },
-                  ),
-                  CheckboxListTile(
-                    title: const Text('Watched'),
-                    value: _selectedFilters.contains(WatchStatus.watched),
-                    onChanged: (value) {
-                      setState(() {
-                        if (value == true) {
-                          _selectedFilters.add(WatchStatus.watched);
-                        } else if (_selectedFilters.length > 1) {
-                          _selectedFilters.remove(WatchStatus.watched);
-                        }
-                      });
-                    },
-                  ),
-                  CheckboxListTile(
-                    title: const Text('Did not finish'),
-                    value: _selectedFilters.contains(WatchStatus.dnf),
-                    onChanged: (value) {
-                      setState(() {
-                        if (value == true) {
-                          _selectedFilters.add(WatchStatus.dnf);
-                        } else if (_selectedFilters.length > 1) {
-                          _selectedFilters.remove(WatchStatus.dnf);
-                        }
-                      });
-                    },
-                  ),
-                ],
-              ),
-              actions: [
-                TextButton(
-                  onPressed: () => Navigator.of(context).pop(),
-                  child: const Text('CANCEL'),
-                ),
-                FilledButton(
-                  onPressed: () {
-                    this.setState(() {
-                      // Update outer state
-                    });
-                    Navigator.of(context).pop();
-                  },
-                  child: const Text('APPLY'),
-                ),
-              ],
-            );
-          },
-        );
-      },
-    );
   }
 
   Future<void> _addTestData() async {
@@ -640,7 +852,7 @@ class _WatchlistScreenState extends ConsumerState<WatchlistScreen>
     ref.invalidate(watchlistEntriesProvider);
   }
 
-  Future<void> _handleSnooze(WatchlistEntry entry) async {
+  Future<void> _handleHide(WatchlistEntry entry) async {
     final logic = ref.read(watchlistLogicProvider);
     await logic.setSnoozed(entry.tmdbId, entry.type, true);
     
@@ -649,7 +861,7 @@ class _WatchlistScreenState extends ConsumerState<WatchlistScreen>
         context,
         entry.title,
         () async {
-          // Undo: Unsnooze
+          // Undo: Unhide
           await logic.setSnoozed(entry.tmdbId, entry.type, false);
           ref.invalidate(watchlistEntriesProvider);
         },
@@ -659,7 +871,7 @@ class _WatchlistScreenState extends ConsumerState<WatchlistScreen>
     ref.invalidate(watchlistEntriesProvider);
   }
 
-  Future<void> _handleUnsnooze(WatchlistEntry entry) async {
+  Future<void> _handleUnhide(WatchlistEntry entry) async {
     final logic = ref.read(watchlistLogicProvider);
     await logic.setSnoozed(entry.tmdbId, entry.type, false);
     ref.invalidate(watchlistEntriesProvider);
@@ -769,19 +981,33 @@ class _WatchlistScreenState extends ConsumerState<WatchlistScreen>
         );
 
         if (updatedDates != null) {
-          await logic.addStatusToWork(
-            entry.tmdbId,
-            entry.type,
-            status,
-            watchDates: updatedDates,
-          );
-          
-          if (mounted) {
-            showSimpleSnackBar(
-              context,
-              '${entry.title} marked as Watched (${updatedDates.length}x)',
-              duration: const Duration(seconds: 3),
+          if (updatedDates.isEmpty) {
+            // User deleted all watches - unmark as watched
+            await logic.removeStatusFromWork(entry.tmdbId, entry.type, status);
+            
+            if (mounted) {
+              showSimpleSnackBar(
+                context,
+                '${entry.title} unmarked as Watched',
+                duration: const Duration(seconds: 3),
+              );
+            }
+          } else {
+            // Update with new watch dates
+            await logic.addStatusToWork(
+              entry.tmdbId,
+              entry.type,
+              status,
+              watchDates: updatedDates,
             );
+            
+            if (mounted) {
+              showSimpleSnackBar(
+                context,
+                '${entry.title} marked as Watched${updatedDates.length > 1 ? ' (x${updatedDates.length})' : ''}',
+                duration: const Duration(seconds: 3),
+              );
+            }
           }
         }
       } else {

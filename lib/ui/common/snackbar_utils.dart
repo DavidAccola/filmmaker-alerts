@@ -446,8 +446,8 @@ Future<String?> showWantToWatchUnmarkPrompt(
         title: const Text('Which do you want to do?'),
         actions: [
           TextButton(
-            onPressed: () => Navigator.of(context).pop('freezer'),
-            child: const Text('FREEZER'),
+            onPressed: () => Navigator.of(context).pop('hide'),
+            child: const Text('HIDE'),
           ),
           TextButton(
             onPressed: () => Navigator.of(context).pop('delete'),

@@ -122,84 +122,6 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with TickerProviderStat
             ),
           ],
         ),
-        actions: [
-          // Display Settings Menu
-          prefsAsync.when(
-            data: (prefs) => PopupMenuButton<String>(
-              icon: const Icon(Icons.tune),
-              tooltip: 'Display Settings',
-              onSelected: (value) async {
-                final repo = ref.read(preferencesRepositoryProvider);
-                if (value == 'toggle_group') {
-                  prefs.groupByType = !(prefs.groupByType ?? true);
-                } else if (value == 'toggle_view') {
-                  prefs.useGridView = !(prefs.useGridView ?? true);
-                } else {
-                  prefs.homeSortOrder = value;
-                }
-                await repo.savePreferences(prefs);
-                ref.invalidate(preferencesProvider);
-              },
-              itemBuilder: (context) {
-                final currentSort = prefs.homeSortOrder ?? 'dateAdded';
-                final isGrouped = prefs.groupByType ?? true; // Default to true
-                final isGrid = prefs.useGridView ?? true;
-
-                return [
-                  PopupMenuItem(
-                    value: 'dateAdded',
-                    child: Row(
-                      children: [
-                        if (currentSort == 'dateAdded') const Icon(Icons.check, size: 18),
-                        const SizedBox(width: 8),
-                        const Text('Date Added'),
-                      ],
-                    ),
-                  ),
-                  PopupMenuItem(
-                    value: 'name',
-                    child: Row(
-                      children: [
-                        if (currentSort == 'name') const Icon(Icons.check, size: 18),
-                        const SizedBox(width: 8),
-                        const Text('Alphabetical'),
-                      ],
-                    ),
-                  ),
-                  PopupMenuItem(
-                    value: 'latestRelease',
-                    child: Row(
-                      children: [
-                        if (currentSort == 'latestRelease') const Icon(Icons.check, size: 18),
-                        const SizedBox(width: 8),
-                        const Text('Latest Release'),
-                      ],
-                    ),
-                  ),
-                  const PopupMenuDivider(),
-                  CheckedPopupMenuItem(
-                    value: 'toggle_group',
-                    checked: isGrouped,
-                    child: const Text('Group by Type'),
-                  ),
-                  const PopupMenuDivider(),
-                  PopupMenuItem(
-                    value: 'toggle_view',
-                    child: Row(
-                      children: [
-                        Icon(isGrid ? Icons.view_list : Icons.grid_view, size: 18),
-                        const SizedBox(width: 8),
-                        Text(isGrid ? 'Switch to Detail View' : 'Switch to Grid View'),
-                      ],
-                    ),
-                  ),
-                ];
-              },
-            ),
-            loading: () => const SizedBox.shrink(),
-            error: (_, __) => const SizedBox.shrink(),
-          ),
-        ],
         bottom: TabBar(
           controller: _tabController,
           tabs: const [
@@ -235,7 +157,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with TickerProviderStat
             controller: _tabController,
             children: [
               // People tab - only show person/company contributors
-              _buildContributorsList(peopleContributors, prefs),
+              _buildContributorsList(peopleContributors, prefs, prefsAsync),
               // Watchlist tab
               const WatchlistScreen(),
             ],
@@ -573,7 +495,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with TickerProviderStat
     });
   }
   
-  Widget _buildContributorsList(List<Contributor> contributors, Preferences prefs) {
+  Widget _buildContributorsList(List<Contributor> contributors, Preferences prefs, AsyncValue<Preferences> prefsAsync) {
     if (contributors.isEmpty) {
       return const Center(
         child: Text('No items in this category yet.'),
@@ -581,6 +503,100 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with TickerProviderStat
     }
 
     final sortedList = _sortContributors(contributors, prefs.homeSortOrder ?? 'dateAdded');
+
+    return Column(
+      children: [
+        // Display Settings button in top right
+        Align(
+          alignment: Alignment.topRight,
+          child: Padding(
+            padding: const EdgeInsets.all(8),
+            child: prefsAsync.when(
+              data: (prefs) => PopupMenuButton<String>(
+                icon: const Icon(Icons.tune),
+                tooltip: 'Display Settings',
+                onSelected: (value) async {
+                  final repo = ref.read(preferencesRepositoryProvider);
+                  if (value == 'toggle_group') {
+                    prefs.groupByType = !(prefs.groupByType ?? true);
+                  } else if (value == 'toggle_view') {
+                    prefs.useGridView = !(prefs.useGridView ?? true);
+                  } else {
+                    prefs.homeSortOrder = value;
+                  }
+                  await repo.savePreferences(prefs);
+                  ref.invalidate(preferencesProvider);
+                },
+                itemBuilder: (context) {
+                  final currentSort = prefs.homeSortOrder ?? 'dateAdded';
+                  final isGrouped = prefs.groupByType ?? true;
+                  final isGrid = prefs.useGridView ?? true;
+
+                  return [
+                    PopupMenuItem(
+                      value: 'dateAdded',
+                      child: Row(
+                        children: [
+                          if (currentSort == 'dateAdded') const Icon(Icons.check, size: 18),
+                          const SizedBox(width: 8),
+                          const Text('Date Added'),
+                        ],
+                      ),
+                    ),
+                    PopupMenuItem(
+                      value: 'name',
+                      child: Row(
+                        children: [
+                          if (currentSort == 'name') const Icon(Icons.check, size: 18),
+                          const SizedBox(width: 8),
+                          const Text('Alphabetical'),
+                        ],
+                      ),
+                    ),
+                    PopupMenuItem(
+                      value: 'latestRelease',
+                      child: Row(
+                        children: [
+                          if (currentSort == 'latestRelease') const Icon(Icons.check, size: 18),
+                          const SizedBox(width: 8),
+                          const Text('Latest Release'),
+                        ],
+                      ),
+                    ),
+                    const PopupMenuDivider(),
+                    CheckedPopupMenuItem(
+                      value: 'toggle_group',
+                      checked: isGrouped,
+                      child: const Text('Group by Type'),
+                    ),
+                    const PopupMenuDivider(),
+                    PopupMenuItem(
+                      value: 'toggle_view',
+                      child: Row(
+                        children: [
+                          Icon(isGrid ? Icons.view_list : Icons.grid_view, size: 18),
+                          const SizedBox(width: 8),
+                          Text(isGrid ? 'Switch to Detail View' : 'Switch to Grid View'),
+                        ],
+                      ),
+                    ),
+                  ];
+                },
+              ),
+              loading: () => const SizedBox.shrink(),
+              error: (_, __) => const SizedBox.shrink(),
+            ),
+          ),
+        ),
+        // Contributors list
+        Expanded(
+          child: _buildContributorsListContent(sortedList, prefs),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildContributorsListContent(List<Contributor> sortedList, Preferences prefs) {
 
     return LayoutBuilder(
       builder: (context, constraints) {

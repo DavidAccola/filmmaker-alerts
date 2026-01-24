@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -34,6 +35,31 @@ class ContributorHoverCard extends ConsumerStatefulWidget {
 
 class _ContributorHoverCardState extends ConsumerState<ContributorHoverCard> {
   bool _isHovered = false;
+  Timer? _hoverTimer;
+  bool _showButton = false;
+
+  @override
+  void dispose() {
+    _hoverTimer?.cancel();
+    super.dispose();
+  }
+
+  void _onHoverChange(bool isHovered) {
+    setState(() => _isHovered = isHovered);
+    
+    if (isHovered) {
+      // Start timer when hover begins
+      _hoverTimer = Timer(const Duration(milliseconds: 250), () {
+        if (mounted) {
+          setState(() => _showButton = true);
+        }
+      });
+    } else {
+      // Cancel timer and hide immediately when hover ends
+      _hoverTimer?.cancel();
+      setState(() => _showButton = false);
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -49,8 +75,8 @@ class _ContributorHoverCardState extends ConsumerState<ContributorHoverCard> {
     debugPrint('[ContributorHoverCard] Building for ${widget.name} (${widget.tmdbId}), prop isFollowed: ${widget.isFollowed}, actual isFollowed: $isActuallyFollowed, isHovered: $_isHovered');
     
     return MouseRegion(
-      onEnter: (_) => setState(() => _isHovered = true),
-      onExit: (_) => setState(() => _isHovered = false),
+      onEnter: (_) => _onHoverChange(true),
+      onExit: (_) => _onHoverChange(false),
       child: InkWell(
         onTap: widget.onTap,
         borderRadius: BorderRadius.circular(8),
@@ -98,38 +124,44 @@ class _ContributorHoverCardState extends ConsumerState<ContributorHoverCard> {
                       top: 0,
                       right: 0,
                       child: AnimatedOpacity(
-                        opacity: _isHovered ? 1.0 : 0.0,
+                        opacity: _showButton ? 1.0 : 0.0,
                         duration: const Duration(milliseconds: 200),
-                        child: IconButton(
-                          icon: Icon(
-                            isActuallyFollowed ? Icons.check_circle : Icons.add_circle,
-                            size: 20,
-                            color: Colors.white,
-                            shadows: [
-                              Shadow(
-                                color: Colors.black.withOpacity(0.35),
-                                blurRadius: 8,
-                                offset: const Offset(0, 2),
+                        child: IgnorePointer(
+                          ignoring: !_showButton,
+                          child: Tooltip(
+                            message: _showButton ? (isActuallyFollowed ? 'Followed' : 'Follow') : '',
+                            waitDuration: Duration.zero, // Show immediately once button is visible
+                            child: IconButton(
+                              icon: Icon(
+                                isActuallyFollowed ? Icons.check_circle : Icons.add_circle,
+                                size: 20,
+                                color: Colors.white,
+                                shadows: [
+                                  Shadow(
+                                    color: Colors.black.withOpacity(0.35),
+                                    blurRadius: 8,
+                                    offset: const Offset(0, 2),
+                                  ),
+                                  Shadow(
+                                    color: Colors.black.withOpacity(0.25),
+                                    blurRadius: 4,
+                                    offset: const Offset(0, 1),
+                                  ),
+                                ],
                               ),
-                              Shadow(
-                                color: Colors.black.withOpacity(0.25),
-                                blurRadius: 4,
-                                offset: const Offset(0, 1),
+                              onPressed: () {
+                                debugPrint('[ContributorHoverCard] Button pressed for ${widget.name}, isActuallyFollowed: $isActuallyFollowed');
+                                widget.onFollow();
+                              },
+                              padding: EdgeInsets.zero,
+                              constraints: const BoxConstraints(
+                                minWidth: 32,
+                                minHeight: 32,
                               ),
-                            ],
-                          ),
-                          onPressed: () {
-                            debugPrint('[ContributorHoverCard] Button pressed for ${widget.name}, isActuallyFollowed: $isActuallyFollowed');
-                            widget.onFollow();
-                          },
-                          tooltip: isActuallyFollowed ? 'Followed' : 'Follow',
-                          padding: EdgeInsets.zero,
-                          constraints: const BoxConstraints(
-                            minWidth: 32,
-                            minHeight: 32,
-                          ),
-                          style: IconButton.styleFrom(
-                            backgroundColor: Colors.transparent,
+                              style: IconButton.styleFrom(
+                                backgroundColor: Colors.transparent,
+                              ),
+                            ),
                           ),
                         ),
                       ),

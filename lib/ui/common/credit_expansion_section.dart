@@ -34,6 +34,7 @@ class _CreditExpansionSectionState extends State<CreditExpansionSection> {
   bool _isExpanded = false;
   bool _groupByRole = true;
   final Set<String> expandedShows = {};
+  final GlobalKey _sectionKey = GlobalKey();
 
   @override
   void initState() {
@@ -169,6 +170,20 @@ class _CreditExpansionSectionState extends State<CreditExpansionSection> {
     return [...stage1Depts, ...stage2Depts];
   }
 
+  void _scrollToTop() {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      final context = _sectionKey.currentContext;
+      if (context != null) {
+        Scrollable.ensureVisible(
+          context,
+          duration: const Duration(milliseconds: 300),
+          curve: Curves.easeInOut,
+          alignment: 0.0, // Align to top
+        );
+      }
+    });
+  }
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
@@ -177,6 +192,7 @@ class _CreditExpansionSectionState extends State<CreditExpansionSection> {
         : _sortDepartmentsForCredits(groupedByDept.keys.toList());
 
     return Card(
+      key: _sectionKey,
       clipBehavior: Clip.antiAlias,
       elevation: 0,
       shape: RoundedRectangleBorder(
@@ -197,6 +213,10 @@ class _CreditExpansionSectionState extends State<CreditExpansionSection> {
                     setState(() {
                       _isExpanded = !_isExpanded;
                     });
+                    // Scroll to top when expanding
+                    if (_isExpanded) {
+                      _scrollToTop();
+                    }
                   },
                   child: Padding(
                     padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
@@ -279,53 +299,71 @@ class _CreditExpansionSectionState extends State<CreditExpansionSection> {
                     ),
                   ),
                 ] else ...[
-                  // Collapsed State: Top 2 Chronological with fade effect
-                  _buildChronologicalList(limit: 2),
-                  
-                  // Fade + Show More
-                  if (widget.works.length > 2)
-                    Material(
-                      color: Colors.transparent,
-                      child: InkWell(
-                        onTap: () => setState(() => _isExpanded = true),
-                        child: Stack(
-                          alignment: Alignment.center,
-                          children: [
-                            // Fade gradient - last item fades into button
-                            Container(
-                              height: 40,
-                              decoration: BoxDecoration(
-                                gradient: LinearGradient(
+                  // Collapsed State: First ~100px with fade-out gradient
+                  Material(
+                    color: Colors.transparent,
+                    child: InkWell(
+                      onTap: () {
+                        setState(() => _isExpanded = true);
+                        _scrollToTop();
+                      },
+                      child: Stack(
+                        children: [
+                          // Content with height constraint and gradient mask
+                          // Wrapped in IgnorePointer so clicks pass through to the InkWell
+                          IgnorePointer(
+                            child: ShaderMask(
+                              shaderCallback: (Rect bounds) {
+                                return LinearGradient(
                                   begin: Alignment.topCenter,
                                   end: Alignment.bottomCenter,
                                   colors: [
-                                    theme.cardColor.withOpacity(0.0),
-                                    theme.cardColor.withOpacity(0.5),
-                                    theme.cardColor.withOpacity(0.9),
-                                    theme.cardColor,
+                                    Colors.white,
+                                    Colors.white,
+                                    Colors.white.withOpacity(0.3),
+                                    Colors.transparent,
                                   ],
+                                  stops: const [0.0, 0.5, 0.85, 1.0],
+                                ).createShader(bounds);
+                              },
+                              blendMode: BlendMode.dstIn,
+                              child: ConstrainedBox(
+                                constraints: const BoxConstraints(maxHeight: 120),
+                                child: SingleChildScrollView(
+                                  physics: const NeverScrollableScrollPhysics(),
+                                  child: _buildChronologicalList(),
                                 ),
                               ),
                             ),
-                            // Show all button - compact
-                            Row(
-                              mainAxisAlignment: MainAxisAlignment.center,
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                const Icon(Icons.expand_more, size: 18),
-                                const SizedBox(width: 6),
-                                Text(
-                                  'Show all ${widget.works.length} credits',
-                                  style: theme.textTheme.labelMedium?.copyWith(
-                                    fontWeight: FontWeight.w600,
+                          ),
+                          
+                          // Show More button overlaid at bottom
+                          Positioned(
+                            bottom: 0,
+                            left: 0,
+                            right: 0,
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(vertical: 8),
+                              child: Row(
+                                mainAxisAlignment: MainAxisAlignment.center,
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  const Icon(Icons.expand_more, size: 18),
+                                  const SizedBox(width: 6),
+                                  Text(
+                                    'Show all ${widget.works.length} credits',
+                                    style: theme.textTheme.labelMedium?.copyWith(
+                                      fontWeight: FontWeight.w600,
+                                    ),
                                   ),
-                                ),
-                              ],
+                                ],
+                              ),
                             ),
-                          ],
-                        ),
+                          ),
+                        ],
                       ),
                     ),
+                  ),
                 ],
               ],
             ),

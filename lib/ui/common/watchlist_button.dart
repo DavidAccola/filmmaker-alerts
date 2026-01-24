@@ -98,22 +98,22 @@ class _WatchlistButtonState extends ConsumerState<WatchlistButton> {
     switch (widget.position) {
       case WatchlistButtonStyle.topRight:
         return Positioned(
-          top: 8,
-          right: 8,
+          top: 2,
+          right: 2,
           child: button,
         );
       case WatchlistButtonStyle.topLeft:
         return Positioned(
-          top: 8,
-          left: 8,
+          top: 2,
+          left: 2,
           child: button,
         );
       case WatchlistButtonStyle.center:
         return Center(child: button);
       case WatchlistButtonStyle.bottomRight:
         return Positioned(
-          bottom: 8,
-          right: 8,
+          bottom: 2,
+          right: 2,
           child: button,
         );
     }

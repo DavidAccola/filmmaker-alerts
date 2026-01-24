@@ -18,7 +18,14 @@ import 'tv_show_detail_screen.dart';
 import 'watchlist_screen.dart';
 
 class HomeScreen extends ConsumerStatefulWidget {
-  const HomeScreen({super.key});
+  final int initialTabIndex;
+  final int? scrollToWatchlistItem;
+  
+  const HomeScreen({
+    super.key,
+    this.initialTabIndex = 0,
+    this.scrollToWatchlistItem,
+  });
 
   @override
   ConsumerState<HomeScreen> createState() => _HomeScreenState();
@@ -35,7 +42,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with TickerProviderStat
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: 2, vsync: this); // People and Watchlist tabs
+    _tabController = TabController(length: 2, vsync: this, initialIndex: widget.initialTabIndex); // People and Watchlist tabs
   }
 
   @override
@@ -159,7 +166,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with TickerProviderStat
               // People tab - only show person/company contributors
               _buildContributorsList(peopleContributors, prefs, prefsAsync),
               // Watchlist tab
-              const WatchlistScreen(),
+              WatchlistScreen(scrollToTmdbId: widget.scrollToWatchlistItem),
             ],
           );
         },

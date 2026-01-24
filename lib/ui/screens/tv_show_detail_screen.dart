@@ -3,11 +3,13 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:intl/intl.dart';
 import '../../data/models/tv_detail.dart';
+import '../../data/models/contributor_detail.dart';
 import '../../data/models/preferences.dart';
 import '../../providers/providers.dart';
 import '../common/streaming_options_widget.dart';
 import '../common/external_navigation_utils.dart';
 import '../common/snackbar_utils.dart';
+import '../common/watchlist_button.dart';
 import 'contributor_detail_screen.dart';
 import 'tv_episode_detail_screen.dart';
 import 'tv_season_detail_screen.dart';
@@ -39,6 +41,7 @@ class TvShowDetailScreen extends ConsumerStatefulWidget {
 
 class _TvShowDetailScreenState extends ConsumerState<TvShowDetailScreen> {
   bool _synopsisExpanded = false;
+  bool _isPosterHovered = false;
 
   @override
   Widget build(BuildContext context) {
@@ -142,24 +145,58 @@ class _TvShowDetailScreenState extends ConsumerState<TvShowDetailScreen> {
                   child: Row(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      // Poster
-                      Container(
-                        width: 100,
-                        height: 150,
-                        decoration: BoxDecoration(
-                          color: Theme.of(context).colorScheme.surfaceContainerHighest,
-                          borderRadius: BorderRadius.circular(8),
-                        ),
-                        child: ClipRRect(
-                          borderRadius: BorderRadius.circular(8),
-                          child: showDetail.posterPath != null
-                              ? CachedNetworkImage(
-                                  imageUrl: 'https://image.tmdb.org/t/p/w300${showDetail.posterPath}',
-                                  fit: BoxFit.cover,
-                                  placeholder: (context, url) => const Icon(Icons.tv, size: 40),
-                                  errorWidget: (context, url, error) => const Icon(Icons.tv, size: 40),
-                                )
-                              : const Icon(Icons.tv, size: 40),
+                      // Poster with watchlist button
+                      MouseRegion(
+                        onEnter: (_) {
+                          debugPrint('[TvShowDetailScreen] Poster hovered: true');
+                          setState(() => _isPosterHovered = true);
+                        },
+                        onExit: (_) {
+                          debugPrint('[TvShowDetailScreen] Poster hovered: false');
+                          setState(() => _isPosterHovered = false);
+                        },
+                        child: SizedBox(
+                          width: 100,
+                          height: 150,
+                          child: Stack(
+                            children: [
+                              Container(
+                                width: 100,
+                                height: 150,
+                                decoration: BoxDecoration(
+                                  color: Theme.of(context).colorScheme.surfaceContainerHighest,
+                                  borderRadius: BorderRadius.circular(8),
+                                ),
+                                child: ClipRRect(
+                                  borderRadius: BorderRadius.circular(8),
+                                  child: showDetail.posterPath != null
+                                      ? CachedNetworkImage(
+                                          imageUrl: 'https://image.tmdb.org/t/p/w300${showDetail.posterPath}',
+                                          fit: BoxFit.cover,
+                                          placeholder: (context, url) => const Icon(Icons.tv, size: 40),
+                                          errorWidget: (context, url, error) => const Icon(Icons.tv, size: 40),
+                                        )
+                                      : const Icon(Icons.tv, size: 40),
+                                ),
+                              ),
+                              Positioned(
+                                top: 0,
+                                right: 0,
+                                child: WatchlistButton(
+                                  tmdbId: showDetail.tmdbId,
+                                  workType: WorkType.tvShow,
+                                  workTitle: showDetail.name,
+                                  posterPath: showDetail.posterPath,
+                                  releaseDate: showDetail.firstAirDate,
+                                  position: WatchlistButtonStyle.topRight,
+                                  showOnHoverOnly: true,
+                                  iconSize: 20,
+                                  isHovered: _isPosterHovered,
+                                  applyPositioning: false,
+                                ),
+                              ),
+                            ],
+                          ),
                         ),
                       ),
                       
@@ -197,24 +234,58 @@ class _TvShowDetailScreenState extends ConsumerState<TvShowDetailScreen> {
                 Row(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    // Poster
-                    Container(
-                      width: 100,
-                      height: 150,
-                      decoration: BoxDecoration(
-                        color: Theme.of(context).colorScheme.surfaceContainerHighest,
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                      child: ClipRRect(
-                        borderRadius: BorderRadius.circular(8),
-                        child: showDetail.posterPath != null
-                            ? CachedNetworkImage(
-                                imageUrl: 'https://image.tmdb.org/t/p/w300${showDetail.posterPath}',
-                                fit: BoxFit.cover,
-                                placeholder: (context, url) => const Icon(Icons.tv, size: 40),
-                                errorWidget: (context, url, error) => const Icon(Icons.tv, size: 40),
-                              )
-                            : const Icon(Icons.tv, size: 40),
+                    // Poster with watchlist button
+                    MouseRegion(
+                      onEnter: (_) {
+                        debugPrint('[TvShowDetailScreen] Poster hovered: true');
+                        setState(() => _isPosterHovered = true);
+                      },
+                      onExit: (_) {
+                        debugPrint('[TvShowDetailScreen] Poster hovered: false');
+                        setState(() => _isPosterHovered = false);
+                      },
+                      child: SizedBox(
+                        width: 100,
+                        height: 150,
+                        child: Stack(
+                          children: [
+                            Container(
+                              width: 100,
+                              height: 150,
+                              decoration: BoxDecoration(
+                                color: Theme.of(context).colorScheme.surfaceContainerHighest,
+                                borderRadius: BorderRadius.circular(8),
+                              ),
+                              child: ClipRRect(
+                                borderRadius: BorderRadius.circular(8),
+                                child: showDetail.posterPath != null
+                                    ? CachedNetworkImage(
+                                        imageUrl: 'https://image.tmdb.org/t/p/w300${showDetail.posterPath}',
+                                        fit: BoxFit.cover,
+                                        placeholder: (context, url) => const Icon(Icons.tv, size: 40),
+                                        errorWidget: (context, url, error) => const Icon(Icons.tv, size: 40),
+                                      )
+                                    : const Icon(Icons.tv, size: 40),
+                              ),
+                            ),
+                            Positioned(
+                              top: 0,
+                              right: 0,
+                              child: WatchlistButton(
+                                tmdbId: showDetail.tmdbId,
+                                workType: WorkType.tvShow,
+                                workTitle: showDetail.name,
+                                posterPath: showDetail.posterPath,
+                                releaseDate: showDetail.firstAirDate,
+                                position: WatchlistButtonStyle.topRight,
+                                showOnHoverOnly: true,
+                                iconSize: 20,
+                                isHovered: _isPosterHovered,
+                                applyPositioning: false,
+                              ),
+                            ),
+                          ],
+                        ),
                       ),
                     ),
                     
@@ -778,6 +849,11 @@ class _TvShowDetailScreenState extends ConsumerState<TvShowDetailScreen> {
         overrideAvailableDepts: availableDepts,
       );
 
+      // Always invalidate TV show detail to refresh isFollowed status
+      if (mounted) {
+        ref.invalidate(tvShowDetailProvider(widget.showId));
+      }
+
       if (success && mounted) {
         ref.invalidate(contributorsProvider);
         
@@ -815,6 +891,7 @@ class _TvShowDetailScreenState extends ConsumerState<TvShowDetailScreen> {
                 if (existingContributor != null) {
                   await contributorLogic.updateContributorRoles(existingContributor, newRoles);
                   ref.invalidate(contributorsProvider);
+                  ref.invalidate(tvShowDetailProvider(widget.showId));
                   
                   if (mounted) {
                     showSimpleSnackBar(context, 'Updated ${sparseContributor.name} to follow ${newRoles.join(", ")}', duration: const Duration(seconds: 3));
@@ -832,6 +909,7 @@ class _TvShowDetailScreenState extends ConsumerState<TvShowDetailScreen> {
           onUnfollow: () async {
             await repo.removeContributor(member.tmdbId);
             ref.invalidate(contributorsProvider);
+            ref.invalidate(tvShowDetailProvider(widget.showId));
             
             if (mounted) {
               showRemovalSnackBar(
@@ -842,6 +920,7 @@ class _TvShowDetailScreenState extends ConsumerState<TvShowDetailScreen> {
                   if (existingContributor != null) {
                     await repo.addContributor(existingContributor);
                     ref.invalidate(contributorsProvider);
+                    ref.invalidate(tvShowDetailProvider(widget.showId));
                   }
                 },
               );

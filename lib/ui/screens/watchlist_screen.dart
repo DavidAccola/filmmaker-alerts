@@ -18,7 +18,12 @@ enum WatchlistSortOption {
 }
 
 class WatchlistScreen extends ConsumerStatefulWidget {
-  const WatchlistScreen({super.key});
+  final int? scrollToTmdbId;
+  
+  const WatchlistScreen({
+    super.key,
+    this.scrollToTmdbId,
+  });
 
   @override
   ConsumerState<WatchlistScreen> createState() => _WatchlistScreenState();
@@ -27,7 +32,9 @@ class WatchlistScreen extends ConsumerStatefulWidget {
 class _WatchlistScreenState extends ConsumerState<WatchlistScreen>
     with TickerProviderStateMixin {
   late TabController _tabController;
+  late ScrollController _scrollController;
   bool _hasFrozenItems = false;
+  int? _lastScrolledTmdbId; // Track which item we've already scrolled to
   
   // Filter state
   Set<WatchStatus> _selectedFilters = {
@@ -47,11 +54,13 @@ class _WatchlistScreenState extends ConsumerState<WatchlistScreen>
   void initState() {
     super.initState();
     _tabController = TabController(length: 1, vsync: this);
+    _scrollController = ScrollController();
   }
 
   @override
   void dispose() {
     _tabController.dispose();
+    _scrollController.dispose();
     super.dispose();
   }
 
@@ -70,6 +79,39 @@ class _WatchlistScreenState extends ConsumerState<WatchlistScreen>
     }
   }
 
+  void _scrollToItem(List<WatchlistEntry> entries, int tmdbId) {
+    // Find the index of the item with the given tmdbId
+    final index = entries.indexWhere((e) => e.tmdbId == tmdbId);
+    if (index == -1 || !_scrollController.hasClients) return;
+
+    // Get the actual max scroll extent to better estimate positions
+    final maxScroll = _scrollController.position.maxScrollExtent;
+    
+    // Estimate the scroll position based on grid layout
+    // Grid has 2 columns with maxCrossAxisExtent: 200, childAspectRatio: 0.48
+    // So each item is roughly 200 wide and 200/0.48 = ~416 tall
+    const itemWidth = 200.0;
+    const itemHeight = 416.0; // More accurate height estimate
+    const spacing = 16.0;
+    const padding = 16.0;
+    const itemsPerRow = 2;
+
+    final row = index ~/ itemsPerRow;
+    final estimatedOffset = (row * (itemHeight + spacing)) + padding - 50; // 50px buffer from top
+
+    // Delay the scroll to ensure the layout is complete and tab has switched
+    Future.delayed(const Duration(milliseconds: 500), () {
+      if (!mounted || !_scrollController.hasClients) return;
+      
+      final targetOffset = estimatedOffset.clamp(0.0, maxScroll);
+      _scrollController.animateTo(
+        targetOffset,
+        duration: const Duration(milliseconds: 600),
+        curve: Curves.easeInOut,
+      );
+    });
+  }
+
   @override
   Widget build(BuildContext context) {
     final watchlistAsync = ref.watch(watchlistEntriesProvider);
@@ -84,6 +126,14 @@ class _WatchlistScreenState extends ConsumerState<WatchlistScreen>
             if (mounted) {
               _updateTabController(hasFrozen);
             }
+          });
+        }
+
+        // Scroll to newly added item if specified
+        if (widget.scrollToTmdbId != null && widget.scrollToTmdbId != _lastScrolledTmdbId) {
+          _lastScrolledTmdbId = widget.scrollToTmdbId;
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            _scrollToItem(entries, widget.scrollToTmdbId!);
           });
         }
 
@@ -543,6 +593,7 @@ class _WatchlistScreenState extends ConsumerState<WatchlistScreen>
                                     },
                                   )
                                 : CustomScrollView(
+                                    controller: _scrollController,
                                     slivers: [
                                       // Active items grid
                                       SliverPadding(

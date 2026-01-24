@@ -111,6 +111,35 @@ void showRemovalSnackBar(
   );
 }
 
+/// Shows a snackbar for watchlist items with Undo and optional View actions.
+/// Use this when adding movies/shows/collections to the watchlist.
+void showWatchlistSnackBar(
+  BuildContext context, {
+  required String message,
+  required VoidCallback onUndo,
+  VoidCallback? onView,
+  Function(bool)? onSnackBarVisibilityChanged,
+}) {
+  onSnackBarVisibilityChanged?.call(true);
+
+  ScaffoldMessenger.of(context).clearSnackBars();
+  ScaffoldMessenger.of(context).showSnackBar(
+    SnackBar(
+      duration: const Duration(hours: 1),
+      backgroundColor: Colors.transparent,
+      elevation: 0,
+      padding: EdgeInsets.zero,
+      content: _WatchlistSnackBarContent(
+        message: message,
+        duration: const Duration(seconds: 5),
+        onDismiss: () => onSnackBarVisibilityChanged?.call(false),
+        onUndo: onUndo,
+        onView: onView,
+      ),
+    ),
+  );
+}
+
 void showAlreadyFollowedSnackBar(
   BuildContext context, {
   required String contributorName,
@@ -719,6 +748,189 @@ class _WarningSnackBarContentState extends State<_WarningSnackBarContent> with T
                         child: Text(widget.actionLabel!),
                       ),
                     ],
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+
+/// Custom snackbar content for watchlist items with Undo and View actions
+class _WatchlistSnackBarContent extends StatefulWidget {
+  final String message;
+  final Duration duration;
+  final VoidCallback? onDismiss;
+  final VoidCallback onUndo;
+  final VoidCallback? onView;
+
+  const _WatchlistSnackBarContent({
+    required this.message,
+    required this.duration,
+    this.onDismiss,
+    required this.onUndo,
+    this.onView,
+  });
+
+  @override
+  State<_WatchlistSnackBarContent> createState() => _WatchlistSnackBarContentState();
+}
+
+class _WatchlistSnackBarContentState extends State<_WatchlistSnackBarContent> with TickerProviderStateMixin {
+  late AnimationController _timerController;
+  late AnimationController _fadeController;
+  late AnimationController _timerBarFadeController;
+  bool _isHovering = false;
+  double _pausedAt = 0.0;
+
+  @override
+  void initState() {
+    super.initState();
+    _timerController = AnimationController(
+      vsync: this,
+      duration: widget.duration,
+    );
+
+    _fadeController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 250),
+      value: 0.0,
+    );
+
+    _timerBarFadeController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 200),
+      value: 1.0,
+    );
+
+    _fadeController.forward();
+    _timerController.forward();
+
+    _timerController.addStatusListener((status) {
+      if (status == AnimationStatus.completed && mounted) {
+        _dismissSnackBar();
+      }
+    });
+  }
+
+  void _dismissSnackBar() {
+    widget.onDismiss?.call();
+    _fadeController.reverse().then((_) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).hideCurrentSnackBar();
+      }
+    });
+  }
+
+  @override
+  void dispose() {
+    _timerController.dispose();
+    _fadeController.dispose();
+    _timerBarFadeController.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
+    final isDark = theme.brightness == Brightness.dark;
+    final bgColor = isDark ? colorScheme.inverseSurface : colorScheme.inverseSurface;
+    final textColor = isDark ? colorScheme.onInverseSurface : colorScheme.onInverseSurface;
+
+    return FadeTransition(
+      opacity: _fadeController,
+      child: MouseRegion(
+        onEnter: (_) {
+          setState(() => _isHovering = true);
+          _timerController.stop();
+          _timerBarFadeController.reverse();
+          _pausedAt = _timerController.value;
+        },
+        onExit: (_) {
+          setState(() => _isHovering = false);
+          _timerBarFadeController.forward();
+          if (_timerController.status != AnimationStatus.completed) {
+            final timeToAdd = _pausedAt * 0.5;
+            final newStart = (_pausedAt - timeToAdd).clamp(0.0, 1.0);
+            _timerController.forward(from: newStart);
+          }
+        },
+        child: Material(
+          color: bgColor,
+          elevation: 6,
+          borderRadius: BorderRadius.circular(4),
+          clipBehavior: Clip.antiAlias,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              AnimatedBuilder(
+                animation: Listenable.merge([_timerController, _timerBarFadeController]),
+                builder: (context, child) {
+                  return FadeTransition(
+                    opacity: _timerBarFadeController,
+                    child: SizedBox(
+                      height: 4,
+                      child: Align(
+                        alignment: Alignment.centerLeft,
+                        child: FractionallySizedBox(
+                          widthFactor: _timerController.value,
+                          child: Container(
+                            color: colorScheme.primary,
+                          ),
+                        ),
+                      ),
+                    ),
+                  );
+                },
+              ),
+              Padding(
+                padding: const EdgeInsets.fromLTRB(16, 10, 16, 10),
+                child: Row(
+                  mainAxisSize: MainAxisSize.max,
+                  children: [
+                    Expanded(
+                      child: AdaptiveTooltipText(
+                        widget.message,
+                        maxLines: 2,
+                        style: TextStyle(color: textColor),
+                      ),
+                    ),
+                    if (widget.onView != null) ...[
+                      const SizedBox(width: 4),
+                      TextButton(
+                        onPressed: () {
+                          widget.onView?.call();
+                          ScaffoldMessenger.of(context).hideCurrentSnackBar();
+                        },
+                        style: TextButton.styleFrom(
+                          foregroundColor: colorScheme.inversePrimary,
+                          padding: const EdgeInsets.symmetric(horizontal: 6),
+                          minimumSize: const Size(0, 0),
+                          tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                        ),
+                        child: const Text('VIEW', style: TextStyle(fontSize: 12)),
+                      ),
+                    ],
+                    const SizedBox(width: 4),
+                    TextButton(
+                      onPressed: () {
+                        widget.onUndo();
+                        ScaffoldMessenger.of(context).hideCurrentSnackBar();
+                      },
+                      style: TextButton.styleFrom(
+                        foregroundColor: colorScheme.inversePrimary,
+                        padding: const EdgeInsets.symmetric(horizontal: 6),
+                        minimumSize: const Size(0, 0),
+                        tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                      ),
+                      child: const Text('UNDO', style: TextStyle(fontSize: 12)),
+                    ),
                   ],
                 ),
               ),

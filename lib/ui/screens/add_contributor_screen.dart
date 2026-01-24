@@ -7,6 +7,7 @@ import '../../data/models/contributor_detail.dart';
 import '../../data/models/watchlist_entry.dart';
 import '../../providers/providers.dart';
 import '../common/snackbar_utils.dart';
+import '../common/watchlist_button.dart';
 import 'search_results_screen.dart';
 
 class AddContributorScreen extends ConsumerStatefulWidget {
@@ -379,32 +380,7 @@ class _AddContributorScreenState extends ConsumerState<AddContributorScreen> {
                           )
                         : const Icon(Icons.person),
                   ),
-                  title: Row(
-                    children: [
-                      Expanded(child: Text(contributor.name)),
-                      if (isWatchlistItem) ...[
-                        const SizedBox(width: 8),
-                        Tooltip(
-                          message: 'Will be added to Watchlist',
-                          child: Icon(
-                            Icons.bookmark_add,
-                            size: 16,
-                            color: Theme.of(context).colorScheme.primary,
-                          ),
-                        ),
-                      ] else ...[
-                        const SizedBox(width: 8),
-                        Tooltip(
-                          message: 'Will be added to Contributors',
-                          child: Icon(
-                            Icons.person_add,
-                            size: 16,
-                            color: Theme.of(context).colorScheme.secondary,
-                          ),
-                        ),
-                      ],
-                    ],
-                  ),
+                  title: Text(contributor.name),
                   subtitle: Text(contributor.knownFor),
                   trailing: Icon(
                     isWatchlistItem ? Icons.bookmark_add : Icons.person_add,

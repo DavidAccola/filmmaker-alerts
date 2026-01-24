@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import '../../data/models/contributor_detail.dart';
 import '../../logic/tv_show_display_logic.dart';
+import 'watchlist_button.dart';
 
 class CreditExpansionSection extends StatefulWidget {
   final String title;
@@ -695,23 +696,19 @@ class _CreditWorkItemState extends State<_CreditWorkItem> {
                               child: const Icon(Icons.movie, size: 16),
                             ),
                           
-                          // Hover Mask + Center Watchlist Button
+                          // Hover Mask + Center Watchlist Button using WatchlistButton component
                           if (widget.onAddToWatchlist != null)
-                            AnimatedOpacity(
-                              opacity: _isHovered ? 1.0 : 0.0,
-                              duration: const Duration(milliseconds: 200),
-                              child: Container(
-                                color: Colors.blue.withOpacity(0.4), // Blue highlight on hover over poster
-                                child: Center(
-                                  child: IconButton(
-                                    icon: const Icon(Icons.add_circle, size: 24, color: Colors.white),
-                                    onPressed: () => widget.onAddToWatchlist?.call(work),
-                                    padding: EdgeInsets.zero,
-                                    constraints: const BoxConstraints(),
-                                    tooltip: 'Add to Watchlist',
-                                  ),
-                                ),
-                              ),
+                            WatchlistButton(
+                              tmdbId: work.tmdbId,
+                              workType: work.type,
+                              workTitle: work.title,
+                              posterPath: work.posterPath,
+                              releaseDate: work.releaseDate,
+                              releaseType: work.releaseType ?? ReleaseType.streaming,
+                              position: WatchlistButtonStyle.center,
+                              showOnHoverOnly: true,
+                              iconSize: 20,
+                              isHovered: _isHovered,
                             ),
                         ],
                       ),

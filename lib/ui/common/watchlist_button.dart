@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import '../../data/models/watchlist_entry.dart';
+import '../../data/models/contributor_detail.dart';
 import '../../providers/providers.dart';
 import 'snackbar_utils.dart';
+import '../screens/home_screen.dart';
+import 'hover_action_button.dart';
 
 enum WatchlistButtonStyle {
   topRight,    // Top right corner (default)
@@ -10,6 +12,7 @@ enum WatchlistButtonStyle {
   center,      // Centered (for TV credits)
   bottomRight, // Bottom right corner
 }
+
 
 class WatchlistButton extends ConsumerStatefulWidget {
   final int tmdbId;
@@ -22,6 +25,11 @@ class WatchlistButton extends ConsumerStatefulWidget {
   final bool showOnHoverOnly;
   final double iconSize;
   final VoidCallback? onAdded;
+  final bool? isHovered; // Optional: parent can pass hover state
+  final VoidCallback? onUndo; // Callback for undo action
+  final VoidCallback? onView; // Callback for view action (navigate to watchlist)
+  final bool showViewButton; // Whether to show View button (true for non-search screens)
+  final bool applyPositioning; // Whether to apply internal Positioned wrapper (false when parent handles positioning)
 
   const WatchlistButton({
     super.key,
@@ -35,6 +43,11 @@ class WatchlistButton extends ConsumerStatefulWidget {
     this.showOnHoverOnly = true,
     this.iconSize = 24,
     this.onAdded,
+    this.isHovered,
+    this.onUndo,
+    this.onView,
+    this.showViewButton = true,
+    this.applyPositioning = true, // Default to true for backward compatibility
   });
 
   @override
@@ -48,28 +61,23 @@ class _WatchlistButtonState extends ConsumerState<WatchlistButton> {
   @override
   Widget build(BuildContext context) {
     final watchlistAsync = ref.watch(watchlistEntriesProvider);
-    final theme = Theme.of(context);
 
     return watchlistAsync.when(
       data: (entries) {
         final isInWatchlist = entries.any((e) =>
             e.tmdbId == widget.tmdbId && e.type == widget.workType);
 
-        final shouldShow = !widget.showOnHoverOnly || _isHovered;
-
-        if (widget.showOnHoverOnly && !shouldShow) {
-          return const SizedBox.shrink();
-        }
-
-        return MouseRegion(
-          onEnter: (_) => setState(() => _isHovered = true),
-          onExit: (_) => setState(() => _isHovered = false),
-          child: _buildButton(
-            context,
-            isInWatchlist,
-            theme,
-          ),
+        final shouldShow = widget.showOnHoverOnly ? (widget.isHovered ?? false) : true;
+        
+        final button = HoverActionButton(
+          onPressed: _isLoading ? () {} : () => _handleWatchlistToggle(isInWatchlist),
+          icon: isInWatchlist ? Icons.check_circle : Icons.add_circle,
+          tooltip: isInWatchlist ? 'Remove from Watchlist' : 'Add to Watchlist',
+          iconSize: widget.iconSize,
+          isCardHovered: shouldShow,
         );
+
+        return _positionButton(button);
       },
       loading: () => SizedBox(
         width: widget.iconSize,
@@ -80,30 +88,13 @@ class _WatchlistButtonState extends ConsumerState<WatchlistButton> {
     );
   }
 
-  Widget _buildButton(BuildContext context, bool isInWatchlist, ThemeData theme) {
-    final button = AnimatedOpacity(
-      opacity: (_isHovered || !widget.showOnHoverOnly) ? 1.0 : 0.0,
-      duration: const Duration(milliseconds: 200),
-      child: IconButton(
-        onPressed: _isLoading ? null : () => _handleWatchlistToggle(isInWatchlist),
-        icon: Icon(
-          isInWatchlist ? Icons.check_circle : Icons.add_circle,
-          color: theme.colorScheme.primary,
-        ),
-        iconSize: widget.iconSize,
-        padding: EdgeInsets.zero,
-        constraints: BoxConstraints(
-          minWidth: widget.iconSize + 8,
-          minHeight: widget.iconSize + 8,
-        ),
-        tooltip: isInWatchlist ? 'Remove from Watchlist' : 'Add to Watchlist',
-        style: IconButton.styleFrom(
-          backgroundColor: Colors.transparent,
-        ),
-      ),
-    );
-
-    // Position the button based on style
+  Widget _positionButton(Widget button) {
+    // If parent is handling positioning, just return the button
+    if (!widget.applyPositioning) {
+      return button;
+    }
+    
+    // Otherwise apply internal positioning (for backward compatibility)
     switch (widget.position) {
       case WatchlistButtonStyle.topRight:
         return Positioned(
@@ -160,10 +151,21 @@ class _WatchlistButtonState extends ConsumerState<WatchlistButton> {
         );
 
         if (mounted) {
-          showSimpleSnackBar(
+          // Determine if we should show the View button
+          final shouldShowView = widget.showViewButton;
+          
+          // Use new watchlist snackbar with undo and optional view
+          showWatchlistSnackBar(
             context,
-            '${widget.workTitle} added to watchlist',
-            duration: const Duration(seconds: 3),
+            message: '${widget.workTitle} added to watchlist',
+            onUndo: () async {
+              await watchlistLogic.removeWorkFromWatchlist(
+                widget.tmdbId,
+                widget.workType,
+              );
+              ref.invalidate(watchlistEntriesProvider);
+            },
+            onView: shouldShowView ? (widget.onView ?? _defaultViewAction) : null,
           );
         }
       }
@@ -183,5 +185,17 @@ class _WatchlistButtonState extends ConsumerState<WatchlistButton> {
         setState(() => _isLoading = false);
       }
     }
+  }
+
+  void _defaultViewAction() {
+    // Default view action: navigate to watchlist tab and scroll to item
+    Navigator.of(context).pushReplacement(
+      MaterialPageRoute(
+        builder: (context) => HomeScreen(
+          initialTabIndex: 1,
+          scrollToWatchlistItem: widget.tmdbId,
+        ),
+      ),
+    );
   }
 }

@@ -2,13 +2,17 @@ import 'package:flutter/material.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:intl/intl.dart';
 import '../../data/models/contributor_detail.dart';
+import '../../data/models/watchlist_entry.dart';
 import '../../logic/work_sorting_logic.dart';
 import 'adaptive_tooltip_text.dart';
 import '../../logic/tv_show_display_logic.dart';
+import 'watchlist_button.dart';
+import '../../providers/providers.dart';
 
 enum WatchlistButtonPosition {
   bottomRight,
   topLeft,
+  topRight,
   center,
 }
 
@@ -26,6 +30,7 @@ class WorkWidget extends StatefulWidget {
   final WatchlistButtonPosition watchlistButtonPosition;
   final String? hoverTitle;
   final String? titleOverride; // Used to show Show Title instead of full Episode Title
+  final bool useNewWatchlistButton; // Use the new WatchlistButton component
 
   const WorkWidget({
     super.key,
@@ -42,6 +47,7 @@ class WorkWidget extends StatefulWidget {
     this.watchlistButtonPosition = WatchlistButtonPosition.bottomRight,
     this.hoverTitle,
     this.titleOverride,
+    this.useNewWatchlistButton = true,
   });
 
   @override
@@ -222,49 +228,25 @@ class _WorkWidgetState extends State<WorkWidget> {
                         ),
                       ),
 
-                    // Watchlist Button on Hover or fixed
-                    if (widget.onAddToWatchlist != null) ...[
-                      // Handle TopLeft and Center positions via if-elements
-                      if ((widget.showWatchlistOnHover && _isHovered) || (!widget.showWatchlistOnHover && widget.watchlistButtonPosition != WatchlistButtonPosition.bottomRight))
-                         if (widget.watchlistButtonPosition == WatchlistButtonPosition.topLeft)
-                            Positioned(
-                              top: 8,
-                              left: 8,
-                              child: AnimatedOpacity(
-                                opacity: _isHovered ? 1.0 : 0.0,
-                                duration: const Duration(milliseconds: 200),
-                                child: IconButton(
-                                  onPressed: widget.onAddToWatchlist,
-                                  icon: const Icon(Icons.add_circle_outline),
-                                  iconSize: 24,
-                                  padding: EdgeInsets.zero,
-                                  tooltip: 'Add to Watchlist',
-                                  color: Colors.white,
-                                  style: IconButton.styleFrom(
-                                    backgroundColor: Colors.black45,
-                                  ),
-                                ),
-                              ),
-                            )
-                         else if (widget.watchlistButtonPosition == WatchlistButtonPosition.center)
-                            Center(
-                              child: AnimatedOpacity(
-                                opacity: _isHovered ? 1.0 : 0.0,
-                                duration: const Duration(milliseconds: 200),
-                                child: IconButton(
-                                  onPressed: widget.onAddToWatchlist,
-                                  icon: const Icon(Icons.add_circle_outline),
-                                  iconSize: 32,
-                                  padding: EdgeInsets.zero,
-                                  tooltip: 'Add to Watchlist',
-                                  color: Colors.white,
-                                  style: IconButton.styleFrom(
-                                    backgroundColor: Colors.black45,
-                                  ),
-                                ),
-                              ),
-                            ),
-                    ],
+                    // Watchlist Button - using new WatchlistButton component
+                    if (widget.useNewWatchlistButton)
+                      WatchlistButton(
+                        tmdbId: work.tmdbId,
+                        workType: work.type,
+                        workTitle: work.title,
+                        posterPath: work.posterPath,
+                        releaseDate: work.releaseDate,
+                        releaseType: work.releaseType ?? ReleaseType.streaming,
+                        position: widget.watchlistButtonPosition == WatchlistButtonPosition.topLeft
+                            ? WatchlistButtonStyle.topLeft
+                            : widget.watchlistButtonPosition == WatchlistButtonPosition.topRight
+                                ? WatchlistButtonStyle.topRight
+                                : widget.watchlistButtonPosition == WatchlistButtonPosition.center
+                                    ? WatchlistButtonStyle.center
+                                    : WatchlistButtonStyle.bottomRight,
+                        showOnHoverOnly: widget.showWatchlistOnHover,
+                        isHovered: _isHovered,
+                      ),
                   ],
                 ),
               ),
@@ -328,19 +310,7 @@ class _WorkWidgetState extends State<WorkWidget> {
                           ),
                         ),
                         
-                        if (!widget.showWatchlistOnHover && widget.watchlistButtonPosition == WatchlistButtonPosition.bottomRight && widget.onAddToWatchlist != null)
-                          IconButton(
-                            onPressed: widget.onAddToWatchlist,
-                            icon: const Icon(Icons.add_circle_outline),
-                            iconSize: 20,
-                            padding: EdgeInsets.zero,
-                            constraints: const BoxConstraints(
-                              minWidth: 28,
-                              minHeight: 28,
-                            ),
-                            tooltip: 'Add to Watchlist',
-                            color: theme.colorScheme.primary,
-                          ),
+
                       ],
                     ),
                     

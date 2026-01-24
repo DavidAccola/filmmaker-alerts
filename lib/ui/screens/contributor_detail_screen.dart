@@ -9,6 +9,7 @@ import '../../data/models/preferences.dart';
 import '../../data/models/watchlist_entry.dart';
 import '../../providers/providers.dart';
 import '../common/snackbar_utils.dart';
+import '../common/watchlist_button.dart';
 import 'movie_detail_screen.dart';
 import 'tv_show_detail_screen.dart';
 import 'tv_episode_detail_screen.dart';
@@ -313,7 +314,7 @@ class _ContributorDetailScreenState extends ConsumerState<ContributorDetailScree
                       hideRatings: prefs.hideRatingsInDetails ?? false,
                       onTap: () => _onWorkTapped(show),
                       onAddToWatchlist: () => _onAddToWatchlist(show),
-                      watchlistButtonPosition: WatchlistButtonPosition.topLeft,
+                      watchlistButtonPosition: WatchlistButtonPosition.topRight,
                       showWatchlistOnHover: true,
                       showDateInPoster: true,
                       showRating: false,
@@ -412,7 +413,7 @@ class _ContributorDetailScreenState extends ConsumerState<ContributorDetailScree
                 hideRatings: prefs.hideRatingsInDetails ?? false,
                 onTap: () => _onWorkTapped(work),
                 onAddToWatchlist: () => _onAddToWatchlist(work),
-                watchlistButtonPosition: WatchlistButtonPosition.topLeft,
+                watchlistButtonPosition: WatchlistButtonPosition.topRight,
                 showWatchlistOnHover: true,
                 showDateInPoster: true,
                 showRating: false,
@@ -541,7 +542,7 @@ class _ContributorDetailScreenState extends ConsumerState<ContributorDetailScree
                   showRating: false,
                   showDate: false,
                   showDateInPoster: true,
-                  watchlistButtonPosition: WatchlistButtonPosition.topLeft,
+                  watchlistButtonPosition: WatchlistButtonPosition.topRight,
                   showWatchlistOnHover: true,
                   titleOverride: item.type == WorkType.tvEpisode ? TvShowDisplayLogic.extractShowTitle(item.title) : null,
                   hoverTitle: item.type == WorkType.tvEpisode ? TvShowDisplayLogic.formatEpisodeInfo(item) : null,
@@ -633,7 +634,7 @@ class _ContributorDetailScreenState extends ConsumerState<ContributorDetailScree
                   showDateInPoster: false,
                   showRating: true,
                   showDate: false,
-                  watchlistButtonPosition: WatchlistButtonPosition.topLeft,
+                  watchlistButtonPosition: WatchlistButtonPosition.topRight,
                   showWatchlistOnHover: true,
                   titleOverride: work.type == WorkType.tvEpisode ? TvShowDisplayLogic.extractShowTitle(work.title) : null,
                   hoverTitle: work.type == WorkType.tvEpisode ? TvShowDisplayLogic.formatEpisodeInfo(work) : null,
@@ -717,41 +718,9 @@ class _ContributorDetailScreenState extends ConsumerState<ContributorDetailScree
     }
   }
 
-  void _onAddToWatchlist(Work work) async {
-    final watchlistLogic = ref.read(watchlistLogicProvider);
-    
-    try {
-      await watchlistLogic.addWorkToWatchlist(
-        tmdbId: work.tmdbId,
-        type: work.type == WorkType.movie ? WorkType.movie : WorkType.tvShow,
-        title: work.title,
-        posterPath: work.posterPath,
-        releaseDate: work.originalReleaseDate != null 
-          ? DateTime.tryParse(work.originalReleaseDate!) 
-          : null,
-        releaseType: work.originalReleaseType == 'theatrical' 
-          ? ReleaseType.theatrical 
-          : ReleaseType.streaming,
-      );
-      
-      ref.invalidate(watchlistEntriesProvider);
-      
-      if (mounted) {
-        showSimpleSnackBar(
-          context,
-          '${work.title} added to watchlist',
-          duration: const Duration(seconds: 3),
-        );
-      }
-    } catch (e) {
-      if (mounted) {
-        showSimpleSnackBar(
-          context,
-          'Failed to add to watchlist: $e',
-          duration: const Duration(seconds: 3),
-        );
-      }
-    }
+  void _onAddToWatchlist(Work work) {
+    // This is now handled by WatchlistButton component
+    // Kept for backward compatibility with existing work widgets
   }
 
   Widget _buildSection({

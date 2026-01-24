@@ -7,6 +7,8 @@ import '../../data/models/watchlist_entry.dart';
 import '../../providers/providers.dart';
 import '../common/department_selection_dialog.dart';
 import '../common/snackbar_utils.dart';
+import '../common/follow_button.dart';
+import 'home_screen.dart';
 
 enum SearchSort { relevance, name }
 
@@ -215,16 +217,46 @@ class _SearchResultsScreenState extends ConsumerState<SearchResultsScreen> {
               contributor.type == ContributorType.collection) {
             // Refresh watchlist providers
             ref.invalidate(watchlistEntriesProvider);
+            
+            // Show watchlist snackbar with undo and navigation
+            showWatchlistSnackBar(
+              context,
+              message: '${contributor.name} added to watchlist',
+              onUndo: () async {
+                final watchlistLogic = ref.read(watchlistLogicProvider);
+                final workType = contributor.type == ContributorType.movie ? WorkType.movie :
+                                contributor.type == ContributorType.tvShow ? WorkType.tvShow :
+                                WorkType.movie;
+                await watchlistLogic.removeWorkFromWatchlist(
+                  contributor.tmdbId,
+                  workType,
+                );
+                ref.invalidate(watchlistEntriesProvider);
+              },
+              onView: () {
+                // Pop back to home screen and switch to watchlist tab
+                // We need to replace the current HomeScreen with one that has initialTabIndex=1
+                Navigator.of(context).popUntil((route) {
+                  // Pop until we find the home screen or reach the root
+                  return route.isFirst || route.settings.name == '/home';
+                });
+                
+                // Now push a new HomeScreen with watchlist tab selected and scroll to item
+                Navigator.of(context).pushReplacement(
+                  MaterialPageRoute(
+                    builder: (context) => HomeScreen(
+                      initialTabIndex: 1,
+                      scrollToWatchlistItem: contributor.tmdbId,
+                    ),
+                  ),
+                );
+              },
+            );
           } else {
             // Refresh contributors provider for people/companies
             ref.invalidate(contributorsProvider);
+            showSimpleSnackBar(context, 'Added ${contributor.name} to Contributors');
           }
-          
-          final itemType = contributor.type == ContributorType.movie ? 'Movie' :
-                          contributor.type == ContributorType.tvShow ? 'TV show' :
-                          contributor.type == ContributorType.collection ? 'Collection' :
-                          'Contributor';
-          showSimpleSnackBar(context, 'Added ${contributor.name} to ${itemType == 'Movie' || itemType == 'TV show' || itemType == 'Collection' ? 'Watchlist' : 'Contributors'}');
         } else {
           final itemType = contributor.type == ContributorType.movie ? 'Movie' :
                           contributor.type == ContributorType.tvShow ? 'TV show' :
@@ -322,79 +354,67 @@ class _SearchResultsScreenState extends ConsumerState<SearchResultsScreen> {
               return Center(
                 child: ConstrainedBox(
                   constraints: BoxConstraints(maxWidth: itemWidth),
-                  child: Card(
-                    margin: const EdgeInsets.symmetric(horizontal: 12.0, vertical: 6.0),
-                    child: ListTile(
-                      contentPadding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
-                      leading: Container(
-                        width: 50,
-                        height: 75,
-                        decoration: BoxDecoration(
-                          color: contributor.type == ContributorType.company 
-                              ? Colors.white 
-                              : theme.colorScheme.surfaceContainerHighest,
-                          borderRadius: BorderRadius.circular(4.0),
-                        ),
-                        clipBehavior: Clip.antiAlias,
-                        child: contributor.profilePath != null
-                            ? CachedNetworkImage(
-                                imageUrl: 'https://image.tmdb.org/t/p/w200${contributor.profilePath}',
-                                fit: BoxFit.contain,
-                                errorWidget: (_, __, ___) => const Icon(Icons.broken_image),
-                              )
-                            : Icon(contributor.type == ContributorType.person ? Icons.person : Icons.business),
-                      ),
-                      title: Row(
-                        children: [
-                          Expanded(
-                            child: Text(contributor.name, style: const TextStyle(fontWeight: FontWeight.bold)),
+                  child: MouseRegion(
+                    onEnter: (_) => setState(() {
+                      // Track which card is hovered
+                    }),
+                    onExit: (_) => setState(() {
+                      // Clear hover state
+                    }),
+                    child: StatefulBuilder(
+                      builder: (context, setCardState) {
+                        bool isCardHovered = false;
+                        return MouseRegion(
+                          onEnter: (_) => setCardState(() => isCardHovered = true),
+                          onExit: (_) => setCardState(() => isCardHovered = false),
+                          child: Card(
+                            margin: const EdgeInsets.symmetric(horizontal: 12.0, vertical: 6.0),
+                            child: ListTile(
+                              contentPadding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
+                              leading: Container(
+                                width: 50,
+                                height: 75,
+                                decoration: BoxDecoration(
+                                  color: contributor.type == ContributorType.company 
+                                      ? Colors.white 
+                                      : theme.colorScheme.surfaceContainerHighest,
+                                  borderRadius: BorderRadius.circular(4.0),
+                                ),
+                                clipBehavior: Clip.antiAlias,
+                                child: contributor.profilePath != null
+                                    ? CachedNetworkImage(
+                                        imageUrl: 'https://image.tmdb.org/t/p/w200${contributor.profilePath}',
+                                        fit: BoxFit.contain,
+                                        errorWidget: (_, __, ___) => const Icon(Icons.broken_image),
+                                      )
+                                    : Icon(contributor.type == ContributorType.person ? Icons.person : Icons.business),
+                              ),
+                              title: Row(
+                                children: [
+                                  Expanded(
+                                    child: Text(contributor.name, style: const TextStyle(fontWeight: FontWeight.bold)),
+                                  ),
+                                ],
+                              ),
+                              subtitle: Text(contributor.knownFor, maxLines: 2, overflow: TextOverflow.ellipsis),
+                              trailing: isFollowed
+                                  ? Column(
+                                      mainAxisAlignment: MainAxisAlignment.center,
+                                      children: [
+                                        Icon(Icons.check_circle, color: theme.colorScheme.primary),
+                                        Text('Followed', style: theme.textTheme.labelSmall?.copyWith(color: theme.colorScheme.primary)),
+                                      ],
+                                    )
+                                  : FollowButton(
+                                      onPressed: () => _addContributor(contributor),
+                                      tooltip: 'Add',
+                                      iconSize: 18,
+                                      isCardHovered: isCardHovered,
+                                    ),
+                            ),
                           ),
-                          if (!isFollowed) ...[
-                            const SizedBox(width: 8),
-                            Tooltip(
-                              message: (contributor.type == ContributorType.movie || 
-                                       contributor.type == ContributorType.tvShow || 
-                                       contributor.type == ContributorType.collection)
-                                  ? 'Will be added to Watchlist'
-                                  : 'Will be added to Contributors',
-                              child: Icon(
-                                (contributor.type == ContributorType.movie || 
-                                 contributor.type == ContributorType.tvShow || 
-                                 contributor.type == ContributorType.collection)
-                                    ? Icons.bookmark_add
-                                    : Icons.person_add,
-                                size: 16,
-                                color: (contributor.type == ContributorType.movie || 
-                                       contributor.type == ContributorType.tvShow || 
-                                       contributor.type == ContributorType.collection)
-                                    ? theme.colorScheme.primary
-                                    : theme.colorScheme.secondary,
-                              ),
-                            ),
-                          ],
-                        ],
-                      ),
-                      subtitle: Text(contributor.knownFor, maxLines: 2, overflow: TextOverflow.ellipsis),
-                      trailing: isFollowed
-                          ? Column(
-                              mainAxisAlignment: MainAxisAlignment.center,
-                              children: [
-                                Icon(Icons.check_circle, color: theme.colorScheme.primary),
-                                Text('Followed', style: theme.textTheme.labelSmall?.copyWith(color: theme.colorScheme.primary)),
-                              ],
-                            )
-                          : FilledButton.icon(
-                              onPressed: () => _addContributor(contributor),
-                              icon: Icon(
-                                (contributor.type == ContributorType.movie || 
-                                 contributor.type == ContributorType.tvShow || 
-                                 contributor.type == ContributorType.collection)
-                                    ? Icons.bookmark_add
-                                    : Icons.person_add,
-                                size: 18,
-                              ),
-                              label: const Text('Add'),
-                            ),
+                        );
+                      },
                     ),
                   ),
                 ),

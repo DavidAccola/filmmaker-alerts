@@ -5,8 +5,10 @@ import 'package:flutter/foundation.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../../data/models/preferences.dart';
 import '../../data/models/notification_history.dart';
+import '../../data/models/contributor_detail.dart';
 import '../../providers/providers.dart';
 import '../common/snackbar_utils.dart';
+import '../common/watchlist_button.dart';
 import '../common/tmdb_attribution.dart';
 import '../common/external_navigation_utils.dart';
 import 'movie_detail_screen.dart';
@@ -14,11 +16,18 @@ import 'tv_show_detail_screen.dart';
 import 'tv_episode_detail_screen.dart';
 import '../../utils/debug_logger.dart';
 
-class HistoryScreen extends ConsumerWidget {
+class HistoryScreen extends ConsumerStatefulWidget {
   const HistoryScreen({super.key});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<HistoryScreen> createState() => _HistoryScreenState();
+}
+
+class _HistoryScreenState extends ConsumerState<HistoryScreen> {
+  late Map<int, bool> _posterHoverStates = {};
+
+  @override
+  Widget build(BuildContext context) {
     final historyAsync = ref.watch(historyProvider);
 
     // Mark history as viewed when the screen is built
@@ -236,27 +245,57 @@ class HistoryScreen extends ConsumerWidget {
                               String primaryTooltip = 'View Details';
                               VoidCallback primaryAction = () => _navigateToInternalDetail(context, entry, item.title);
                               
-                              return Tooltip(
-                                message: primaryTooltip,
-                                waitDuration: const Duration(milliseconds: 800),
+                              return MouseRegion(
+                                onEnter: (_) {
+                                  setState(() => _posterHoverStates[entry.tmdbId] = true);
+                                },
+                                onExit: (_) {
+                                  setState(() => _posterHoverStates[entry.tmdbId] = false);
+                                },
                                 child: Material(
                                   color: Colors.transparent,
                                   borderRadius: BorderRadius.circular(4),
                                   child: InkWell(
                                     borderRadius: BorderRadius.circular(4),
                                     onTap: primaryAction,
-                                    child: ClipRRect(
-                                      borderRadius: BorderRadius.circular(4),
-                                      child: SizedBox(
-                                        width: 60,
-                                        height: 90,
-                                        child: item.posterPath != null
-                                            ? CachedNetworkImage(
-                                                imageUrl: 'https://image.tmdb.org/t/p/w200${item.posterPath}',
-                                                fit: BoxFit.cover,
-                                                errorWidget: (_, __, ___) => const Icon(Icons.movie),
-                                              )
-                                            : Container(color: Colors.grey, child: const Icon(Icons.movie)),
+                                    child: SizedBox(
+                                      width: 60,
+                                      height: 90,
+                                      child: Stack(
+                                        children: [
+                                          ClipRRect(
+                                            borderRadius: BorderRadius.circular(4),
+                                            child: SizedBox(
+                                              width: 60,
+                                              height: 90,
+                                              child: item.posterPath != null
+                                                  ? CachedNetworkImage(
+                                                      imageUrl: 'https://image.tmdb.org/t/p/w200${item.posterPath}',
+                                                      fit: BoxFit.cover,
+                                                      errorWidget: (_, __, ___) => const Icon(Icons.movie),
+                                                    )
+                                                  : Container(color: Colors.grey, child: const Icon(Icons.movie)),
+                                            ),
+                                          ),
+                                          Positioned(
+                                            top: 0,
+                                            right: 0,
+                                            child: WatchlistButton(
+                                              tmdbId: entry.tmdbId,
+                                              workType: entry.mediaType == 'tv' ? WorkType.tvShow : WorkType.movie,
+                                              workTitle: item.title,
+                                              posterPath: item.posterPath,
+                                              releaseDate: entry.notificationEvents.isNotEmpty 
+                                                  ? DateTime.tryParse(entry.notificationEvents.first.releaseDate)
+                                                  : null,
+                                              position: WatchlistButtonStyle.topRight,
+                                              showOnHoverOnly: true,
+                                              iconSize: 16,
+                                              isHovered: _posterHoverStates[entry.tmdbId] ?? false,
+                                              applyPositioning: false,
+                                            ),
+                                          ),
+                                        ],
                                       ),
                                     ),
                                   ),

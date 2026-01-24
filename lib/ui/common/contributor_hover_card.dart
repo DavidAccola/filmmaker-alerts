@@ -1,8 +1,10 @@
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'adaptive_tooltip_text.dart';
+import '../../providers/providers.dart';
 
-class ContributorHoverCard extends StatefulWidget {
+class ContributorHoverCard extends ConsumerStatefulWidget {
   final int tmdbId;
   final String name;
   final String? profilePath;
@@ -27,15 +29,24 @@ class ContributorHoverCard extends StatefulWidget {
   });
 
   @override
-  State<ContributorHoverCard> createState() => _ContributorHoverCardState();
+  ConsumerState<ContributorHoverCard> createState() => _ContributorHoverCardState();
 }
 
-class _ContributorHoverCardState extends State<ContributorHoverCard> {
+class _ContributorHoverCardState extends ConsumerState<ContributorHoverCard> {
   bool _isHovered = false;
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    
+    // Check follow status in real-time from the repository
+    final contributorsAsync = ref.watch(contributorsProvider);
+    final isActuallyFollowed = contributorsAsync.maybeWhen(
+      data: (contributors) => contributors.any((c) => c.tmdbId == widget.tmdbId),
+      orElse: () => widget.isFollowed,
+    );
+    
+    debugPrint('[ContributorHoverCard] Building for ${widget.name} (${widget.tmdbId}), prop isFollowed: ${widget.isFollowed}, actual isFollowed: $isActuallyFollowed, isHovered: $_isHovered');
     
     return MouseRegion(
       onEnter: (_) => setState(() => _isHovered = true),
@@ -47,14 +58,9 @@ class _ContributorHoverCardState extends State<ContributorHoverCard> {
           width: widget.width,
           decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(8),
-            border: widget.isFollowed
-                ? Border.all(
-                    color: theme.colorScheme.primary,
-                    width: 2,
-                  )
-                : Border.all(
-                    color: theme.colorScheme.outline.withOpacity(0.2),
-                  ),
+            border: Border.all(
+              color: theme.colorScheme.outline.withOpacity(0.2),
+            ),
           ),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -89,35 +95,44 @@ class _ContributorHoverCardState extends State<ContributorHoverCard> {
                     
                     // Follow/Checkmark button in upper-right corner
                     Positioned(
-                      top: 4,
-                      right: 4,
-                      child: widget.isFollowed
-                          ? Container(
-                              decoration: BoxDecoration(
-                                color: theme.colorScheme.primary,
-                                shape: BoxShape.circle,
+                      top: 0,
+                      right: 0,
+                      child: AnimatedOpacity(
+                        opacity: _isHovered ? 1.0 : 0.0,
+                        duration: const Duration(milliseconds: 200),
+                        child: IconButton(
+                          icon: Icon(
+                            isActuallyFollowed ? Icons.check_circle : Icons.add_circle,
+                            size: 20,
+                            color: Colors.white,
+                            shadows: [
+                              Shadow(
+                                color: Colors.black.withOpacity(0.35),
+                                blurRadius: 8,
+                                offset: const Offset(0, 2),
                               ),
-                              padding: const EdgeInsets.all(4),
-                              child: Icon(
-                                Icons.check,
-                                size: 20,
-                                color: theme.colorScheme.onPrimary,
+                              Shadow(
+                                color: Colors.black.withOpacity(0.25),
+                                blurRadius: 4,
+                                offset: const Offset(0, 1),
                               ),
-                            )
-                          : IconButton(
-                              icon: Icon(
-                                Icons.add_circle,
-                                size: 28,
-                                color: theme.colorScheme.primary,
-                              ),
-                              onPressed: widget.onFollow,
-                              tooltip: 'Follow',
-                              padding: EdgeInsets.zero,
-                              constraints: const BoxConstraints(
-                                minWidth: 32,
-                                minHeight: 32,
-                              ),
-                            ),
+                            ],
+                          ),
+                          onPressed: () {
+                            debugPrint('[ContributorHoverCard] Button pressed for ${widget.name}, isActuallyFollowed: $isActuallyFollowed');
+                            widget.onFollow();
+                          },
+                          tooltip: isActuallyFollowed ? 'Followed' : 'Follow',
+                          padding: EdgeInsets.zero,
+                          constraints: const BoxConstraints(
+                            minWidth: 32,
+                            minHeight: 32,
+                          ),
+                          style: IconButton.styleFrom(
+                            backgroundColor: Colors.transparent,
+                          ),
+                        ),
+                      ),
                     ),
                   ],
                 ),
@@ -132,7 +147,7 @@ class _ContributorHoverCardState extends State<ContributorHoverCard> {
                     AdaptiveTooltipText(
                       widget.name,
                       style: theme.textTheme.bodySmall?.copyWith(
-                        fontWeight: widget.isFollowed ? FontWeight.bold : FontWeight.w500,
+                        fontWeight: FontWeight.w500,
                         fontSize: 11, // Slightly smaller font for compact feel
                       ),
                       maxLines: 2,

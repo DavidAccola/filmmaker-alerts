@@ -3,12 +3,14 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:intl/intl.dart';
 import '../../data/models/movie_detail.dart';
+import '../../data/models/contributor_detail.dart';
 import '../../data/models/preferences.dart';
 import '../../data/repositories/movie_detail_repository.dart';
 import '../../providers/providers.dart';
 import '../common/streaming_options_widget.dart';
 import '../common/external_navigation_utils.dart';
 import '../common/snackbar_utils.dart';
+import '../common/watchlist_button.dart';
 import 'contributor_detail_screen.dart';
 import '../../data/models/contributor.dart';
 import '../../logic/work_sorting_logic.dart';
@@ -37,6 +39,7 @@ class MovieDetailScreen extends ConsumerStatefulWidget {
 
 class _MovieDetailScreenState extends ConsumerState<MovieDetailScreen> {
   bool _synopsisExpanded = false;
+  bool _isPosterHovered = false;
 
   @override
   Widget build(BuildContext context) {
@@ -144,24 +147,58 @@ class _MovieDetailScreenState extends ConsumerState<MovieDetailScreen> {
                   child: Row(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      // Poster image
-                      Container(
-                        width: 100,
-                        height: 150,
-                        decoration: BoxDecoration(
-                          color: Theme.of(context).colorScheme.surfaceContainerHighest,
-                          borderRadius: BorderRadius.circular(8),
-                        ),
-                        child: movieDetail.posterPath != null
-                            ? ClipRRect(
-                                borderRadius: BorderRadius.circular(8),
-                                child: CachedNetworkImage(
-                                  imageUrl: 'https://image.tmdb.org/t/p/w300${movieDetail.posterPath}',
-                                  fit: BoxFit.cover,
-                                  errorWidget: (_, __, ___) => const Icon(Icons.movie, size: 40),
+                      // Poster image with watchlist button
+                      MouseRegion(
+                        onEnter: (_) {
+                          debugPrint('[MovieDetailScreen] Poster hovered: true');
+                          setState(() => _isPosterHovered = true);
+                        },
+                        onExit: (_) {
+                          debugPrint('[MovieDetailScreen] Poster hovered: false');
+                          setState(() => _isPosterHovered = false);
+                        },
+                        child: SizedBox(
+                          width: 100,
+                          height: 150,
+                          child: Stack(
+                            children: [
+                              Container(
+                                width: 100,
+                                height: 150,
+                                decoration: BoxDecoration(
+                                  color: Theme.of(context).colorScheme.surfaceContainerHighest,
+                                  borderRadius: BorderRadius.circular(8),
                                 ),
-                              )
-                            : const Icon(Icons.movie, size: 40),
+                                child: movieDetail.posterPath != null
+                                    ? ClipRRect(
+                                        borderRadius: BorderRadius.circular(8),
+                                        child: CachedNetworkImage(
+                                          imageUrl: 'https://image.tmdb.org/t/p/w300${movieDetail.posterPath}',
+                                          fit: BoxFit.cover,
+                                          errorWidget: (_, __, ___) => const Icon(Icons.movie, size: 40),
+                                        ),
+                                      )
+                                    : const Icon(Icons.movie, size: 40),
+                              ),
+                              Positioned(
+                                top: 0,
+                                right: 0,
+                                child: WatchlistButton(
+                                  tmdbId: movieDetail.tmdbId,
+                                  workType: WorkType.movie,
+                                  workTitle: movieDetail.title,
+                                  posterPath: movieDetail.posterPath,
+                                  releaseDate: movieDetail.releaseDate,
+                                  position: WatchlistButtonStyle.topRight,
+                                  showOnHoverOnly: true,
+                                  iconSize: 20,
+                                  isHovered: _isPosterHovered,
+                                  applyPositioning: false,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
                       ),
                       
                       const SizedBox(width: 16),
@@ -198,24 +235,58 @@ class _MovieDetailScreenState extends ConsumerState<MovieDetailScreen> {
                 Row(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    // Poster image
-                    Container(
-                      width: 100,
-                      height: 150,
-                      decoration: BoxDecoration(
-                        color: Theme.of(context).colorScheme.surfaceContainerHighest,
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                      child: movieDetail.posterPath != null
-                          ? ClipRRect(
-                              borderRadius: BorderRadius.circular(8),
-                              child: CachedNetworkImage(
-                                imageUrl: 'https://image.tmdb.org/t/p/w300${movieDetail.posterPath}',
-                                fit: BoxFit.cover,
-                                errorWidget: (_, __, ___) => const Icon(Icons.movie, size: 40),
+                    // Poster image with watchlist button
+                    MouseRegion(
+                      onEnter: (_) {
+                        debugPrint('[MovieDetailScreen] Poster hovered: true');
+                        setState(() => _isPosterHovered = true);
+                      },
+                      onExit: (_) {
+                        debugPrint('[MovieDetailScreen] Poster hovered: false');
+                        setState(() => _isPosterHovered = false);
+                      },
+                      child: SizedBox(
+                        width: 100,
+                        height: 150,
+                        child: Stack(
+                          children: [
+                            Container(
+                              width: 100,
+                              height: 150,
+                              decoration: BoxDecoration(
+                                color: Theme.of(context).colorScheme.surfaceContainerHighest,
+                                borderRadius: BorderRadius.circular(8),
                               ),
-                            )
-                          : const Icon(Icons.movie, size: 40),
+                              child: movieDetail.posterPath != null
+                                  ? ClipRRect(
+                                      borderRadius: BorderRadius.circular(8),
+                                      child: CachedNetworkImage(
+                                        imageUrl: 'https://image.tmdb.org/t/p/w300${movieDetail.posterPath}',
+                                        fit: BoxFit.cover,
+                                        errorWidget: (_, __, ___) => const Icon(Icons.movie, size: 40),
+                                      ),
+                                    )
+                                  : const Icon(Icons.movie, size: 40),
+                            ),
+                            Positioned(
+                              top: 0,
+                              right: 0,
+                              child: WatchlistButton(
+                                tmdbId: movieDetail.tmdbId,
+                                workType: WorkType.movie,
+                                workTitle: movieDetail.title,
+                                posterPath: movieDetail.posterPath,
+                                releaseDate: movieDetail.releaseDate,
+                                position: WatchlistButtonStyle.topRight,
+                                showOnHoverOnly: true,
+                                iconSize: 20,
+                                isHovered: _isPosterHovered,
+                                applyPositioning: false,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
                     ),
                     
                     const SizedBox(width: 16),
@@ -405,6 +476,11 @@ class _MovieDetailScreenState extends ConsumerState<MovieDetailScreen> {
 
   Widget _buildCrewSection(MovieDetail movieDetail, Preferences prefs) {
     final sortedCrew = WorkSortingLogic.groupAndSortCrew(movieDetail.crew);
+    
+    debugPrint('[MovieDetail] Building crew section with ${sortedCrew.length} members');
+    for (var member in sortedCrew.take(3)) {
+      debugPrint('[MovieDetail] Crew member: ${member.name} (${member.tmdbId}), isFollowed: ${member.isFollowed}');
+    }
 
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 16.0),
@@ -597,9 +673,15 @@ class _MovieDetailScreenState extends ConsumerState<MovieDetailScreen> {
   }
 
   Future<void> _handleFollowPerson(dynamic member, WidgetRef ref) async {
+    debugPrint('[MovieDetail] _handleFollowPerson called for ${member.name} (${member.tmdbId})');
+    
     try {
       final contributorLogic = ref.read(contributorLogicProvider);
       final repo = ref.read(contributorRepositoryProvider);
+      
+      // Check if already followed
+      final existingContributor = repo.getContributor(member.tmdbId);
+      debugPrint('[MovieDetail] Existing contributor: ${existingContributor?.name}, isFollowed: ${existingContributor != null}');
       
       // Determine knownFor based on member type (CastMember vs CrewMember)
       String knownFor = '';
@@ -629,7 +711,16 @@ class _MovieDetailScreenState extends ConsumerState<MovieDetailScreen> {
         overrideAvailableDepts: availableDepts,
       );
 
+      debugPrint('[MovieDetail] addEnrichedContributor result: $success');
+      
+      // Always invalidate movie detail to refresh isFollowed status
+      if (mounted) {
+        ref.invalidate(movieDetailProvider(widget.movieId));
+        debugPrint('[MovieDetail] Invalidated movieDetailProvider to refresh isFollowed status');
+      }
+
       if (success && mounted) {
+        debugPrint('[MovieDetail] Successfully added contributor, invalidating contributors provider');
         ref.invalidate(contributorsProvider);
         
         final prefs = ref.read(preferencesRepositoryProvider).getPreferences();
@@ -666,6 +757,7 @@ class _MovieDetailScreenState extends ConsumerState<MovieDetailScreen> {
                 if (existingContributor != null) {
                   await contributorLogic.updateContributorRoles(existingContributor, newRoles);
                   ref.invalidate(contributorsProvider);
+                  ref.invalidate(movieDetailProvider(widget.movieId));
                   
                   if (mounted) {
                     showSimpleSnackBar(context, 'Updated ${sparseContributor.name} to follow ${newRoles.join(", ")}', duration: const Duration(seconds: 3));
@@ -676,6 +768,7 @@ class _MovieDetailScreenState extends ConsumerState<MovieDetailScreen> {
           },
         );
       } else if (mounted) {
+        debugPrint('[MovieDetail] Contributor already followed, showing unfollow option');
         // Person already followed - show new snackbar with unfollow option
         showAlreadyFollowedSnackBar(
           context,
@@ -683,6 +776,8 @@ class _MovieDetailScreenState extends ConsumerState<MovieDetailScreen> {
           onUnfollow: () async {
             await repo.removeContributor(member.tmdbId);
             ref.invalidate(contributorsProvider);
+            ref.invalidate(movieDetailProvider(widget.movieId));
+            debugPrint('[MovieDetail] Unfollowed and invalidated providers');
             
             if (mounted) {
               showRemovalSnackBar(
@@ -693,6 +788,7 @@ class _MovieDetailScreenState extends ConsumerState<MovieDetailScreen> {
                   if (existingContributor != null) {
                     await repo.addContributor(existingContributor);
                     ref.invalidate(contributorsProvider);
+                    ref.invalidate(movieDetailProvider(widget.movieId));
                   }
                 },
               );

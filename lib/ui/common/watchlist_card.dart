@@ -128,7 +128,7 @@ class _WatchlistCardState extends ConsumerState<WatchlistCard> {
               },
               borderRadius: const BorderRadius.vertical(top: Radius.circular(12)),
               child: SizedBox(
-                height: 230,
+                height: 200,
                 width: double.infinity,
                 child: Stack(
                   fit: StackFit.expand,

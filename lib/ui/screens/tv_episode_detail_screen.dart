@@ -727,6 +727,11 @@ class _TvEpisodeDetailScreenState extends ConsumerState<TvEpisodeDetailScreen> {
         overrideAvailableDepts: availableDepts,
       );
 
+      // Always invalidate episode detail to refresh isFollowed status
+      if (mounted) {
+        ref.invalidate(tvEpisodeDetailProvider((showId: widget.showId, seasonNumber: widget.seasonNumber, episodeNumber: widget.episodeNumber)));
+      }
+
       if (success && mounted) {
         ref.invalidate(contributorsProvider);
         
@@ -764,6 +769,7 @@ class _TvEpisodeDetailScreenState extends ConsumerState<TvEpisodeDetailScreen> {
                 if (existingContributor != null) {
                   await contributorLogic.updateContributorRoles(existingContributor, newRoles);
                   ref.invalidate(contributorsProvider);
+                  ref.invalidate(tvEpisodeDetailProvider((showId: widget.showId, seasonNumber: widget.seasonNumber, episodeNumber: widget.episodeNumber)));
                   
                   if (mounted) {
                     showSimpleSnackBar(context, 'Updated ${sparseContributor.name} to follow ${newRoles.join(", ")}', duration: const Duration(seconds: 3));
@@ -781,6 +787,7 @@ class _TvEpisodeDetailScreenState extends ConsumerState<TvEpisodeDetailScreen> {
           onUnfollow: () async {
             await repo.removeContributor(member.tmdbId);
             ref.invalidate(contributorsProvider);
+            ref.invalidate(tvEpisodeDetailProvider((showId: widget.showId, seasonNumber: widget.seasonNumber, episodeNumber: widget.episodeNumber)));
             
             if (mounted) {
               showRemovalSnackBar(
@@ -791,6 +798,7 @@ class _TvEpisodeDetailScreenState extends ConsumerState<TvEpisodeDetailScreen> {
                   if (existingContributor != null) {
                     await repo.addContributor(existingContributor);
                     ref.invalidate(contributorsProvider);
+                    ref.invalidate(tvEpisodeDetailProvider((showId: widget.showId, seasonNumber: widget.seasonNumber, episodeNumber: widget.episodeNumber)));
                   }
                 },
               );

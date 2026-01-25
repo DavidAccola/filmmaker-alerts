@@ -47,6 +47,20 @@ class _HoverActionButtonState extends State<HoverActionButton> {
   }
 
   @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    // If already hovering when widget is built/updated, ensure button shows
+    if (widget.isCardHovered && !_showButton) {
+      _hoverTimer?.cancel();
+      _hoverTimer = Timer(const Duration(milliseconds: 250), () {
+        if (mounted) {
+          setState(() => _showButton = true);
+        }
+      });
+    }
+  }
+
+  @override
   void dispose() {
     _hoverTimer?.cancel();
     super.dispose();
@@ -60,8 +74,9 @@ class _HoverActionButtonState extends State<HoverActionButton> {
       child: IgnorePointer(
         ignoring: !_showButton,
         child: Tooltip(
-          message: _showButton ? widget.tooltip : '',
+          message: widget.tooltip,
           waitDuration: Duration.zero, // Show immediately once button is visible
+          showDuration: const Duration(seconds: 3),
           child: IconButton(
             onPressed: widget.onPressed,
             icon: Icon(

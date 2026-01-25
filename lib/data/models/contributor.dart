@@ -138,6 +138,9 @@ class Contributor extends HiveObject {
   @HiveField(15)
   String? imdbId;
 
+  @HiveField(16)
+  bool notificationsSnoozed;
+
   Contributor({
     required this.tmdbId,
     required this.name,
@@ -155,5 +158,6 @@ class Contributor extends HiveObject {
     this.totalSeasons,
     this.nextEpisodeDate,
     this.imdbId,
+    this.notificationsSnoozed = false,
   });
 }

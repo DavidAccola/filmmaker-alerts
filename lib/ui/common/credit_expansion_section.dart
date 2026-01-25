@@ -184,6 +184,51 @@ class _CreditExpansionSectionState extends State<CreditExpansionSection> {
     });
   }
 
+  /// Builds the preview content based on current _groupByRole state
+  Widget _buildPreview() {
+    if (_groupByRole) {
+      // Show grouped by role preview
+      final sortedDepts = widget.splitByStage 
+          ? _sortDepartments(groupedByDept.keys.toList())
+          : _sortDepartmentsForCredits(groupedByDept.keys.toList());
+      
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: sortedDepts.map((dept) {
+          final worksInDept = groupedByDept[dept]!;
+          final theme = Theme.of(context);
+          return Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Padding(
+                padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
+                child: Container(
+                  decoration: BoxDecoration(
+                    color: theme.colorScheme.primaryContainer,
+                    borderRadius: BorderRadius.circular(6),
+                  ),
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                  child: Text(
+                    dept.toUpperCase(),
+                    style: theme.textTheme.labelMedium?.copyWith(
+                      color: theme.colorScheme.onPrimaryContainer,
+                      fontWeight: FontWeight.bold,
+                      letterSpacing: 1.2,
+                    ),
+                  ),
+                ),
+              ),
+              _buildWorksList(worksInDept, dept),
+            ],
+          );
+        }).toList(),
+      );
+    } else {
+      // Show chronological preview
+      return _buildChronologicalList();
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
@@ -331,7 +376,7 @@ class _CreditExpansionSectionState extends State<CreditExpansionSection> {
                                 constraints: const BoxConstraints(maxHeight: 120),
                                 child: SingleChildScrollView(
                                   physics: const NeverScrollableScrollPhysics(),
-                                  child: _buildChronologicalList(),
+                                  child: _buildPreview(),
                                 ),
                               ),
                             ),

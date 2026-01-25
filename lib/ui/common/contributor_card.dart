@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import '../../data/models/contributor.dart';
 import '../common/adaptive_tooltip_text.dart';
+import '../common/snackbar_utils.dart';
 
 class ContributorCard extends StatefulWidget {
   final Contributor contributor;
@@ -297,32 +298,55 @@ class _ContributorCardState extends State<ContributorCard> {
                   // Poster/Profile Image
                   SizedBox(
                     width: 90,
-                    child: AnimatedSwitcher(
-                    duration: const Duration(milliseconds: 200),
-                    child: Container(
-                      key: ValueKey('${widget.contributor.tmdbId}_${mainImagePath ?? 'placeholder'}_$_keyCounter'),
-                      width: 90,
-                      height: double.infinity,
-                      color: widget.contributor.type == ContributorType.company 
-                          ? Colors.white 
-                          : theme.colorScheme.surfaceContainerHighest, // Background for 'contain' fit
-                      child: mainImagePath != null
-                          ? CachedNetworkImage(
-                              imageUrl: 'https://image.tmdb.org/t/p/w200$mainImagePath',
-                              fit: BoxFit.contain,
-                              placeholder: (context, url) => Shimmer.fromColors(
-                                baseColor: theme.colorScheme.surfaceContainerHighest,
-                                highlightColor: theme.colorScheme.surface,
-                                child: Container(
-                                  color: theme.colorScheme.surface,
-                                ),
+                    child: Stack(
+                      fit: StackFit.expand,
+                      children: [
+                        AnimatedSwitcher(
+                          duration: const Duration(milliseconds: 200),
+                          child: Container(
+                            key: ValueKey('${widget.contributor.tmdbId}_${mainImagePath ?? 'placeholder'}_$_keyCounter'),
+                            width: 90,
+                            height: double.infinity,
+                            color: widget.contributor.type == ContributorType.company 
+                                ? Colors.white 
+                                : theme.colorScheme.surfaceContainerHighest, // Background for 'contain' fit
+                            child: mainImagePath != null
+                                ? CachedNetworkImage(
+                                    imageUrl: 'https://image.tmdb.org/t/p/w200$mainImagePath',
+                                    fit: BoxFit.contain,
+                                    placeholder: (context, url) => Shimmer.fromColors(
+                                      baseColor: theme.colorScheme.surfaceContainerHighest,
+                                      highlightColor: theme.colorScheme.surface,
+                                      child: Container(
+                                        color: theme.colorScheme.surface,
+                                      ),
+                                    ),
+                                    errorWidget: (context, url, error) => const Icon(Icons.error),
+                                  )
+                                : const Center(
+                                    child: Icon(Icons.person, size: 30),
+                                  ),
+                          ),
+                        ),
+                        // Notification snooze indicator (upper-left)
+                        if (widget.contributor.notificationsSnoozed)
+                          Positioned(
+                            top: 4,
+                            left: 4,
+                            child: Container(
+                              padding: const EdgeInsets.all(6),
+                              decoration: BoxDecoration(
+                                color: Colors.black.withValues(alpha: 0.6),
+                                borderRadius: BorderRadius.circular(6),
                               ),
-                              errorWidget: (context, url, error) => const Icon(Icons.error),
-                            )
-                          : const Center(
-                              child: Icon(Icons.person, size: 30),
+                              child: const Icon(
+                                Icons.notifications_off,
+                                size: 14,
+                                color: Colors.white,
+                              ),
                             ),
-                    ),
+                          ),
+                      ],
                     ),
                   ),
                   // Main Info Area
@@ -363,15 +387,28 @@ class _ContributorCardState extends State<ContributorCard> {
                                 icon: const Icon(Icons.more_vert),
                                 padding: EdgeInsets.zero,
                                 onSelected: (value) {
-                                  if (value == 'remove') {
+                                  if (value == 'toggle_notifications') {
+                                    widget.contributor.notificationsSnoozed = !widget.contributor.notificationsSnoozed;
+                                    widget.contributor.save();
+                                    setState(() {});
+                                    
+                                    final message = widget.contributor.notificationsSnoozed
+                                        ? 'Notifications paused for ${widget.contributor.name}'
+                                        : 'Notifications resumed for ${widget.contributor.name}';
+                                    showSimpleSnackBar(context, message);
+                                  } else if (value == 'remove') {
                                     widget.onRemove();
                                   } else if (value == 'edit_roles') {
                                     widget.onEditRoles?.call();
                                   } else if (value == 'edit_tv_prefs') {
-                                    widget.onEditRoles?.call(); // Reuse the same callback for TV preferences
+                                    widget.onEditRoles?.call();
                                   }
                                 },
                                 itemBuilder: (context) => [
+                                  PopupMenuItem(
+                                    value: 'toggle_notifications',
+                                    child: Text(widget.contributor.notificationsSnoozed ? 'Resume Notifications' : 'Pause Notifications'),
+                                  ),
                                   if (widget.contributor.type == ContributorType.person)
                                     const PopupMenuItem(
                                       value: 'edit_roles',

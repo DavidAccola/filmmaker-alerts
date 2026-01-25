@@ -201,217 +201,102 @@ class _HistoryScreenState extends ConsumerState<HistoryScreen> {
                   ? _formatNotificationDate(entry.notificationEvents.last.notifiedAt)
                   : 'Unknown';
 
-              return Card(
+              return Container(
                 margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                color: !isRecentBatch 
-                    ? Theme.of(context).colorScheme.surface.withOpacity(0.6) // De-emphasized older items
-                    : null, // New items look normal
+                decoration: BoxDecoration(
+                  color: !isRecentBatch 
+                      ? Theme.of(context).colorScheme.surface.withOpacity(0.6)
+                      : Theme.of(context).colorScheme.surface,
+                  borderRadius: const BorderRadius.all(Radius.circular(4)),
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black.withOpacity(0.12),
+                      blurRadius: 2,
+                      offset: const Offset(0, 2),
+                    ),
+                  ],
+                ),
+                clipBehavior: Clip.antiAlias,
                 child: Material(
                   color: Colors.transparent,
                   child: InkWell(
                     onTap: () => _navigateToInternalDetail(context, entry, item.title),
-                    child: Padding(
-                      padding: const EdgeInsets.all(12.0),
+                    child: IntrinsicHeight(
                       child: Row(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      // Poster
-                      Consumer(
-                        builder: (context, ref, child) {
-                          final prefsAsync = ref.watch(preferencesProvider);
-                          return prefsAsync.when(
-                            data: (prefs) {
-                              final movieDetailsPreference = prefs.movieDetailsPreference ?? 'both';
-                              
-                              // Get IMDb ID based on media type
-                              String? imdbId;
-                              bool hasImdbId = false;
-                              
-                              if (entry.mediaType == 'tv') {
-                                // TV show - get from TV cache
-                                final tvCacheRepo = ref.read(tvCacheRepositoryProvider);
-                                final tvShow = tvCacheRepo.getShow(entry.tmdbId);
-                                imdbId = tvShow?.imdbId;
-                                hasImdbId = imdbId != null && imdbId.isNotEmpty;
-                              } else {
-                                // Movie - get from movie cache
-                                final movieCacheRepo = ref.read(movieCacheRepositoryProvider);
-                                final movie = movieCacheRepo.getMovie(entry.tmdbId);
-                                imdbId = movie?.imdbId;
-                                hasImdbId = imdbId != null && imdbId.isNotEmpty;
-                              }
-                              
-                              // Determine primary action (poster/title click) - ALWAYS INTERNAL NOW
-                              String primaryTooltip = 'View Details';
-                              VoidCallback primaryAction = () => _navigateToInternalDetail(context, entry, item.title);
-                              
-                              return MouseRegion(
-                                onEnter: (_) {
-                                  setState(() => _posterHoverStates[entry.tmdbId] = true);
-                                },
-                                onExit: (_) {
-                                  setState(() => _posterHoverStates[entry.tmdbId] = false);
-                                },
-                                child: Material(
-                                  color: Colors.transparent,
-                                  borderRadius: BorderRadius.circular(4),
-                                  child: InkWell(
-                                    borderRadius: BorderRadius.circular(4),
-                                    onTap: primaryAction,
-                                    child: SizedBox(
-                                      width: 60,
-                                      height: 90,
-                                      child: Stack(
-                                        children: [
-                                          ClipRRect(
-                                            borderRadius: BorderRadius.circular(4),
-                                            child: SizedBox(
-                                              width: 60,
-                                              height: 90,
-                                              child: item.posterPath != null
-                                                  ? CachedNetworkImage(
-                                                      imageUrl: 'https://image.tmdb.org/t/p/w200${item.posterPath}',
-                                                      fit: BoxFit.cover,
-                                                      errorWidget: (_, __, ___) => const Icon(Icons.movie),
-                                                    )
-                                                  : Container(color: Colors.grey, child: const Icon(Icons.movie)),
-                                            ),
-                                          ),
-                                          Positioned(
-                                            top: 0,
-                                            right: 0,
-                                            child: WatchlistButton(
-                                              tmdbId: entry.tmdbId,
-                                              workType: entry.mediaType == 'tv' ? WorkType.tvShow : WorkType.movie,
-                                              workTitle: item.title,
-                                              posterPath: item.posterPath,
-                                              releaseDate: entry.notificationEvents.isNotEmpty 
-                                                  ? DateTime.tryParse(entry.notificationEvents.first.releaseDate)
-                                                  : null,
-                                              position: WatchlistButtonStyle.topRight,
-                                              showOnHoverOnly: true,
-                                              iconSize: 16,
-                                              isHovered: _posterHoverStates[entry.tmdbId] ?? false,
-                                              applyPositioning: false,
-                                            ),
-                                          ),
-                                        ],
-                                      ),
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          // Poster - 60px wide, fills card height and left edge
+                          MouseRegion(
+                            onEnter: (_) => setState(() => _posterHoverStates[entry.tmdbId] = true),
+                            onExit: (_) => setState(() => _posterHoverStates[entry.tmdbId] = false),
+                            child: SizedBox(
+                              width: 60,
+                              child: Stack(
+                                fit: StackFit.expand,
+                                children: [
+                                  ClipRRect(
+                                    borderRadius: BorderRadius.zero,
+                                    child: item.posterPath != null
+                                        ? CachedNetworkImage(
+                                            imageUrl: 'https://image.tmdb.org/t/p/w200${item.posterPath}',
+                                            fit: BoxFit.cover,
+                                            errorWidget: (_, __, ___) => const Icon(Icons.movie),
+                                          )
+                                        : Container(color: Colors.grey, child: const Icon(Icons.movie)),
+                                  ),
+                                  Positioned(
+                                    top: 2,
+                                    right: 2,
+                                    child: WatchlistButton(
+                                      tmdbId: entry.tmdbId,
+                                      workType: entry.mediaType == 'tv' ? WorkType.tvShow : WorkType.movie,
+                                      workTitle: item.title,
+                                      posterPath: item.posterPath,
+                                      releaseDate: entry.notificationEvents.isNotEmpty 
+                                          ? DateTime.tryParse(entry.notificationEvents.first.releaseDate)
+                                          : null,
+                                      position: WatchlistButtonStyle.topRight,
+                                      showOnHoverOnly: true,
+                                      iconSize: 16,
+                                      isHovered: _posterHoverStates[entry.tmdbId] ?? false,
+                                      applyPositioning: false,
                                     ),
                                   ),
-                                ),
-                              );
-                            },
-                            loading: () => ClipRRect(
-                              borderRadius: BorderRadius.circular(4),
-                              child: SizedBox(
-                                width: 60,
-                                height: 90,
-                                child: item.posterPath != null
-                                    ? CachedNetworkImage(
-                                        imageUrl: 'https://image.tmdb.org/t/p/w200${item.posterPath}',
-                                        fit: BoxFit.cover,
-                                        errorWidget: (_, __, ___) => const Icon(Icons.movie),
-                                      )
-                                    : Container(color: Colors.grey, child: const Icon(Icons.movie)),
+                                ],
                               ),
                             ),
-                            error: (_, __) => ClipRRect(
-                              borderRadius: BorderRadius.circular(4),
-                              child: SizedBox(
-                                width: 60,
-                                height: 90,
-                                child: item.posterPath != null
-                                    ? CachedNetworkImage(
-                                        imageUrl: 'https://image.tmdb.org/t/p/w200${item.posterPath}',
-                                        fit: BoxFit.cover,
-                                        errorWidget: (_, __, ___) => const Icon(Icons.movie),
-                                      )
-                                    : Container(color: Colors.grey, child: const Icon(Icons.movie)),
-                              ),
-                            ),
-                          );
-                        },
-                      ),
-                      const SizedBox(width: 16),
-                      // Content
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Row(
-                              children: [
-                                Expanded(
-                                  child: Consumer(
-                                    builder: (context, ref, child) {
-                                      final prefsAsync = ref.watch(preferencesProvider);
-                                      return prefsAsync.when(
-                                        data: (prefs) {
-                                          final movieDetailsPreference = prefs.movieDetailsPreference ?? 'both';
-                                          
-                                          // Get IMDb ID based on media type
-                                          String? imdbId;
-                                          bool hasImdbId = false;
-                                          
-                                          if (entry.mediaType == 'tv') {
-                                            // TV show - get from TV cache
-                                            final tvCacheRepo = ref.read(tvCacheRepositoryProvider);
-                                            final tvShow = tvCacheRepo.getShow(entry.tmdbId);
-                                            imdbId = tvShow?.imdbId;
-                                            hasImdbId = imdbId != null && imdbId.isNotEmpty;
-                                          } else {
-                                            // Movie - get from movie cache
-                                            final movieCacheRepo = ref.read(movieCacheRepositoryProvider);
-                                            final movie = movieCacheRepo.getMovie(entry.tmdbId);
-                                            imdbId = movie?.imdbId;
-                                            hasImdbId = imdbId != null && imdbId.isNotEmpty;
-                                          }
-                                          
-                                          return Text(
-                                            item.title, 
-                                            style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                                              fontWeight: FontWeight.bold,
-                                            ),
-                                          );
-                                        },
-                                        loading: () => Text(
-                                          item.title, 
-                                          style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold)
-                                        ),
-                                        error: (_, __) => Text(
-                                          item.title, 
-                                          style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold)
-                                        ),
-                                      );
-                                    },
+                          ),
+                          // Content
+                          Expanded(
+                            child: Padding(
+                              padding: const EdgeInsets.all(12.0),
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    item.title,
+                                    style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                                      fontWeight: FontWeight.bold,
+                                    ),
                                   ),
-                                ),
-                              ],
+                                  const SizedBox(height: 4),
+                                  if (episodeWidgets.isNotEmpty) ...[
+                                    ...episodeWidgets,
+                                    const SizedBox(height: 4),
+                                  ],
+                                  if (reasonsText.isNotEmpty) ...[
+                                    Text(reasonsText, style: Theme.of(context).textTheme.bodyMedium),
+                                    const SizedBox(height: 8),
+                                  ],
+                                  if (entry.mediaType != 'tv') ...[
+                                    Text(eventsText, style: Theme.of(context).textTheme.bodySmall),
+                                    const SizedBox(height: 8),
+                                  ],
+                                  Text('Notified on $notifiedOn', style: Theme.of(context).textTheme.labelSmall?.copyWith(color: Colors.grey)),
+                                ],
+                              ),
                             ),
-                            const SizedBox(height: 4),
-                            // TV episode information
-                            if (episodeWidgets.isNotEmpty) ...[
-                              ...episodeWidgets,
-                              const SizedBox(height: 4),
-                            ],
-                            if (reasonsText.isNotEmpty) ...[
-                              Text(reasonsText, style: Theme.of(context).textTheme.bodyMedium),
-                              const SizedBox(height: 8),
-                            ],
-                            // Only show eventsText for non-TV entries (movies)
-                            if (entry.mediaType != 'tv') ...[
-                              Text(eventsText, style: Theme.of(context).textTheme.bodySmall),
-                              const SizedBox(height: 8),
-                            ],
-                            Text('Notified on $notifiedOn', style: Theme.of(context).textTheme.labelSmall?.copyWith(color: Colors.grey)),
-                          ],
-                        ),
-                      ),
-                      // Action buttons
-                      Column(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          // Delete button (debug mode only)
+                          ),
                           if (kDebugMode)
                             IconButton(
                               icon: const Icon(Icons.delete, color: Colors.red),
@@ -426,7 +311,6 @@ class _HistoryScreenState extends ConsumerState<HistoryScreen> {
                                       context,
                                       message: 'Removed "${item.title}" from history',
                                       onUndo: () {
-                                        // Re-add the entry
                                         historyRepo.addNotificationToHistory(entry);
                                         ref.invalidate(historyProvider);
                                       },
@@ -437,11 +321,9 @@ class _HistoryScreenState extends ConsumerState<HistoryScreen> {
                             ),
                         ],
                       ),
-                    ],
-                  ),
-                ),
                     ),
                   ),
+                ),
               );
             },
             childCount: history.length,

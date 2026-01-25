@@ -141,13 +141,14 @@ class ContributorAdapter extends TypeAdapter<Contributor> {
       totalSeasons: fields[13] as int?,
       nextEpisodeDate: fields[14] as String?,
       imdbId: fields[15] as String?,
+      notificationsSnoozed: fields[16] as bool? ?? false,
     );
   }
 
   @override
   void write(BinaryWriter writer, Contributor obj) {
     writer
-      ..writeByte(16)
+      ..writeByte(17)
       ..writeByte(0)
       ..write(obj.tmdbId)
       ..writeByte(1)
@@ -179,7 +180,9 @@ class ContributorAdapter extends TypeAdapter<Contributor> {
       ..writeByte(14)
       ..write(obj.nextEpisodeDate)
       ..writeByte(15)
-      ..write(obj.imdbId);
+      ..write(obj.imdbId)
+      ..writeByte(16)
+      ..write(obj.notificationsSnoozed);
   }
 
   @override

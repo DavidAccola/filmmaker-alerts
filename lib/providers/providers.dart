@@ -347,6 +347,12 @@ final selectedTabProvider = StateProvider<int>((ref) => 0);
 /// This is managed at the provider level to persist across screen resizes
 final homeTabProvider = StateProvider<int>((ref) => 0);
 
+/// Scroll target for watchlist - set this to scroll to a specific item
+final watchlistScrollTargetProvider = StateProvider<int?>((ref) => null);
+
+/// FAB visibility state - controls whether the FAB should be raised for snackbars
+final fabRaisedProvider = StateProvider<bool>((ref) => false);
+
 // --- Watchlist Providers ---
 
 /// Watchlist entries provider - fetches all watchlist entries

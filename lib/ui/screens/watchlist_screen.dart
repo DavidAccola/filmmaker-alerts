@@ -50,6 +50,11 @@ class _WatchlistScreenState extends ConsumerState<WatchlistScreen>
   // Sort state
   WatchlistSortOption _sortOption = WatchlistSortOption.addOrder;
 
+  /// Helper to update FAB raised state via provider (shared with HomeScreen)
+  void _setFabRaised(bool raised) {
+    ref.read(fabRaisedProvider.notifier).state = raised;
+  }
+
   @override
   void initState() {
     super.initState();
@@ -398,6 +403,7 @@ class _WatchlistScreenState extends ConsumerState<WatchlistScreen>
                           context,
                           'Drag and drop cards to reorder',
                           duration: const Duration(seconds: 2),
+                          onSnackBarVisibilityChanged: (isVisible) => _setFabRaised(isVisible),
                         );
                       }
                     },
@@ -885,7 +891,11 @@ class _WatchlistScreenState extends ConsumerState<WatchlistScreen>
     ref.invalidate(watchlistEntriesProvider);
     
     if (mounted) {
-      showSimpleSnackBar(context, 'Added 4 test items to watchlist');
+      showSimpleSnackBar(
+        context,
+        'Added 4 test items to watchlist',
+        onSnackBarVisibilityChanged: (isVisible) => _setFabRaised(isVisible),
+      );
     }
   }
 
@@ -909,6 +919,7 @@ class _WatchlistScreenState extends ConsumerState<WatchlistScreen>
           );
           ref.invalidate(watchlistEntriesProvider);
         },
+        onSnackBarVisibilityChanged: (isVisible) => _setFabRaised(isVisible),
       );
     }
     
@@ -928,6 +939,7 @@ class _WatchlistScreenState extends ConsumerState<WatchlistScreen>
           await logic.setSnoozed(entry.tmdbId, entry.type, false);
           ref.invalidate(watchlistEntriesProvider);
         },
+        onSnackBarVisibilityChanged: (isVisible) => _setFabRaised(isVisible),
       );
     }
     
@@ -968,6 +980,7 @@ class _WatchlistScreenState extends ConsumerState<WatchlistScreen>
               };
             });
           },
+          onSnackBarVisibilityChanged: (isVisible) => _setFabRaised(isVisible),
         );
       }
       return;
@@ -1001,7 +1014,11 @@ class _WatchlistScreenState extends ConsumerState<WatchlistScreen>
 
     // Check if unreleased
     if (!entry.isReleased && status != WatchStatus.wantToWatch) {
-      showUnreleasedWarningSnackBar(context, entry.title);
+      showUnreleasedWarningSnackBar(
+        context,
+        entry.title,
+        onSnackBarVisibilityChanged: (isVisible) => _setFabRaised(isVisible),
+      );
     }
 
     // Handle In Progress toggle - if already in progress, unmark it
@@ -1018,6 +1035,7 @@ class _WatchlistScreenState extends ConsumerState<WatchlistScreen>
             context,
             '${entry.title} unmarked as In progress',
             duration: const Duration(seconds: 3),
+            onSnackBarVisibilityChanged: (isVisible) => _setFabRaised(isVisible),
           );
         }
         
@@ -1053,6 +1071,7 @@ class _WatchlistScreenState extends ConsumerState<WatchlistScreen>
                 context,
                 '${entry.title} unmarked as Watched',
                 duration: const Duration(seconds: 3),
+                onSnackBarVisibilityChanged: (isVisible) => _setFabRaised(isVisible),
               );
             }
           } else {
@@ -1069,6 +1088,7 @@ class _WatchlistScreenState extends ConsumerState<WatchlistScreen>
                 context,
                 '${entry.title} marked as Watched${updatedDates.length > 1 ? ' (x${updatedDates.length})' : ''}',
                 duration: const Duration(seconds: 3),
+                onSnackBarVisibilityChanged: (isVisible) => _setFabRaised(isVisible),
               );
             }
           }
@@ -1087,6 +1107,7 @@ class _WatchlistScreenState extends ConsumerState<WatchlistScreen>
             context,
             '${entry.title} marked as Watched',
             duration: const Duration(seconds: 3),
+            onSnackBarVisibilityChanged: (isVisible) => _setFabRaised(isVisible),
           );
         }
       }
@@ -1121,6 +1142,7 @@ class _WatchlistScreenState extends ConsumerState<WatchlistScreen>
             context,
             '${entry.title} marked as $text',
             duration: const Duration(seconds: 3),
+            onSnackBarVisibilityChanged: (isVisible) => _setFabRaised(isVisible),
           );
         }
       }

@@ -234,7 +234,16 @@ class _SearchResultsScreenState extends ConsumerState<SearchResultsScreen> {
                 ref.invalidate(watchlistEntriesProvider);
               },
               onView: () {
-                // Pop back to home screen and switch to watchlist tab
+                // Set tab and scroll target via providers
+                ref.read(homeTabProvider.notifier).state = 1;
+                ref.read(watchlistScrollTargetProvider.notifier).state = contributor.tmdbId;
+                
+                // Clear scroll target after a delay
+                Future.delayed(const Duration(seconds: 2), () {
+                  ref.read(watchlistScrollTargetProvider.notifier).state = null;
+                });
+                
+                // Pop back to home screen
                 Navigator.of(context).popUntil((route) {
                   // Pop until we find the home screen or reach the root
                   return route.isFirst || route.settings.name == '/home';
@@ -243,13 +252,7 @@ class _SearchResultsScreenState extends ConsumerState<SearchResultsScreen> {
                 // Now push a new HomeScreen with watchlist tab selected
                 Navigator.of(context).pushReplacement(
                   MaterialPageRoute(
-                    builder: (context) {
-                      // Set the tab to Watchlist after navigation
-                      WidgetsBinding.instance.addPostFrameCallback((_) {
-                        ref.read(homeTabProvider.notifier).state = 1;
-                      });
-                      return const HomeScreen();
-                    },
+                    builder: (context) => const HomeScreen(),
                   ),
                 );
               },

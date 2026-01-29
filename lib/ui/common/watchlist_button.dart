@@ -268,15 +268,17 @@ class _WatchlistButtonState extends ConsumerState<WatchlistButton> {
 
   void _defaultViewAction() {
     // Default view action: navigate to watchlist tab and scroll to item
+    ref.read(homeTabProvider.notifier).state = 1;
+    ref.read(watchlistScrollTargetProvider.notifier).state = widget.tmdbId;
+    
+    // Clear scroll target after a delay
+    Future.delayed(const Duration(seconds: 2), () {
+      ref.read(watchlistScrollTargetProvider.notifier).state = null;
+    });
+    
     Navigator.of(context).pushReplacement(
       MaterialPageRoute(
-        builder: (context) {
-          // Set the tab to Watchlist after navigation
-          WidgetsBinding.instance.addPostFrameCallback((_) {
-            ref.read(homeTabProvider.notifier).state = 1;
-          });
-          return const HomeScreen();
-        },
+        builder: (context) => const HomeScreen(),
       ),
     );
   }

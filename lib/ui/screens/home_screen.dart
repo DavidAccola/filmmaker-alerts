@@ -28,20 +28,38 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with TickerProviderStat
   final ScrollController _scrollController = ScrollController();
   final GlobalKey _newContributorKey = GlobalKey();
   int? _newlyAddedContributorId; // Track the newly added contributor
-  double _fabBottomPadding = 0.0; // Track FAB padding for snackbar avoidance
   
-  late TabController _tabController;
+  TabController? _tabController;
+  bool _isInitialized = false;
 
-  @override
-  void initState() {
-    super.initState();
-    _tabController = TabController(length: 2, vsync: this, initialIndex: 0);
+  /// Helper to update FAB raised state via provider
+  void _setFabRaised(bool raised) {
+    ref.read(fabRaisedProvider.notifier).state = raised;
+  }
+
+  void _initTabController(int initialIndex) {
+    if (_isInitialized) return;
+    _isInitialized = true;
+    
+    _tabController = TabController(length: 2, vsync: this, initialIndex: initialIndex);
+    _tabController!.addListener(_onTabChanged);
+  }
+
+  void _onTabChanged() {
+    if (_tabController != null && !_tabController!.indexIsChanging) {
+      // Update provider when user swipes or taps tab
+      final currentProviderValue = ref.read(homeTabProvider);
+      if (currentProviderValue != _tabController!.index) {
+        ref.read(homeTabProvider.notifier).state = _tabController!.index;
+      }
+    }
   }
 
   @override
   void dispose() {
     _scrollController.dispose();
-    _tabController.dispose();
+    _tabController?.removeListener(_onTabChanged);
+    _tabController?.dispose();
     super.dispose();
   }
 
@@ -84,13 +102,24 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with TickerProviderStat
     final contributorsAsync = ref.watch(contributorsProvider);
     final prefsAsync = ref.watch(preferencesProvider);
     final homeTab = ref.watch(homeTabProvider);
+    final scrollTarget = ref.watch(watchlistScrollTargetProvider);
+    final fabRaised = ref.watch(fabRaisedProvider);
+    final fabBottomPadding = fabRaised ? 70.0 : 0.0;
 
-    // Sync TabController with provider
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (_tabController.index != homeTab && mounted) {
-        _tabController.animateTo(homeTab);
-      }
-    });
+    // Initialize TabController with current provider value (only once)
+    _initTabController(homeTab);
+
+    // Sync TabController with provider when provider changes externally
+    if (_tabController != null && _tabController!.index != homeTab) {
+      _tabController!.animateTo(homeTab);
+    }
+
+    // If TabController not ready yet, show loading
+    if (_tabController == null) {
+      return const Scaffold(
+        body: Center(child: CircularProgressIndicator()),
+      );
+    }
 
     return Scaffold(
       appBar: AppBar(
@@ -108,9 +137,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with TickerProviderStat
                   'Refreshing contributors...',
                   duration: const Duration(seconds: 1),
                   onSnackBarVisibilityChanged: (isVisible) {
-                    setState(() {
-                      _fabBottomPadding = isVisible ? 70.0 : 0.0;
-                    });
+                    _setFabRaised(isVisible);
                   },
                 );
                 await logic.refreshAllContributors();
@@ -120,9 +147,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with TickerProviderStat
                     context,
                     'Refresh complete.',
                     onSnackBarVisibilityChanged: (isVisible) {
-                      setState(() {
-                        _fabBottomPadding = isVisible ? 70.0 : 0.0;
-                      });
+                      _setFabRaised(isVisible);
                     },
                   );
                 }
@@ -131,7 +156,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with TickerProviderStat
           ],
         ),
         bottom: TabBar(
-          controller: _tabController,
+          controller: _tabController!,
           onTap: (index) {
             // Update provider when user taps tab
             ref.read(homeTabProvider.notifier).state = index;
@@ -146,13 +171,6 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with TickerProviderStat
         loading: () => const Center(child: CircularProgressIndicator()),
         error: (err, stack) => Center(child: Text('Error: $err')),
         data: (contributors) {
-          // DEBUG: Log all contributors and their types
-          debugPrint('[HomeScreen] DEBUG: === Contributors loaded ===');
-          for (final contributor in contributors) {
-            debugPrint('[HomeScreen] DEBUG: "${contributor.name}" - Type: ${contributor.type} - ID: ${contributor.tmdbId}');
-          }
-          debugPrint('[HomeScreen] DEBUG: === End contributors list ===');
-          
           if (contributors.isEmpty) {
             return const Center(
               child: Text('No contributors followed yet.\nAdd one to get started!'),
@@ -166,12 +184,12 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with TickerProviderStat
           final watchlistContributors = _filterWatchlistContributors(contributors);
           
           return TabBarView(
-            controller: _tabController,
+            controller: _tabController!,
             children: [
               // People tab - only show person/company contributors
               _buildContributorsList(peopleContributors, prefs, prefsAsync),
               // Watchlist tab
-              const WatchlistScreen(),
+              WatchlistScreen(scrollToTmdbId: scrollTarget),
             ],
           );
         },
@@ -179,7 +197,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with TickerProviderStat
       floatingActionButton: AnimatedPadding(
         duration: const Duration(milliseconds: 200),
         curve: Curves.easeInOut,
-        padding: EdgeInsets.only(bottom: _fabBottomPadding),
+        padding: EdgeInsets.only(bottom: fabBottomPadding),
         child: Tooltip(
           message: 'Find More to Follow',
           waitDuration: const Duration(milliseconds: 250),
@@ -204,8 +222,14 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with TickerProviderStat
                 if (contributor.type == ContributorType.movie || 
                     contributor.type == ContributorType.tvShow || 
                     contributor.type == ContributorType.collection) {
-                  // Switch to Watchlist tab
+                  // Switch to Watchlist tab and set scroll target
                   ref.read(homeTabProvider.notifier).state = 1;
+                  ref.read(watchlistScrollTargetProvider.notifier).state = contributor.tmdbId;
+                  
+                  // Clear scroll target after a delay
+                  Future.delayed(const Duration(seconds: 2), () {
+                    ref.read(watchlistScrollTargetProvider.notifier).state = null;
+                  });
                   
                   // For watchlist items, show the watchlist-specific snackbar with release preferences
                   final watchlistLogic = ref.read(watchlistLogicProvider);
@@ -254,18 +278,14 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with TickerProviderStat
                               'Release preferences updated for ${contributor.name}',
                               duration: const Duration(seconds: 2),
                               onSnackBarVisibilityChanged: (isVisible) {
-                                setState(() {
-                                  _fabBottomPadding = isVisible ? 70.0 : 0.0;
-                                });
+                                _setFabRaised(isVisible);
                               },
                             );
                           }
                         }
                       },
                       onSnackBarVisibilityChanged: (isVisible) {
-                        setState(() {
-                          _fabBottomPadding = isVisible ? 70.0 : 0.0;
-                        });
+                        _setFabRaised(isVisible);
                       },
                     );
                   }
@@ -281,9 +301,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with TickerProviderStat
                     availableRoles: availableRoles,
                     tvNotificationPrefs: result['tvNotificationPrefs'] as TvNotificationPreferences?,
                     onSnackBarVisibilityChanged: (isVisible) {
-                      setState(() {
-                        _fabBottomPadding = isVisible ? 70.0 : 0.0;
-                      });
+                      _setFabRaised(isVisible);
                     },
                     onChange: () async {
                     final logic = ref.read(contributorLogicProvider);
@@ -335,9 +353,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with TickerProviderStat
                               context,
                               'TV preferences updated.',
                               onSnackBarVisibilityChanged: (isVisible) {
-                                setState(() {
-                                  _fabBottomPadding = isVisible ? 70.0 : 0.0;
-                                });
+                                _setFabRaised(isVisible);
                               },
                             );
                           }
@@ -348,9 +364,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with TickerProviderStat
                               context,
                               'No changes made to TV preferences.',
                               onSnackBarVisibilityChanged: (isVisible) {
-                                setState(() {
-                                  _fabBottomPadding = isVisible ? 70.0 : 0.0;
-                                });
+                                _setFabRaised(isVisible);
                               },
                             );
                           }
@@ -407,9 +421,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with TickerProviderStat
                               context,
                               'Roles updated.',
                               onSnackBarVisibilityChanged: (isVisible) {
-                                setState(() {
-                                  _fabBottomPadding = isVisible ? 70.0 : 0.0;
-                                });
+                                _setFabRaised(isVisible);
                               },
                             );
                           }
@@ -420,9 +432,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with TickerProviderStat
                               context,
                               'No changes made to roles.',
                               onSnackBarVisibilityChanged: (isVisible) {
-                                setState(() {
-                                  _fabBottomPadding = isVisible ? 70.0 : 0.0;
-                                });
+                                _setFabRaised(isVisible);
                               },
                             );
                           }
@@ -912,9 +922,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with TickerProviderStat
         context,
         message: 'Unfollowed ${contributor.name}',
         onSnackBarVisibilityChanged: (isVisible) {
-          setState(() {
-            _fabBottomPadding = isVisible ? 70.0 : 0.0;
-          });
+          _setFabRaised(isVisible);
         },
         onUndo: () async {
           // 3. Re-add if Undone
@@ -977,9 +985,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with TickerProviderStat
               context,
               'TV preferences updated.',
               onSnackBarVisibilityChanged: (isVisible) {
-                setState(() {
-                  _fabBottomPadding = isVisible ? 70.0 : 0.0;
-                });
+                _setFabRaised(isVisible);
               },
             );
           }
@@ -990,9 +996,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with TickerProviderStat
               context,
               'No changes made to TV preferences.',
               onSnackBarVisibilityChanged: (isVisible) {
-                setState(() {
-                  _fabBottomPadding = isVisible ? 70.0 : 0.0;
-                });
+                _setFabRaised(isVisible);
               },
             );
           }
@@ -1058,9 +1062,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with TickerProviderStat
               context,
               'Roles updated.',
               onSnackBarVisibilityChanged: (isVisible) {
-                setState(() {
-                  _fabBottomPadding = isVisible ? 70.0 : 0.0;
-                });
+                _setFabRaised(isVisible);
               },
             );
           }
@@ -1071,9 +1073,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with TickerProviderStat
               context,
               'No changes made to roles.',
               onSnackBarVisibilityChanged: (isVisible) {
-                setState(() {
-                  _fabBottomPadding = isVisible ? 70.0 : 0.0;
-                });
+                _setFabRaised(isVisible);
               },
             );
           }

@@ -514,6 +514,15 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
           final hour = picked.hour.toString().padLeft(2, '0');
           final minute = picked.minute.toString().padLeft(2, '0');
           _updatePrefs(ref, prefs, scheduleTime: '$hour:$minute');
+          
+          // Show message about restart requirement
+          if (context.mounted) {
+            showSimpleSnackBar(
+              context,
+              'Restart the app for the new notification time to take effect',
+              duration: const Duration(seconds: 4),
+            );
+          }
         }
       },
     );

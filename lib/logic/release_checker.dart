@@ -4,11 +4,13 @@ import '../data/models/contributor.dart';
 import '../data/models/movie_cache_entry.dart';
 import '../data/models/notification_history.dart';
 import '../data/models/preferences.dart';
+import '../data/models/watchlist_entry.dart';
 import '../data/repositories/contributor_repository.dart';
 import '../data/repositories/history_repository.dart';
 import '../data/repositories/movie_cache_repository.dart';
 import '../data/repositories/preferences_repository.dart';
 import '../data/repositories/tv_cache_repository.dart';
+import '../data/repositories/watchlist_repository.dart'; // Add watchlist repository
 import '../data/services/tmdb_service.dart';
 import '../core/tmdb_mapping.dart';
 import '../data/models/tv_cache.dart';
@@ -25,6 +27,7 @@ class ReleaseChecker {
   final HistoryRepository _historyRepository;
   final MovieCacheRepository _movieCacheRepository;
   final TvCacheRepository _tvCacheRepository;
+  final WatchlistRepository _watchlistRepository; // Add watchlist repository
   final ContributorDetailRepository? _contributorDetailRepository;
   
   // TV Efficiency Optimization
@@ -32,9 +35,6 @@ class ReleaseChecker {
   
   // Feature flag for controlled rollout
   static const bool _useOptimizedTvProcessing = true;
-  
-  // Debug mode for testing
-  bool isDebugFutureMode = false;
 
   ReleaseChecker(
     this._tmdbService,
@@ -42,13 +42,15 @@ class ReleaseChecker {
     this._preferencesRepository,
     this._historyRepository,
     this._movieCacheRepository,
-    this._tvCacheRepository, {
+    this._tvCacheRepository,
+    this._watchlistRepository, // Add to constructor
+    {
     ContributorDetailRepository? contributorDetailRepository,
   }) : _contributorDetailRepository = contributorDetailRepository {
     _tvEfficiency = TvEfficiencyUpgrade(_tmdbService);
   }
 
-  Future<List<NotificationHistoryEntry>> findNewReleases({DateTime? sinceDate}) async {
+  Future<List<NotificationHistoryEntry>> findNewReleases({DateTime? sinceDate, bool ignoreDebugDate = false}) async {
     final prefs = _preferencesRepository.getPreferences();
     final contributors = _contributorRepository.getContributors();
     
@@ -70,21 +72,39 @@ class ReleaseChecker {
     final Map<int, Map<String, dynamic>> processedShowDetails = {};
     final Map<String, Map<String, dynamic>> processedSeasonDetails = {};
     
+    // Debug mode flag for this check run
+    bool isDebugFutureMode = false;
+    
     // 1. Date Logic
     final DateTime realToday = DateTime.now();
     DateTime effectiveToday = realToday;
     DateTime start;
     
-    // Check if we're in debug mode with a future pretend date
-    if (prefs.pretendToday != null && prefs.pretendToday!.isNotEmpty) {
+    // Check if we're in debug mode with a future pretend date (only if not ignoring debug date)
+    if (!ignoreDebugDate && prefs.pretendToday != null && prefs.pretendToday!.isNotEmpty) {
       try {
         final pretendDate = DateTime.parse(prefs.pretendToday!);
         if (pretendDate.isAfter(realToday)) {
           // Debug mode: pretend date is in the future
+          // Use the normal start logic (from last check or 7 days), but check up to pretend date
           isDebugFutureMode = true;
-          start = realToday;
           effectiveToday = pretendDate;
-          debugPrint('[ReleaseChecker] Debug future mode: checking from real today ($realToday) to pretend date ($pretendDate)');
+          
+          // Determine start date using normal logic
+          if (sinceDate != null) {
+            start = sinceDate;
+          } else if (prefs.lastCheckTime != null && prefs.lastCheckTime!.isNotEmpty) {
+            try {
+              start = DateTime.parse(prefs.lastCheckTime!);
+            } catch (e) {
+              debugPrint('[ReleaseChecker] Invalid lastCheckTime format: $e, falling back to 7 days');
+              start = realToday.subtract(const Duration(days: 7));
+            }
+          } else {
+            start = realToday.subtract(const Duration(days: 7));
+          }
+          
+          debugPrint('[ReleaseChecker] Debug future mode: checking from $start to pretend date ($pretendDate)');
         } else {
           // Normal pretend mode: pretend date is in past/present
           effectiveToday = pretendDate;
@@ -120,9 +140,15 @@ class ReleaseChecker {
 
     // Normalize to YYYY-MM-DD strings for comparison
     final startDateStr = DateFormat('yyyy-MM-dd').format(start);
-    final todayStr = DateFormat('yyyy-MM-dd').format(effectiveToday);
+    // For the end date: use real today for normal checks, pretend date only in debug future mode
+    final endDate = isDebugFutureMode ? effectiveToday : realToday;
+    final todayStr = DateFormat('yyyy-MM-dd').format(endDate);
 
     debugPrint('[ReleaseChecker] Checking releases from $startDateStr to $todayStr');
+    debugPrint('[ReleaseChecker] DEBUG: isDebugFutureMode = $isDebugFutureMode');
+    debugPrint('[ReleaseChecker] DEBUG: realToday = $realToday');
+    debugPrint('[ReleaseChecker] DEBUG: effectiveToday = $effectiveToday');
+    debugPrint('[ReleaseChecker] DEBUG: endDate = $endDate');
 
     final List<NotificationHistoryEntry> newNotifications = [];
 
@@ -134,6 +160,12 @@ class ReleaseChecker {
     final tvNotifications = await _checkTvReleases(startDateStr, todayStr, processedShowDetails, processedSeasonDetails);
     debugPrint('[ReleaseChecker] DEBUG: TV releases check returned ${tvNotifications.length} notifications');
     newNotifications.addAll(tvNotifications);
+
+    // Check watchlist movies for releases
+    debugPrint('[ReleaseChecker] DEBUG: About to check watchlist movie releases...');
+    final watchlistMovieNotifications = await _checkWatchlistMovieReleases(startDateStr, todayStr);
+    debugPrint('[ReleaseChecker] DEBUG: Watchlist movie releases check returned ${watchlistMovieNotifications.length} notifications');
+    newNotifications.addAll(watchlistMovieNotifications);
 
     // 2. Iterate Contributors (excluding TV shows, which are handled separately)
     debugPrint('[ReleaseChecker] DEBUG: Starting main contributor loop...');
@@ -388,9 +420,27 @@ class ReleaseChecker {
 
             // History Check
             final typeStr = _getReleaseTypeString(type);
-            if (_hasBeenNotified(movieId, typeStr)) continue;
+            
+            // Debug logging for specific movies we're tracking
+            if (movieId == 1381151) { // Holy Days
+              debugPrint('[ReleaseChecker] DEBUG: *** HOLY DAYS (1381151) *** - Release date: $rDate, Type: $type ($typeStr)');
+            }
+            if (movieId == 1381152) { // Hail Mary (assuming this is the ID)
+              debugPrint('[ReleaseChecker] DEBUG: *** HAIL MARY (1381152) *** - Release date: $rDate, Type: $type ($typeStr)');
+            }
+            
+            debugPrint('[ReleaseChecker] DEBUG: Checking history for movie $movieId, releaseType: $typeStr');
+            if (_hasBeenNotified(movieId, typeStr)) {
+              debugPrint('[ReleaseChecker] DEBUG: Already notified for movie $movieId, releaseType: $typeStr - SKIPPING');
+              continue;
+            }
+            debugPrint('[ReleaseChecker] DEBUG: NOT in history for movie $movieId, releaseType: $typeStr - WILL NOTIFY');
 
             // Add Notification
+            debugPrint('[ReleaseChecker] DEBUG: Adding notification for movie $movieId, releaseType: $typeStr');
+            if (movieId == 1381151) { // Holy Days
+              debugPrint('[ReleaseChecker] DEBUG: *** HOLY DAYS (1381151) *** - ADDING TO NOTIFICATIONS');
+            }
             _addNotification(newNotifications, contributor, matchingCredits, typeStr, todayStr);
           }
         }
@@ -416,18 +466,25 @@ class ReleaseChecker {
   }
 
   bool _isNotificationEnabled(int type, Preferences prefs) {
+    debugPrint('[ReleaseChecker] Checking notification for release type $type (${_getReleaseTypeString(type)})');
+    
     switch (type) {
       case 1: // Premiere
       case 2: // Theatrical Limited
       case 3: // Theatrical
+        debugPrint('[ReleaseChecker] Theatrical release - effectiveNotifyTheatre: ${prefs.effectiveNotifyTheatre}');
         return prefs.effectiveNotifyTheatre;
       case 4: // Digital
+        debugPrint('[ReleaseChecker] Digital release - effectiveNotifyStreaming: ${prefs.effectiveNotifyStreaming}');
         return prefs.effectiveNotifyStreaming;
       case 5: // Physical
+        debugPrint('[ReleaseChecker] Physical release - effectiveNotifyPhysical: ${prefs.effectiveNotifyPhysical}');
         return prefs.effectiveNotifyPhysical;
       case 6: // TV
+        debugPrint('[ReleaseChecker] TV release - effectiveNotifyTV: ${prefs.effectiveNotifyTV}');
         return prefs.effectiveNotifyTV;
       default:
+        debugPrint('[ReleaseChecker] Unknown release type $type - not notifying');
         return false;
     }
   }
@@ -441,9 +498,20 @@ class ReleaseChecker {
     final history = _historyRepository.getHistory();
     final entry = history.where((h) => h.entry.tmdbId == tmdbId).firstOrNull;
     
-    if (entry == null) return false;
+    debugPrint('[ReleaseChecker] DEBUG: _hasBeenNotified - tmdbId: $tmdbId, releaseType: $releaseType');
     
-    return entry.entry.notificationEvents.any((e) => e.releaseType == releaseType);
+    if (entry == null) {
+      debugPrint('[ReleaseChecker] DEBUG: No history entry found for tmdbId: $tmdbId');
+      return false;
+    }
+    
+    debugPrint('[ReleaseChecker] DEBUG: Found history entry for tmdbId: $tmdbId');
+    debugPrint('[ReleaseChecker] DEBUG: History events: ${entry.entry.notificationEvents.map((e) => e.releaseType).toList()}');
+    
+    final hasBeenNotified = entry.entry.notificationEvents.any((e) => e.releaseType == releaseType);
+    debugPrint('[ReleaseChecker] DEBUG: Has been notified for $releaseType: $hasBeenNotified');
+    
+    return hasBeenNotified;
   }
 
   void _addNotification(
@@ -1739,6 +1807,159 @@ class ReleaseChecker {
 
     await _contributorDetailRepository!.cacheContributorDetail(detail);
     debugPrint('[ReleaseChecker] Successfully cached contributor detail for ${contributor.name}');
+  }
+
+  /// Check for new releases of movies in the watchlist
+  Future<List<NotificationHistoryEntry>> _checkWatchlistMovieReleases(
+    String startDateStr,
+    String todayStr,
+  ) async {
+    final List<NotificationHistoryEntry> watchlistNotifications = [];
+    final prefs = _preferencesRepository.getPreferences();
+    
+    debugPrint('[ReleaseChecker] DEBUG: === _checkWatchlistMovieReleases called ===');
+    
+    // Get all watchlist entries
+    final watchlistEntries = _watchlistRepository.getWorks();
+    
+    // Filter for movies only
+    final movieEntries = watchlistEntries.where((entry) => entry.type == WorkType.movie).toList();
+    
+    debugPrint('[ReleaseChecker] DEBUG: Found ${movieEntries.length} movies in watchlist');
+    
+    for (final entry in movieEntries) {
+      try {
+        debugPrint('[ReleaseChecker] DEBUG: Checking watchlist movie: ${entry.title} (ID: ${entry.tmdbId})');
+        
+        // Throttling
+        await Future.delayed(const Duration(milliseconds: 250));
+        
+        // Get movie details including release dates
+        final details = await _tmdbService.getMovieDetails(entry.tmdbId);
+        
+        final releaseDatesResults = details['release_dates']?['results'] as List?;
+        
+        if (releaseDatesResults == null) {
+          debugPrint('[ReleaseChecker] DEBUG: No release dates found for ${entry.title}');
+          continue;
+        }
+        
+        // Cache Movie Details
+        await _movieCacheRepository.addOrUpdateMovieInCache(MovieCacheEntry(
+          tmdbId: entry.tmdbId,
+          title: details['title'] ?? 'Unknown',
+          posterPath: details['poster_path'],
+          releaseDate: details['release_date'] ?? '',
+          imdbId: details['external_ids']?['imdb_id'],
+        ));
+        
+        // Region Priority: US first, then fallback to all
+        var regionReleases = releaseDatesResults.where(
+          (r) => r['iso_3166_1'] == 'US',
+        ).firstOrNull;
+        
+        List<dynamic> releases = [];
+        if (regionReleases != null) {
+          releases = regionReleases['release_dates'];
+        } else {
+          // Fallback: Check all regions
+          for (var r in releaseDatesResults) {
+            releases.addAll(r['release_dates']);
+          }
+        }
+        
+        debugPrint('[ReleaseChecker] DEBUG: Found ${releases.length} release dates for ${entry.title}');
+        
+        for (final release in releases) {
+          final String rDate = (release['release_date'] as String).substring(0, 10);
+          final int type = release['type'];
+          
+          debugPrint('[ReleaseChecker] DEBUG: Checking release: date=$rDate, type=$type (${_getReleaseTypeString(type)})');
+          
+          // Window Check for specific release
+          if (rDate.compareTo(startDateStr) < 0 || rDate.compareTo(todayStr) > 0) {
+            debugPrint('[ReleaseChecker] DEBUG: Release date $rDate is outside window $startDateStr-$todayStr, skipping');
+            continue;
+          }
+          
+          // Get effective preferences for this watchlist entry
+          final effectivePrefs = entry.releaseNotificationPrefs ?? ReleaseNotificationPreferences();
+          
+          // Check if user wants notifications for this release type
+          if (!_isNotificationEnabledForWatchlistEntry(type, effectivePrefs)) {
+            debugPrint('[ReleaseChecker] DEBUG: User does not want notifications for ${_getReleaseTypeString(type)}');
+            continue;
+          }
+          
+          // History Check
+          final typeStr = _getReleaseTypeString(type);
+          
+          debugPrint('[ReleaseChecker] DEBUG: Checking history for watchlist movie ${entry.tmdbId}, releaseType: $typeStr');
+          if (_hasBeenNotified(entry.tmdbId, typeStr)) {
+            debugPrint('[ReleaseChecker] DEBUG: Already notified for watchlist movie ${entry.tmdbId}, releaseType: $typeStr - SKIPPING');
+            continue;
+          }
+          debugPrint('[ReleaseChecker] DEBUG: NOT in history for watchlist movie ${entry.tmdbId}, releaseType: $typeStr - WILL NOTIFY');
+          
+          // Add Notification
+          debugPrint('[ReleaseChecker] DEBUG: Adding notification for watchlist movie ${entry.tmdbId}, releaseType: $typeStr');
+          
+          final now = DateTime.now();
+          final notificationTime = now.add(Duration(milliseconds: watchlistNotifications.length)).toIso8601String();
+          
+          final event = NotificationEvent(
+            releaseType: typeStr,
+            releaseDate: rDate,
+            notifiedAt: notificationTime,
+          );
+          
+          final reason = NotificationReason(
+            contributorId: 0, // Watchlist entries don't have a contributor ID
+            contributorName: 'Watchlist',
+            department: 'Watchlist',
+            job: 'Watchlist Entry',
+          );
+          
+          watchlistNotifications.add(NotificationHistoryEntry(
+            tmdbId: entry.tmdbId,
+            reasons: [reason],
+            notificationEvents: [event],
+            mediaType: 'movie',
+          ));
+        }
+        
+      } catch (e) {
+        debugPrint('[ReleaseChecker] Error checking watchlist movie ${entry.title}: $e');
+      }
+    }
+    
+    debugPrint('[ReleaseChecker] DEBUG: Watchlist movie check complete, found ${watchlistNotifications.length} notifications');
+    return watchlistNotifications;
+  }
+
+  /// Check if notification is enabled for a specific release type based on watchlist entry preferences
+  bool _isNotificationEnabledForWatchlistEntry(int type, ReleaseNotificationPreferences prefs) {
+    debugPrint('[ReleaseChecker] Checking watchlist notification for release type $type (${_getReleaseTypeString(type)})');
+    
+    switch (type) {
+      case 1: // Premiere
+      case 2: // Theatrical Limited
+      case 3: // Theatrical
+        debugPrint('[ReleaseChecker] Theatrical release - watchlist pref: ${prefs.theatrical}');
+        return prefs.theatrical;
+      case 4: // Digital
+        debugPrint('[ReleaseChecker] Digital release - watchlist pref: ${prefs.streaming}');
+        return prefs.streaming;
+      case 5: // Physical
+        debugPrint('[ReleaseChecker] Physical release - watchlist pref: ${prefs.physical}');
+        return prefs.physical;
+      case 6: // TV
+        debugPrint('[ReleaseChecker] TV release - watchlist pref: ${prefs.tv}');
+        return prefs.tv;
+      default:
+        debugPrint('[ReleaseChecker] Unknown release type $type - not notifying');
+        return false;
+    }
   }
 
   /// Helper method to add an episode to the works list

@@ -164,6 +164,7 @@ final releaseCheckerProvider = Provider<ReleaseChecker>((ref) {
     ref.watch(historyRepositoryProvider),
     ref.watch(movieCacheRepositoryProvider),
     ref.watch(tvCacheRepositoryProvider),
+    ref.watch(watchlistRepositoryProvider),
     contributorDetailRepository: ref.watch(contributorDetailRepositoryProvider),
   );
 });
@@ -185,6 +186,7 @@ final watchlistLogicProvider = Provider<WatchlistLogic>((ref) {
     ref.watch(watchlistRepositoryProvider),
     ref.watch(episodeStatusRepositoryProvider),
     ref.watch(seasonStatusRepositoryProvider),
+    ref.watch(preferencesRepositoryProvider),
   );
 });
 

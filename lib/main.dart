@@ -119,6 +119,7 @@ void main() async {
   // Register watchlist adapters
   Hive.registerAdapter(WatchlistEntryAdapter());
   Hive.registerAdapter(ContributorSnapshotAdapter());
+  Hive.registerAdapter(ReleaseNotificationPreferencesAdapter());
   Hive.registerAdapter(StatusRecordAdapter());
   Hive.registerAdapter(WatchStatusAdapter());
   Hive.registerAdapter(EpisodeStatusEntryAdapter());
@@ -169,13 +170,33 @@ void main() async {
       isInDebugMode: kDebugMode,
     );
     
-    // Calculate initial delay for 9:00 AM
+    // Get user's scheduled notification time from preferences
+    final prefsBox = Hive.box<Preferences>(AppConstants.preferencesBox);
+    final prefs = prefsBox.isEmpty ? Preferences() : prefsBox.getAt(0)!;
+    
+    // Parse schedule time (format: "HH:MM")
+    int scheduleHour = 9;
+    int scheduleMinute = 0;
+    try {
+      final parts = prefs.scheduleTime.split(':');
+      if (parts.length == 2) {
+        scheduleHour = int.parse(parts[0]);
+        scheduleMinute = int.parse(parts[1]);
+      }
+    } catch (e) {
+      debugPrint('[Main] Error parsing scheduleTime "${prefs.scheduleTime}": $e, using default 9:00');
+    }
+    
+    // Calculate initial delay for the scheduled time
     final now = DateTime.now();
-    var firstRun = DateTime(now.year, now.month, now.day, 9, 0);
+    var firstRun = DateTime(now.year, now.month, now.day, scheduleHour, scheduleMinute);
     if (firstRun.isBefore(now)) {
       firstRun = firstRun.add(const Duration(days: 1));
     }
     final initialDelay = firstRun.difference(now);
+
+    debugPrint('[Main] Scheduling background task for ${scheduleHour.toString().padLeft(2, '0')}:${scheduleMinute.toString().padLeft(2, '0')} daily');
+    debugPrint('[Main] First run scheduled in ${initialDelay.inMinutes} minutes');
 
     await Workmanager().registerPeriodicTask(
       "daily-check-task",

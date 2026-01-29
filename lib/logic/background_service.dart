@@ -9,11 +9,13 @@ import '../data/models/movie_cache_entry.dart';
 import '../data/models/notification_history.dart';
 import '../data/models/preferences.dart';
 import '../data/models/tv_cache.dart';
+import '../data/models/watchlist_entry.dart';
 import '../data/repositories/contributor_repository.dart';
 import '../data/repositories/history_repository.dart';
 import '../data/repositories/movie_cache_repository.dart';
 import '../data/repositories/preferences_repository.dart';
 import '../data/repositories/tv_cache_repository.dart';
+import '../data/repositories/watchlist_repository.dart';
 import '../data/services/notification_service.dart';
 import '../data/services/tmdb_service.dart';
 import '../utils/debug_logger.dart';
@@ -58,6 +60,7 @@ void callbackDispatcher() {
       final movieCacheRepo = MovieCacheRepository();
       final tvCacheRepo = TvCacheRepository();
       await tvCacheRepo.init(); // Initialize TV cache boxes
+      final watchlistRepo = WatchlistRepository(Hive.box<WatchlistEntry>(AppConstants.watchlistEntriesBox));
       final notificationService = NotificationService();
       await notificationService.init();
 
@@ -69,6 +72,7 @@ void callbackDispatcher() {
         movieCacheRepo: movieCacheRepo,
         notificationService: notificationService,
         tvCacheRepo: tvCacheRepo,
+        watchlistRepo: watchlistRepo,
       );
 
       return await processor.process();
@@ -87,6 +91,7 @@ class BackgroundTaskProcessor {
   final MovieCacheRepository movieCacheRepo;
   final NotificationService notificationService;
   final TvCacheRepository? tvCacheRepo;
+  final WatchlistRepository watchlistRepo;
 
   BackgroundTaskProcessor({
     required this.tmdbService,
@@ -96,6 +101,7 @@ class BackgroundTaskProcessor {
     required this.movieCacheRepo,
     required this.notificationService,
     this.tvCacheRepo,
+    required this.watchlistRepo,
   });
 
   Future<bool> process() async {
@@ -105,6 +111,14 @@ class BackgroundTaskProcessor {
     }
     
     try {
+      final currentPrefs = prefsRepo.getPreferences();
+      
+      // Check if we should run based on scheduled time
+      if (!_shouldRunCheck(currentPrefs)) {
+        debugPrint('[BackgroundService] Scheduled time has not passed since last check, skipping');
+        return true;
+      }
+      
       final releaseChecker = ReleaseChecker(
         tmdbService,
         contributorRepo,
@@ -112,13 +126,13 @@ class BackgroundTaskProcessor {
         historyRepo,
         movieCacheRepo,
         tvCacheRepoInstance,
+        watchlistRepo,
       );
 
-      // 4. Run Check
-      final newReleases = await releaseChecker.findNewReleases();
+      // 4. Run Check (ignore debug date for scheduled checks)
+      final newReleases = await releaseChecker.findNewReleases(ignoreDebugDate: true);
 
       // 5. Update last check time (regardless of whether we found releases)
-      final currentPrefs = prefsRepo.getPreferences();
       final updatedPrefs = Preferences(
         notifyTheatre: currentPrefs.notifyTheatre,
         notifyStreaming: currentPrefs.notifyStreaming,
@@ -351,5 +365,57 @@ class BackgroundTaskProcessor {
       tmdbService.dispose();
       notificationService.dispose();
     }
+  }
+
+  /// Check if the scheduled time has passed since the last check
+  /// This enables "catch-up" behavior when the app starts after the scheduled time
+  bool _shouldRunCheck(Preferences prefs) {
+    final now = DateTime.now();
+    
+    // Parse scheduled time (format: "HH:MM")
+    int scheduleHour = 9;
+    int scheduleMinute = 0;
+    try {
+      final parts = prefs.scheduleTime.split(':');
+      if (parts.length == 2) {
+        scheduleHour = int.parse(parts[0]);
+        scheduleMinute = int.parse(parts[1]);
+      }
+    } catch (e) {
+      debugPrint('[BackgroundService] Error parsing scheduleTime: $e');
+      return true; // Default to running if we can't parse
+    }
+
+    // Get today's scheduled time
+    final todayScheduled = DateTime(now.year, now.month, now.day, scheduleHour, scheduleMinute);
+    
+    // If we haven't reached today's scheduled time yet, don't run
+    if (now.isBefore(todayScheduled)) {
+      debugPrint('[BackgroundService] Current time ($now) is before today\'s scheduled time ($todayScheduled)');
+      return false;
+    }
+
+    // If we have a last check time, verify it was before today's scheduled time
+    if (prefs.lastCheckTime != null && prefs.lastCheckTime!.isNotEmpty) {
+      try {
+        final lastCheck = DateTime.parse(prefs.lastCheckTime!);
+        
+        // If last check was after today's scheduled time, we already ran today
+        if (lastCheck.isAfter(todayScheduled)) {
+          debugPrint('[BackgroundService] Last check ($lastCheck) was after today\'s scheduled time ($todayScheduled), already ran today');
+          return false;
+        }
+        
+        debugPrint('[BackgroundService] Last check ($lastCheck) was before today\'s scheduled time ($todayScheduled), should run');
+        return true;
+      } catch (e) {
+        debugPrint('[BackgroundService] Error parsing lastCheckTime: $e');
+        return true; // Default to running if we can't parse
+      }
+    }
+
+    // No last check time, so we should run
+    debugPrint('[BackgroundService] No last check time recorded, should run');
+    return true;
   }
 }

@@ -7,6 +7,7 @@ import '../../data/models/contributor_detail.dart';
 import '../../data/models/status_record.dart';
 import 'adaptive_tooltip_text.dart';
 import 'snackbar_utils.dart';
+import 'release_preferences_dialog.dart';
 import '../../providers/providers.dart';
 import '../screens/show_configuration_screen.dart';
 import '../screens/collection_configuration_screen.dart';
@@ -151,6 +152,9 @@ class _WatchlistCardState extends ConsumerState<WatchlistCard> {
                           padding: EdgeInsets.zero,
                           onSelected: (value) {
                             switch (value) {
+                              case 'release_preferences':
+                                _showReleasePreferencesDialog();
+                                break;
                               case 'delete':
                                 widget.onDelete?.call();
                                 break;
@@ -167,7 +171,7 @@ class _WatchlistCardState extends ConsumerState<WatchlistCard> {
                           },
                           itemBuilder: (context) {
                             if (entry.isSnoozed) {
-                              // Hidden menu: Unhide, Did Not Finish, Delete
+                              // Hidden menu: Unhide, Did Not Finish, Release Preferences, Delete
                               return [
                                 const PopupMenuItem(
                                   value: 'snooze',
@@ -178,16 +182,24 @@ class _WatchlistCardState extends ConsumerState<WatchlistCard> {
                                   child: Text('Did not finish'),
                                 ),
                                 const PopupMenuItem(
+                                  value: 'release_preferences',
+                                  child: Text('Release Preferences'),
+                                ),
+                                const PopupMenuItem(
                                   value: 'delete',
                                   child: Text('Delete'),
                                 ),
                               ];
                             } else {
-                              // Main watchlist menu: Pause/Unpause Notifications, Hide, Delete
+                              // Main watchlist menu: Pause/Unpause Notifications, Release Preferences, Hide, Delete
                               return [
                                 PopupMenuItem(
                                   value: 'toggle_notifications',
                                   child: Text(entry.notificationsSnoozed ? 'Unpause Notifications' : 'Pause Notifications'),
+                                ),
+                                const PopupMenuItem(
+                                  value: 'release_preferences',
+                                  child: Text('Release Preferences'),
                                 ),
                                 const PopupMenuItem(
                                   value: 'snooze',
@@ -428,6 +440,35 @@ class _WatchlistCardState extends ConsumerState<WatchlistCard> {
         );
       },
     );
+  }
+
+  Future<void> _showReleasePreferencesDialog() async {
+    final result = await showDialog<ReleaseNotificationPreferences>(
+      context: context,
+      builder: (context) => ReleasePreferencesDialog(
+        workTitle: widget.entry.title,
+        initialPreferences: widget.entry.releaseNotificationPrefs ?? ReleaseNotificationPreferences(),
+      ),
+    );
+
+    if (result != null) {
+      // Update the entry with new preferences
+      final watchlistLogic = ref.read(watchlistLogicProvider);
+      await watchlistLogic.updateReleaseNotificationPreferences(
+        widget.entry.tmdbId,
+        widget.entry.type,
+        result,
+      );
+      ref.invalidate(watchlistEntriesProvider);
+      
+      if (mounted) {
+        showSimpleSnackBar(
+          context,
+          'Release preferences updated for ${widget.entry.title}',
+          duration: const Duration(seconds: 2),
+        );
+      }
+    }
   }
 
   String _formatReleaseDate(DateTime date) {

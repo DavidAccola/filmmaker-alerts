@@ -1,6 +1,7 @@
 import 'package:hive/hive.dart';
 import '../models/watchlist_entry.dart';
 import '../models/contributor_detail.dart';
+import '../models/contributor.dart'; // For TvNotificationPreferences
 import '../models/status_record.dart';
 
 class WatchlistRepository {
@@ -9,7 +10,7 @@ class WatchlistRepository {
   WatchlistRepository(this._box);
 
   /// Add a work to the watchlist with default "Want to watch" status
-  Future<void> addWork({
+  Future<WatchlistEntry> addWork({
     required int tmdbId,
     required WorkType type,
     required String title,
@@ -17,10 +18,13 @@ class WatchlistRepository {
     DateTime? releaseDate,
     ReleaseType? releaseType,
     List<ContributorSnapshot>? followedContributors,
+    ReleaseNotificationPreferences? releaseNotificationPrefs,
+    TvNotificationPreferences? tvNotificationPrefs,
   }) async {
     // Check if already exists
-    if (await isWorkInWatchlist(tmdbId, type)) {
-      return;
+    final existing = getWork(tmdbId, type);
+    if (existing != null) {
+      return existing;
     }
 
     // Get next addRank
@@ -45,9 +49,12 @@ class WatchlistRepository {
           setAt: DateTime.now(),
         ),
       ],
+      releaseNotificationPrefs: releaseNotificationPrefs,
+      tvNotificationPrefs: tvNotificationPrefs,
     );
 
     await _box.put(entry.uniqueKey, entry);
+    return entry;
   }
 
   /// Remove a work from the watchlist
@@ -121,6 +128,31 @@ class WatchlistRepository {
     final entry = getWork(tmdbId, type);
     if (entry != null) {
       entry.followedContributors = contributors;
+      await updateWork(entry);
+    }
+  }
+
+  /// Update release notification preferences
+  Future<void> updateReleaseNotificationPreferences(
+    int tmdbId,
+    WorkType type,
+    ReleaseNotificationPreferences preferences,
+  ) async {
+    final entry = getWork(tmdbId, type);
+    if (entry != null) {
+      entry.releaseNotificationPrefs = preferences;
+      await updateWork(entry);
+    }
+  }
+
+  /// Update TV notification preferences
+  Future<void> updateTvNotificationPreferences(
+    int tmdbId,
+    TvNotificationPreferences preferences,
+  ) async {
+    final entry = getWork(tmdbId, WorkType.tvShow);
+    if (entry != null) {
+      entry.tvNotificationPrefs = preferences;
       await updateWork(entry);
     }
   }

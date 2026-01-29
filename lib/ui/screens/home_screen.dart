@@ -2,16 +2,16 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:collection/collection.dart';
 import '../../data/models/contributor.dart';
+import '../../data/models/contributor_detail.dart';
 import '../../data/models/preferences.dart';
+import '../../data/models/watchlist_entry.dart';
 import '../../providers/providers.dart';
 import '../common/contributor_card.dart';
 import '../common/department_selection_dialog.dart';
+import '../common/release_preferences_dialog.dart';
 import '../common/snackbar_utils.dart';
 import '../common/tmdb_attribution.dart';
 import 'add_contributor_screen.dart';
-import 'history_screen.dart';
-import 'debug_screen.dart';
-import 'settings_screen.dart';
 import 'contributor_detail_screen.dart';
 import 'movie_detail_screen.dart';
 import 'tv_show_detail_screen.dart';
@@ -195,18 +195,86 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with TickerProviderStat
                   _newlyAddedContributorId = contributor.tmdbId;
                 });
 
-                showSuccessSnackBar(
-                  context,
-                  contributor: contributor,
-                  roles: roles ?? [],
-                  availableRoles: availableRoles,
-                  tvNotificationPrefs: result['tvNotificationPrefs'] as TvNotificationPreferences?,
-                  onSnackBarVisibilityChanged: (isVisible) {
-                    setState(() {
-                      _fabBottomPadding = isVisible ? 70.0 : 0.0;
-                    });
-                  },
-                  onChange: () async {
+                // Check if this is a watchlist item (movie/TV show/collection) or a contributor (person/company)
+                if (contributor.type == ContributorType.movie || 
+                    contributor.type == ContributorType.tvShow || 
+                    contributor.type == ContributorType.collection) {
+                  // For watchlist items, show the watchlist-specific snackbar with release preferences
+                  final watchlistLogic = ref.read(watchlistLogicProvider);
+                  final entry = watchlistLogic.getWork(
+                    contributor.tmdbId, 
+                    contributor.type == ContributorType.movie ? WorkType.movie : WorkType.tvShow
+                  );
+                  
+                  if (entry != null) {
+                    final prefs = entry.releaseNotificationPrefs;
+                    final selectedTypes = prefs?.selectedTypes ?? [];
+                    
+                    showWatchlistWithPreferencesSnackBar(
+                      context,
+                      workTitle: contributor.name,
+                      selectedReleaseTypes: selectedTypes,
+                      onUndo: () async {
+                        await watchlistLogic.removeWorkFromWatchlist(
+                          contributor.tmdbId,
+                          contributor.type == ContributorType.movie ? WorkType.movie : WorkType.tvShow,
+                        );
+                        ref.invalidate(watchlistEntriesProvider);
+                      },
+                      onEditPreferences: () async {
+                        // Show release preferences dialog (similar to watchlist_button.dart)
+                        final result = await showDialog<ReleaseNotificationPreferences>(
+                          context: context,
+                          builder: (context) => ReleasePreferencesDialog(
+                            workTitle: contributor.name,
+                            initialPreferences: entry.releaseNotificationPrefs ?? ReleaseNotificationPreferences(),
+                          ),
+                        );
+
+                        if (result != null) {
+                          // Update the entry with new preferences
+                          await watchlistLogic.updateReleaseNotificationPreferences(
+                            contributor.tmdbId, 
+                            contributor.type == ContributorType.movie ? WorkType.movie : WorkType.tvShow, 
+                            result
+                          );
+                          ref.invalidate(watchlistEntriesProvider);
+                          
+                          if (mounted) {
+                            showSimpleSnackBar(
+                              context,
+                              'Release preferences updated for ${contributor.name}',
+                              duration: const Duration(seconds: 2),
+                              onSnackBarVisibilityChanged: (isVisible) {
+                                setState(() {
+                                  _fabBottomPadding = isVisible ? 70.0 : 0.0;
+                                });
+                              },
+                            );
+                          }
+                        }
+                      },
+                      onSnackBarVisibilityChanged: (isVisible) {
+                        setState(() {
+                          _fabBottomPadding = isVisible ? 70.0 : 0.0;
+                        });
+                      },
+                    );
+                  }
+                } else {
+                  // For contributors (people/companies), use the existing success snackbar
+                  showSuccessSnackBar(
+                    context,
+                    contributor: contributor,
+                    roles: roles ?? [],
+                    availableRoles: availableRoles,
+                    tvNotificationPrefs: result['tvNotificationPrefs'] as TvNotificationPreferences?,
+                    onSnackBarVisibilityChanged: (isVisible) {
+                      setState(() {
+                        _fabBottomPadding = isVisible ? 70.0 : 0.0;
+                      });
+                    },
+                    onChange: () async {
                     final logic = ref.read(contributorLogicProvider);
                     final repo = ref.read(preferencesRepositoryProvider);
                     final prefs = repo.getPreferences();
@@ -352,6 +420,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with TickerProviderStat
                     }
                   },
                 );
+                }
                 
                 // Scroll to the newly added contributor
                 _scrollToNewContributor(contributor);

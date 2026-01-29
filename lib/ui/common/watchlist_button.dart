@@ -1,10 +1,15 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../data/models/contributor_detail.dart';
+import '../../data/models/contributor.dart'; // For TvNotificationPreferences
+import '../../data/models/watchlist_entry.dart';
 import '../../providers/providers.dart';
 import 'snackbar_utils.dart';
 import '../screens/home_screen.dart';
 import 'hover_action_button.dart';
+import 'release_preferences_dialog.dart';
+import 'tv_preferences_dialog.dart';
 
 enum WatchlistButtonStyle {
   topRight,    // Top right corner (default)
@@ -140,33 +145,107 @@ class _WatchlistButtonState extends ConsumerState<WatchlistButton> {
           );
         }
       } else {
-        // Add to watchlist
-        await watchlistLogic.addWorkToWatchlist(
-          tmdbId: widget.tmdbId,
-          type: widget.workType,
-          title: widget.workTitle,
-          posterPath: widget.posterPath,
-          releaseDate: widget.releaseDate,
-          releaseType: widget.releaseType,
-        );
-
-        if (mounted) {
-          // Determine if we should show the View button
-          final shouldShowView = widget.showViewButton;
-          
-          // Use new watchlist snackbar with undo and optional view
-          showWatchlistSnackBar(
-            context,
-            message: '${widget.workTitle} added to watchlist',
-            onUndo: () async {
-              await watchlistLogic.removeWorkFromWatchlist(
-                widget.tmdbId,
-                widget.workType,
+        // Check if item is already in watchlist before adding
+        final isAlreadyInWatchlist = await watchlistLogic.isWorkInWatchlist(widget.tmdbId, widget.workType);
+        
+        if (isAlreadyInWatchlist) {
+          // Item is already in watchlist - show "already following" snackbar
+          final existingEntry = watchlistLogic.getWork(widget.tmdbId, widget.workType);
+          if (existingEntry != null && mounted) {
+            if (widget.workType == WorkType.movie) {
+              final prefs = existingEntry.releaseNotificationPrefs;
+              final selectedTypes = prefs?.selectedTypes ?? [];
+              
+              showAlreadyInWatchlistSnackBar(
+                context,
+                widget.workTitle,
+                () async {
+                  await watchlistLogic.removeWorkFromWatchlist(
+                    widget.tmdbId,
+                    widget.workType,
+                  );
+                  ref.invalidate(watchlistEntriesProvider);
+                },
               );
-              ref.invalidate(watchlistEntriesProvider);
-            },
-            onView: shouldShowView ? (widget.onView ?? _defaultViewAction) : null,
+            } else if (widget.workType == WorkType.tvShow) {
+              final tvPrefs = existingEntry.tvNotificationPrefs;
+              final selectedTypes = tvPrefs?.selectedTypes ?? [];
+              
+              showAlreadyInWatchlistSnackBar(
+                context,
+                widget.workTitle,
+                () async {
+                  await watchlistLogic.removeWorkFromWatchlist(
+                    widget.tmdbId,
+                    widget.workType,
+                  );
+                  ref.invalidate(watchlistEntriesProvider);
+                },
+              );
+            }
+          }
+        } else {
+          // Add to watchlist with default preferences
+          final entry = await watchlistLogic.addWorkToWatchlist(
+            tmdbId: widget.tmdbId,
+            type: widget.workType,
+            title: widget.workTitle,
+            posterPath: widget.posterPath,
+            releaseDate: widget.releaseDate,
+            releaseType: widget.releaseType,
           );
+
+          if (mounted) {
+            // Determine if we should show the View button
+            final shouldShowView = widget.showViewButton;
+            
+            if (widget.workType == WorkType.movie) {
+              // Handle movie with release preferences
+              final prefs = entry.releaseNotificationPrefs;
+              final selectedTypes = prefs?.selectedTypes ?? [];
+              
+              // Debug logging
+              debugPrint('[WatchlistButton] entry.releaseNotificationPrefs: $prefs');
+              debugPrint('[WatchlistButton] selectedTypes: $selectedTypes');
+              if (prefs != null) {
+                debugPrint('[WatchlistButton] theatrical: ${prefs.theatrical}, streaming: ${prefs.streaming}, physical: ${prefs.physical}, tv: ${prefs.tv}');
+              }
+              
+              showWatchlistWithPreferencesSnackBar(
+                context,
+                workTitle: widget.workTitle,
+                selectedReleaseTypes: selectedTypes,
+                onUndo: () async {
+                  await watchlistLogic.removeWorkFromWatchlist(
+                    widget.tmdbId,
+                    widget.workType,
+                  );
+                  ref.invalidate(watchlistEntriesProvider);
+                },
+                onEditPreferences: () => _showReleasePreferencesDialog(entry),
+                onView: shouldShowView ? (widget.onView ?? _defaultViewAction) : null,
+              );
+            } else if (widget.workType == WorkType.tvShow) {
+              // Handle TV show with episode preferences
+              final tvPrefs = entry.tvNotificationPrefs;
+              final selectedTypes = tvPrefs?.selectedTypes ?? [];
+              
+              showTvWatchlistSnackBar(
+                context,
+                workTitle: widget.workTitle,
+                selectedEpisodeTypes: selectedTypes,
+                onUndo: () async {
+                  await watchlistLogic.removeWorkFromWatchlist(
+                    widget.tmdbId,
+                    widget.workType,
+                  );
+                  ref.invalidate(watchlistEntriesProvider);
+                },
+                onEditPreferences: () => _showTvPreferencesDialog(entry),
+                onView: shouldShowView ? (widget.onView ?? _defaultViewAction) : null,
+              );
+            }
+          }
         }
       }
 
@@ -197,5 +276,55 @@ class _WatchlistButtonState extends ConsumerState<WatchlistButton> {
         ),
       ),
     );
+  }
+
+  Future<void> _showReleasePreferencesDialog(WatchlistEntry entry) async {
+    final result = await showDialog<ReleaseNotificationPreferences>(
+      context: context,
+      builder: (context) => ReleasePreferencesDialog(
+        workTitle: entry.title,
+        initialPreferences: entry.releaseNotificationPrefs ?? ReleaseNotificationPreferences(),
+      ),
+    );
+
+    if (result != null) {
+      // Update the entry with new preferences
+      final watchlistLogic = ref.read(watchlistLogicProvider);
+      await watchlistLogic.updateReleaseNotificationPreferences(entry.tmdbId, entry.type, result);
+      ref.invalidate(watchlistEntriesProvider);
+      
+      if (mounted) {
+        showSimpleSnackBar(
+          context,
+          'Release preferences updated for ${entry.title}',
+          duration: const Duration(seconds: 2),
+        );
+      }
+    }
+  }
+
+  Future<void> _showTvPreferencesDialog(WatchlistEntry entry) async {
+    final result = await showDialog<TvNotificationPreferences>(
+      context: context,
+      builder: (context) => TvPreferencesDialog(
+        workTitle: entry.title,
+        initialPreferences: entry.tvNotificationPrefs ?? TvNotificationPreferences(),
+      ),
+    );
+
+    if (result != null) {
+      // Update the entry with new preferences
+      final watchlistLogic = ref.read(watchlistLogicProvider);
+      await watchlistLogic.updateTvNotificationPreferences(entry.tmdbId, result);
+      ref.invalidate(watchlistEntriesProvider);
+      
+      if (mounted) {
+        showSimpleSnackBar(
+          context,
+          'Episode preferences updated for ${entry.title}',
+          duration: const Duration(seconds: 2),
+        );
+      }
+    }
   }
 }

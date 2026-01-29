@@ -6,6 +6,50 @@ part of 'watchlist_entry.dart';
 // TypeAdapterGenerator
 // **************************************************************************
 
+class ReleaseNotificationPreferencesAdapter
+    extends TypeAdapter<ReleaseNotificationPreferences> {
+  @override
+  final int typeId = 48;
+
+  @override
+  ReleaseNotificationPreferences read(BinaryReader reader) {
+    final numOfFields = reader.readByte();
+    final fields = <int, dynamic>{
+      for (int i = 0; i < numOfFields; i++) reader.readByte(): reader.read(),
+    };
+    return ReleaseNotificationPreferences(
+      theatrical: fields[0] as bool,
+      streaming: fields[1] as bool,
+      physical: fields[2] as bool,
+      tv: fields[3] as bool,
+    );
+  }
+
+  @override
+  void write(BinaryWriter writer, ReleaseNotificationPreferences obj) {
+    writer
+      ..writeByte(4)
+      ..writeByte(0)
+      ..write(obj.theatrical)
+      ..writeByte(1)
+      ..write(obj.streaming)
+      ..writeByte(2)
+      ..write(obj.physical)
+      ..writeByte(3)
+      ..write(obj.tv);
+  }
+
+  @override
+  int get hashCode => typeId.hashCode;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is ReleaseNotificationPreferencesAdapter &&
+          runtimeType == other.runtimeType &&
+          typeId == other.typeId;
+}
+
 class ContributorSnapshotAdapter extends TypeAdapter<ContributorSnapshot> {
   @override
   final int typeId = 42;
@@ -72,13 +116,15 @@ class WatchlistEntryAdapter extends TypeAdapter<WatchlistEntry> {
       genreListId: fields[12] as String?,
       followedContributors: (fields[13] as List?)?.cast<ContributorSnapshot>(),
       statusRecords: (fields[14] as List?)?.cast<StatusRecord>(),
+      releaseNotificationPrefs: fields[15] as ReleaseNotificationPreferences?,
+      tvNotificationPrefs: fields[16] as TvNotificationPreferences?,
     );
   }
 
   @override
   void write(BinaryWriter writer, WatchlistEntry obj) {
     writer
-      ..writeByte(15)
+      ..writeByte(17)
       ..writeByte(0)
       ..write(obj.tmdbId)
       ..writeByte(1)
@@ -108,7 +154,11 @@ class WatchlistEntryAdapter extends TypeAdapter<WatchlistEntry> {
       ..writeByte(13)
       ..write(obj.followedContributors)
       ..writeByte(14)
-      ..write(obj.statusRecords);
+      ..write(obj.statusRecords)
+      ..writeByte(15)
+      ..write(obj.releaseNotificationPrefs)
+      ..writeByte(16)
+      ..write(obj.tvNotificationPrefs);
   }
 
   @override

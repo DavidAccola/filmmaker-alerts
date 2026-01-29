@@ -4,8 +4,12 @@ import 'dart:io';
 import '../../providers/providers.dart';
 import '../../logic/notification_logic.dart';
 import '../../data/models/preferences.dart';
+import '../../data/models/contributor.dart'; // For TvNotificationPreferences
+import '../../data/models/contributor_detail.dart'; // For WorkType
+import '../../data/models/watchlist_entry.dart'; // For ReleaseNotificationPreferences
 import '../../utils/debug_logger.dart';
 import 'package:flutter/services.dart';
+import '../common/snackbar_utils.dart';
 
 class DebugScreen extends ConsumerWidget {
   const DebugScreen({super.key});
@@ -19,10 +23,11 @@ class DebugScreen extends ConsumerWidget {
       appBar: AppBar(
         title: const Text('Debug - Notification Test'),
       ),
-      body: Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
+      body: SingleChildScrollView(
+        child: Center(
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
             const Text(
               'Windows Notification Test',
               style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
@@ -93,6 +98,15 @@ class DebugScreen extends ConsumerWidget {
                   ),
                 ),
               ),
+              loading: () => const CircularProgressIndicator(),
+              error: (error, stack) => Text('Error loading preferences: $error'),
+            ),
+            
+            const SizedBox(height: 20),
+            
+            // Notification Timing Debug Section
+            preferencesAsync.when(
+              data: (prefs) => _buildNotificationTimingCard(context, ref, prefs),
               loading: () => const CircularProgressIndicator(),
               error: (error, stack) => Text('Error loading preferences: $error'),
             ),
@@ -953,6 +967,303 @@ class DebugScreen extends ConsumerWidget {
             ),
           ],
         ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildNotificationTimingCard(BuildContext context, WidgetRef ref, Preferences prefs) {
+    final now = DateTime.now();
+    
+    // Parse scheduled time
+    int scheduleHour = 9;
+    int scheduleMinute = 0;
+    try {
+      final parts = prefs.scheduleTime.split(':');
+      if (parts.length == 2) {
+        scheduleHour = int.parse(parts[0]);
+        scheduleMinute = int.parse(parts[1]);
+      }
+    } catch (_) {}
+    
+    // Get today's scheduled time
+    final todayScheduled = DateTime(now.year, now.month, now.day, scheduleHour, scheduleMinute);
+    
+    // Determine status
+    String status = '';
+    Color statusColor = Colors.grey;
+    bool hasTriggered = false;
+    
+    if (prefs.lastCheckTime != null && prefs.lastCheckTime!.isNotEmpty) {
+      try {
+        final lastCheck = DateTime.parse(prefs.lastCheckTime!);
+        if (lastCheck.isAfter(todayScheduled)) {
+          status = '✓ Already triggered today';
+          statusColor = Colors.green;
+          hasTriggered = true;
+        } else if (now.isAfter(todayScheduled)) {
+          status = '⚠ Passed scheduled time (will trigger on next app start)';
+          statusColor = Colors.orange;
+        } else {
+          status = '○ Waiting for scheduled time';
+          statusColor = Colors.grey;
+        }
+      } catch (_) {
+        status = '○ Waiting for scheduled time';
+        statusColor = Colors.grey;
+      }
+    } else {
+      if (now.isAfter(todayScheduled)) {
+        status = '⚠ Passed scheduled time (will trigger on next app start)';
+        statusColor = Colors.orange;
+      } else {
+        status = '○ Waiting for scheduled time';
+        statusColor = Colors.grey;
+      }
+    }
+    
+    // Calculate next check time
+    DateTime nextCheck;
+    if (now.isBefore(todayScheduled)) {
+      nextCheck = todayScheduled;
+    } else {
+      nextCheck = todayScheduled.add(const Duration(days: 1));
+    }
+    
+    return Card(
+      margin: const EdgeInsets.symmetric(horizontal: 32),
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          children: [
+            const Text(
+              'Notification Timing Debug',
+              style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+            ),
+            const SizedBox(height: 16),
+            Row(
+              children: [
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Scheduled Time: ${scheduleHour.toString().padLeft(2, '0')}:${scheduleMinute.toString().padLeft(2, '0')}',
+                        style: const TextStyle(fontSize: 12),
+                      ),
+                      const SizedBox(height: 8),
+                      Text(
+                        'Current Time: ${now.hour.toString().padLeft(2, '0')}:${now.minute.toString().padLeft(2, '0')}:${now.second.toString().padLeft(2, '0')}',
+                        style: const TextStyle(fontSize: 12),
+                      ),
+                      const SizedBox(height: 8),
+                      Row(
+                        children: [
+                          Expanded(
+                            child: Text(
+                              'Last Check: ${prefs.lastCheckTime != null && prefs.lastCheckTime!.isNotEmpty ? prefs.lastCheckTime : 'Never'}',
+                              style: const TextStyle(fontSize: 12),
+                            ),
+                          ),
+                          IconButton(
+                            onPressed: () => _showLastCheckTimeDialog(context, ref, prefs),
+                            icon: const Icon(Icons.edit, size: 16),
+                            tooltip: 'Edit Last Check Time',
+                            padding: EdgeInsets.zero,
+                            constraints: const BoxConstraints(minWidth: 24, minHeight: 24),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 8),
+                      Text(
+                        'Next Check: ${nextCheck.hour.toString().padLeft(2, '0')}:${nextCheck.minute.toString().padLeft(2, '0')} (${nextCheck.toIso8601String().split('T').first})',
+                        style: const TextStyle(fontSize: 12),
+                      ),
+                      const SizedBox(height: 12),
+                      Row(
+                        children: [
+                          Container(
+                            width: 12,
+                            height: 12,
+                            decoration: BoxDecoration(
+                              color: statusColor,
+                              shape: BoxShape.circle,
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: Text(
+                              status,
+                              style: TextStyle(fontSize: 12, color: statusColor, fontWeight: FontWeight.w500),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 16),
+            Row(
+              children: [
+                if (hasTriggered)
+                  Expanded(
+                    child: ElevatedButton.icon(
+                      onPressed: () async {
+                        // Reset the last check time
+                        final newPrefs = Preferences(
+                          notifyTheatre: prefs.notifyTheatre,
+                          notifyStreaming: prefs.notifyStreaming,
+                          scheduleTime: prefs.scheduleTime,
+                          defaultDepartments: prefs.defaultDepartments,
+                          notifyPhysical: prefs.notifyPhysical,
+                          notifyTV: prefs.notifyTV,
+                          pretendToday: prefs.pretendToday,
+                          includeCollectionsInMovieSearch: prefs.includeCollectionsInMovieSearch,
+                          useGridView: prefs.useGridView,
+                          homeSortOrder: prefs.homeSortOrder,
+                          groupByType: prefs.groupByType,
+                          allRolesSelected: prefs.allRolesSelected,
+                          allReleaseTypesSelected: prefs.allReleaseTypesSelected,
+                          autoFollowNewRoles: prefs.autoFollowNewRoles,
+                          lastCheckTime: null, // Reset
+                          lastViewedHistoryTime: prefs.lastViewedHistoryTime,
+                          movieDetailsPreference: prefs.movieDetailsPreference,
+                          defaultTvNotificationPrefs: prefs.defaultTvNotificationPrefs,
+                          notifyPersonTvEpisodes: prefs.notifyPersonTvEpisodes,
+                        );
+                        
+                        await ref.read(preferencesRepositoryProvider).savePreferences(newPrefs);
+                        ref.invalidate(preferencesProvider);
+                        
+                        if (context.mounted) {
+                          showSimpleSnackBar(
+                            context,
+                            'Check time reset - notification will trigger on next scheduled time',
+                            duration: const Duration(seconds: 3),
+                          );
+                        }
+                      },
+                      icon: const Icon(Icons.refresh),
+                      label: const Text('Reset Check Time'),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: Colors.orange,
+                        foregroundColor: Colors.white,
+                      ),
+                    ),
+                  ),
+                if (hasTriggered) const SizedBox(width: 8),
+                Expanded(
+                  child: ElevatedButton.icon(
+                    onPressed: () => _showLastCheckTimeDialog(context, ref, prefs),
+                    icon: const Icon(Icons.schedule),
+                    label: const Text('Set Check Time'),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.blue,
+                      foregroundColor: Colors.white,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 8),
+            // Force missed check button - always visible for quick testing
+            SizedBox(
+              width: double.infinity,
+              child: ElevatedButton.icon(
+                onPressed: () async {
+                  // Set last check time to yesterday AND set scheduled time to 1 hour ago
+                  // This guarantees a "missed check" scenario regardless of current scheduled time
+                  final now = DateTime.now();
+                  final oneHourAgo = now.subtract(const Duration(hours: 1));
+                  final yesterday = now.subtract(const Duration(days: 1));
+                  
+                  final newPrefs = Preferences(
+                    notifyTheatre: prefs.notifyTheatre,
+                    notifyStreaming: prefs.notifyStreaming,
+                    scheduleTime: '${oneHourAgo.hour.toString().padLeft(2, '0')}:${oneHourAgo.minute.toString().padLeft(2, '0')}', // Set to 1 hour ago
+                    defaultDepartments: prefs.defaultDepartments,
+                    notifyPhysical: prefs.notifyPhysical,
+                    notifyTV: prefs.notifyTV,
+                    pretendToday: prefs.pretendToday,
+                    includeCollectionsInMovieSearch: prefs.includeCollectionsInMovieSearch,
+                    useGridView: prefs.useGridView,
+                    homeSortOrder: prefs.homeSortOrder,
+                    groupByType: prefs.groupByType,
+                    allRolesSelected: prefs.allRolesSelected,
+                    allReleaseTypesSelected: prefs.allReleaseTypesSelected,
+                    autoFollowNewRoles: prefs.autoFollowNewRoles,
+                    lastCheckTime: yesterday.toIso8601String(), // Set to yesterday
+                    lastViewedHistoryTime: prefs.lastViewedHistoryTime,
+                    movieDetailsPreference: prefs.movieDetailsPreference,
+                    defaultTvNotificationPrefs: prefs.defaultTvNotificationPrefs,
+                    notifyPersonTvEpisodes: prefs.notifyPersonTvEpisodes,
+                  );
+                  
+                  await ref.read(preferencesRepositoryProvider).savePreferences(newPrefs);
+                  ref.invalidate(preferencesProvider);
+                  
+                  if (context.mounted) {
+                    showSimpleSnackBar(
+                      context,
+                      'Forced missed check: scheduled time set to 1 hour ago, last check to yesterday',
+                      duration: const Duration(seconds: 4),
+                    );
+                  }
+                },
+                icon: const Icon(Icons.warning),
+                label: const Text('Force Missed Check (Guaranteed)'),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: Colors.red,
+                  foregroundColor: Colors.white,
+                ),
+              ),
+            ),
+            const SizedBox(height: 16),
+            // Database Export button for debugging
+            SizedBox(
+              width: double.infinity,
+              child: ElevatedButton.icon(
+                onPressed: () => _exportDatabaseInfo(context, ref),
+                icon: const Icon(Icons.download),
+                label: const Text('Export DB Info (Watchlist & Preferences)'),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: Colors.purple,
+                  foregroundColor: Colors.white,
+                ),
+              ),
+            ),
+            const SizedBox(height: 8),
+            // Fix NULL preferences button
+            SizedBox(
+              width: double.infinity,
+              child: ElevatedButton.icon(
+                onPressed: () => _fixNullPreferences(context, ref),
+                icon: const Icon(Icons.build),
+                label: const Text('Fix NULL Preferences (Apply Defaults)'),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: Colors.green,
+                  foregroundColor: Colors.white,
+                ),
+              ),
+            ),
+            const SizedBox(height: 8),
+            // Export History/Notification Reasons
+            SizedBox(
+              width: double.infinity,
+              child: ElevatedButton.icon(
+                onPressed: () => _exportHistoryInfo(context, ref),
+                icon: const Icon(Icons.history),
+                label: const Text('Export History (Notification Reasons)'),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: Colors.teal,
+                  foregroundColor: Colors.white,
+                ),
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -984,5 +1295,465 @@ class DebugScreen extends ConsumerWidget {
 
     await ref.read(preferencesRepositoryProvider).savePreferences(newPrefs);
     ref.invalidate(preferencesProvider);
+  }
+
+  Future<void> _showLastCheckTimeDialog(BuildContext context, WidgetRef ref, Preferences prefs) async {
+    DateTime? selectedDateTime;
+    
+    // Parse current last check time if it exists
+    if (prefs.lastCheckTime != null && prefs.lastCheckTime!.isNotEmpty) {
+      try {
+        selectedDateTime = DateTime.parse(prefs.lastCheckTime!);
+      } catch (e) {
+        selectedDateTime = DateTime.now().subtract(const Duration(hours: 1));
+      }
+    } else {
+      selectedDateTime = DateTime.now().subtract(const Duration(hours: 1));
+    }
+
+    final result = await showDialog<DateTime>(
+      context: context,
+      builder: (context) => _LastCheckTimeDialog(initialDateTime: selectedDateTime!),
+    );
+
+    if (result != null) {
+      final newPrefs = Preferences(
+        notifyTheatre: prefs.notifyTheatre,
+        notifyStreaming: prefs.notifyStreaming,
+        scheduleTime: prefs.scheduleTime,
+        defaultDepartments: prefs.defaultDepartments,
+        notifyPhysical: prefs.notifyPhysical,
+        notifyTV: prefs.notifyTV,
+        pretendToday: prefs.pretendToday,
+        includeCollectionsInMovieSearch: prefs.includeCollectionsInMovieSearch,
+        useGridView: prefs.useGridView,
+        homeSortOrder: prefs.homeSortOrder,
+        groupByType: prefs.groupByType,
+        allRolesSelected: prefs.allRolesSelected,
+        allReleaseTypesSelected: prefs.allReleaseTypesSelected,
+        autoFollowNewRoles: prefs.autoFollowNewRoles,
+        lastCheckTime: result.toIso8601String(),
+        lastViewedHistoryTime: prefs.lastViewedHistoryTime,
+        movieDetailsPreference: prefs.movieDetailsPreference,
+        defaultTvNotificationPrefs: prefs.defaultTvNotificationPrefs,
+        notifyPersonTvEpisodes: prefs.notifyPersonTvEpisodes,
+      );
+      
+      await ref.read(preferencesRepositoryProvider).savePreferences(newPrefs);
+      ref.invalidate(preferencesProvider);
+      
+      if (context.mounted) {
+        showSimpleSnackBar(
+          context,
+          'Last check time updated to ${result.toIso8601String()}',
+          duration: const Duration(seconds: 3),
+        );
+      }
+    }
+  }
+
+  Future<void> _exportDatabaseInfo(BuildContext context, WidgetRef ref) async {
+    try {
+      final watchlistRepo = ref.read(watchlistRepositoryProvider);
+      final prefsRepo = ref.read(preferencesRepositoryProvider);
+      final movieCacheRepo = ref.read(movieCacheRepositoryProvider);
+      
+      final watchlistEntries = watchlistRepo.getWorks();
+      final prefs = prefsRepo.getPreferences();
+      
+      // Build export string
+      final buffer = StringBuffer();
+      buffer.writeln('=== WATCHLIST EXPORT ===');
+      buffer.writeln('Total entries: ${watchlistEntries.length}');
+      buffer.writeln('');
+      
+      for (final entry in watchlistEntries) {
+        buffer.writeln('Title: ${entry.title}');
+        buffer.writeln('  Type: ${entry.type}');
+        buffer.writeln('  TMDB ID: ${entry.tmdbId}');
+        buffer.writeln('  Release Date: ${entry.releaseDate}');
+        buffer.writeln('  Release Type: ${entry.releaseType}');
+        buffer.writeln('  Added At: ${entry.addedAt}');
+        
+        // Show what's actually in the database
+        buffer.writeln('  [DB] Release Notification Prefs object: ${entry.releaseNotificationPrefs}');
+        
+        if (entry.releaseNotificationPrefs != null) {
+          buffer.writeln('  [DB] Release Notification Prefs (from object):');
+          buffer.writeln('    Theatrical: ${entry.releaseNotificationPrefs!.theatrical}');
+          buffer.writeln('    Streaming: ${entry.releaseNotificationPrefs!.streaming}');
+          buffer.writeln('    Physical: ${entry.releaseNotificationPrefs!.physical}');
+          buffer.writeln('    TV: ${entry.releaseNotificationPrefs!.tv}');
+          buffer.writeln('    Selected Types: ${entry.releaseNotificationPrefs!.selectedTypes}');
+        } else {
+          buffer.writeln('  [DB] Release Notification Prefs: NULL');
+          buffer.writeln('  [UI] Will display: Global defaults (Theatre: ${prefs.effectiveNotifyTheatre}, Streaming: ${prefs.effectiveNotifyStreaming})');
+        }
+        
+        if (entry.tvNotificationPrefs != null) {
+          buffer.writeln('  [DB] TV Notification Prefs:');
+          buffer.writeln('    Series Premiere: ${entry.tvNotificationPrefs!.seriesPremiere}');
+          buffer.writeln('    Season Premieres: ${entry.tvNotificationPrefs!.seasonPremieres}');
+          buffer.writeln('    Season Finales: ${entry.tvNotificationPrefs!.seasonFinales}');
+          buffer.writeln('    New Episodes: ${entry.tvNotificationPrefs!.newEpisodes}');
+          buffer.writeln('    Specials: ${entry.tvNotificationPrefs!.specials}');
+        }
+        
+        buffer.writeln('');
+      }
+      
+      buffer.writeln('=== GLOBAL PREFERENCES ===');
+      buffer.writeln('Notify Theatre: ${prefs.notifyTheatre}');
+      buffer.writeln('Notify Streaming: ${prefs.notifyStreaming}');
+      buffer.writeln('Notify Physical: ${prefs.notifyPhysical}');
+      buffer.writeln('Notify TV: ${prefs.notifyTV}');
+      buffer.writeln('Schedule Time: ${prefs.scheduleTime}');
+      buffer.writeln('Last Check Time: ${prefs.lastCheckTime}');
+      buffer.writeln('Pretend Today: ${prefs.pretendToday}');
+      buffer.writeln('');
+      
+      final exportText = buffer.toString();
+      
+      // Copy to clipboard
+      await Clipboard.setData(ClipboardData(text: exportText));
+      
+      if (context.mounted) {
+        showSimpleSnackBar(
+          context,
+          'Database info copied to clipboard!',
+          duration: const Duration(seconds: 3),
+        );
+      }
+      
+      // Also print to debug console
+      debugPrint(exportText);
+    } catch (e) {
+      if (context.mounted) {
+        showSimpleSnackBar(
+          context,
+          'Error exporting database: $e',
+          duration: const Duration(seconds: 3),
+        );
+      }
+    }
+  }
+
+  Future<void> _fixNullPreferences(BuildContext context, WidgetRef ref) async {
+    try {
+      final watchlistLogic = ref.read(watchlistLogicProvider);
+      final watchlistRepo = ref.read(watchlistRepositoryProvider);
+      
+      final entries = watchlistRepo.getWorks();
+      int fixedCount = 0;
+      
+      for (final entry in entries) {
+        if (entry.releaseNotificationPrefs == null && entry.type == WorkType.movie) {
+          // Set default preferences based on global settings
+          final prefs = ref.read(preferencesRepositoryProvider).getPreferences();
+          final defaultPrefs = ReleaseNotificationPreferences(
+            theatrical: prefs.effectiveNotifyTheatre,
+            streaming: prefs.effectiveNotifyStreaming,
+            physical: prefs.effectiveNotifyPhysical,
+            tv: prefs.effectiveNotifyTV,
+          );
+          
+          await watchlistLogic.updateReleaseNotificationPreferences(
+            entry.tmdbId,
+            entry.type,
+            defaultPrefs,
+          );
+          fixedCount++;
+          debugPrint('[DebugScreen] Fixed preferences for: ${entry.title}');
+        } else if (entry.tvNotificationPrefs == null && entry.type == WorkType.tvShow) {
+          // Set default TV preferences
+          final defaultTvPrefs = TvNotificationPreferences(
+            seriesPremiere: true,
+            seasonPremieres: true,
+            seasonFinales: false,
+            newEpisodes: false,
+            specials: false,
+          );
+          
+          await watchlistLogic.updateTvNotificationPreferences(
+            entry.tmdbId,
+            defaultTvPrefs,
+          );
+          fixedCount++;
+          debugPrint('[DebugScreen] Fixed TV preferences for: ${entry.title}');
+        }
+      }
+      
+      ref.invalidate(watchlistEntriesProvider);
+      
+      if (context.mounted) {
+        showSimpleSnackBar(
+          context,
+          'Fixed $fixedCount entries with NULL preferences',
+          duration: const Duration(seconds: 3),
+        );
+      }
+    } catch (e) {
+      if (context.mounted) {
+        showSimpleSnackBar(
+          context,
+          'Error fixing preferences: $e',
+          duration: const Duration(seconds: 3),
+        );
+      }
+    }
+  }
+
+  Future<void> _exportHistoryInfo(BuildContext context, WidgetRef ref) async {
+    try {
+      final historyRepo = ref.read(historyRepositoryProvider);
+      final history = historyRepo.getHistory();
+      
+      // Build export string
+      final buffer = StringBuffer();
+      buffer.writeln('=== NOTIFICATION HISTORY EXPORT ===');
+      buffer.writeln('Total entries: ${history.length}');
+      buffer.writeln('');
+      
+      for (final item in history) {
+        final entry = item.entry;
+        buffer.writeln('Title: ${item.title}');
+        buffer.writeln('  TMDB ID: ${entry.tmdbId}');
+        buffer.writeln('  Media Type: ${entry.mediaType}');
+        buffer.writeln('  Notification Events: ${entry.notificationEvents.length}');
+        
+        for (int i = 0; i < entry.notificationEvents.length; i++) {
+          final event = entry.notificationEvents[i];
+          buffer.writeln('    Event $i:');
+          buffer.writeln('      Release Type: ${event.releaseType}');
+          buffer.writeln('      Release Date: ${event.releaseDate}');
+          buffer.writeln('      Notified At: ${event.notifiedAt}');
+        }
+        
+        buffer.writeln('  Reasons (${entry.reasons.length}):');
+        for (final reason in entry.reasons) {
+          buffer.writeln('    - ${reason.contributorName}');
+          buffer.writeln('      Department: ${reason.department}');
+          buffer.writeln('      Job: ${reason.job}');
+          buffer.writeln('      Contributor ID: ${reason.contributorId}');
+        }
+        
+        if (entry.mediaType == 'tv') {
+          buffer.writeln('  TV Info:');
+          buffer.writeln('    Season: ${entry.seasonNumber}');
+          buffer.writeln('    Episode: ${entry.episodeNumber}');
+          buffer.writeln('    Episode Title: ${entry.episodeTitle}');
+          buffer.writeln('    TV Notification Type: ${entry.tvNotificationType}');
+        }
+        
+        buffer.writeln('');
+      }
+      
+      final exportText = buffer.toString();
+      
+      // Copy to clipboard
+      await Clipboard.setData(ClipboardData(text: exportText));
+      
+      if (context.mounted) {
+        showSimpleSnackBar(
+          context,
+          'History info copied to clipboard! (${history.length} entries)',
+          duration: const Duration(seconds: 3),
+        );
+      }
+      
+      // Also print to debug console
+      debugPrint(exportText);
+    } catch (e) {
+      if (context.mounted) {
+        showSimpleSnackBar(
+          context,
+          'Error exporting history: $e',
+          duration: const Duration(seconds: 3),
+        );
+      }
+    }
+  }
+}
+
+class _LastCheckTimeDialog extends StatefulWidget {
+  final DateTime initialDateTime;
+
+  const _LastCheckTimeDialog({required this.initialDateTime});
+
+  @override
+  State<_LastCheckTimeDialog> createState() => _LastCheckTimeDialogState();
+}
+
+class _LastCheckTimeDialogState extends State<_LastCheckTimeDialog> {
+  late DateTime selectedDateTime;
+  late TextEditingController _dateController;
+  late TextEditingController _timeController;
+
+  @override
+  void initState() {
+    super.initState();
+    selectedDateTime = widget.initialDateTime;
+    _dateController = TextEditingController(
+      text: '${selectedDateTime.year}-${selectedDateTime.month.toString().padLeft(2, '0')}-${selectedDateTime.day.toString().padLeft(2, '0')}',
+    );
+    _timeController = TextEditingController(
+      text: '${selectedDateTime.hour.toString().padLeft(2, '0')}:${selectedDateTime.minute.toString().padLeft(2, '0')}',
+    );
+  }
+
+  @override
+  void dispose() {
+    _dateController.dispose();
+    _timeController.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: const Text('Set Last Check Time'),
+      content: SizedBox(
+        width: 300,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text(
+              'Set when the last notification check occurred. This affects which releases will be considered "new".',
+              style: TextStyle(fontSize: 14, color: Colors.grey),
+            ),
+            const SizedBox(height: 16),
+            const Text('Date:', style: TextStyle(fontWeight: FontWeight.w500)),
+            const SizedBox(height: 4),
+            TextField(
+              controller: _dateController,
+              decoration: const InputDecoration(
+                hintText: 'YYYY-MM-DD',
+                border: OutlineInputBorder(),
+                isDense: true,
+              ),
+              onChanged: _updateDateTime,
+            ),
+            const SizedBox(height: 12),
+            const Text('Time:', style: TextStyle(fontWeight: FontWeight.w500)),
+            const SizedBox(height: 4),
+            TextField(
+              controller: _timeController,
+              decoration: const InputDecoration(
+                hintText: 'HH:MM',
+                border: OutlineInputBorder(),
+                isDense: true,
+              ),
+              onChanged: _updateDateTime,
+            ),
+            const SizedBox(height: 16),
+            const Text('Quick Options:', style: TextStyle(fontWeight: FontWeight.w500)),
+            const SizedBox(height: 8),
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: [
+                _QuickOptionChip(
+                  label: '1 hour ago',
+                  onTap: () => _setQuickTime(DateTime.now().subtract(const Duration(hours: 1))),
+                ),
+                _QuickOptionChip(
+                  label: '6 hours ago',
+                  onTap: () => _setQuickTime(DateTime.now().subtract(const Duration(hours: 6))),
+                ),
+                _QuickOptionChip(
+                  label: '1 day ago',
+                  onTap: () => _setQuickTime(DateTime.now().subtract(const Duration(days: 1))),
+                ),
+                _QuickOptionChip(
+                  label: '3 days ago',
+                  onTap: () => _setQuickTime(DateTime.now().subtract(const Duration(days: 3))),
+                ),
+                _QuickOptionChip(
+                  label: '1 week ago',
+                  onTap: () => _setQuickTime(DateTime.now().subtract(const Duration(days: 7))),
+                ),
+                _QuickOptionChip(
+                  label: 'Yesterday (Force Missed)',
+                  onTap: () => _setQuickTime(DateTime.now().subtract(const Duration(days: 1))),
+                ),
+                _QuickOptionChip(
+                  label: 'Never',
+                  onTap: () => Navigator.pop(context, DateTime.fromMillisecondsSinceEpoch(0)),
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(context),
+          child: const Text('Cancel'),
+        ),
+        ElevatedButton(
+          onPressed: () => Navigator.pop(context, selectedDateTime),
+          child: const Text('Set'),
+        ),
+      ],
+    );
+  }
+
+  void _updateDateTime([String? _]) {
+    try {
+      final dateParts = _dateController.text.split('-');
+      final timeParts = _timeController.text.split(':');
+      
+      if (dateParts.length == 3 && timeParts.length == 2) {
+        final year = int.parse(dateParts[0]);
+        final month = int.parse(dateParts[1]);
+        final day = int.parse(dateParts[2]);
+        final hour = int.parse(timeParts[0]);
+        final minute = int.parse(timeParts[1]);
+        
+        setState(() {
+          selectedDateTime = DateTime(year, month, day, hour, minute);
+        });
+      }
+    } catch (e) {
+      // Invalid format, keep current selectedDateTime
+    }
+  }
+
+  void _setQuickTime(DateTime dateTime) {
+    setState(() {
+      selectedDateTime = dateTime;
+      _dateController.text = '${dateTime.year}-${dateTime.month.toString().padLeft(2, '0')}-${dateTime.day.toString().padLeft(2, '0')}';
+      _timeController.text = '${dateTime.hour.toString().padLeft(2, '0')}:${dateTime.minute.toString().padLeft(2, '0')}';
+    });
+  }
+}
+
+class _QuickOptionChip extends StatelessWidget {
+  final String label;
+  final VoidCallback onTap;
+
+  const _QuickOptionChip({
+    required this.label,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(16),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+        decoration: BoxDecoration(
+          border: Border.all(color: Colors.grey.shade300),
+          borderRadius: BorderRadius.circular(16),
+        ),
+        child: Text(
+          label,
+          style: const TextStyle(fontSize: 12),
+        ),
+      ),
+    );
   }
 }

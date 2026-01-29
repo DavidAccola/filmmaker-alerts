@@ -1,15 +1,19 @@
 import 'dart:io';
+import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:tray_manager/tray_manager.dart';
 import 'package:window_manager/window_manager.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../providers/providers.dart';
+import '../../logic/notification_logic.dart';
+import '../../data/models/preferences.dart';
 
 class SystemTrayService with TrayListener {
   static final SystemTrayService _instance = SystemTrayService._internal();
   
   bool _isInitialized = false;
   ProviderContainer? _container;
+  Timer? _scheduledCheckTimer;
 
   factory SystemTrayService() {
     return _instance;
@@ -21,6 +25,11 @@ class SystemTrayService with TrayListener {
   void setContainer(ProviderContainer container) {
     _container = container;
     debugPrint('[SystemTray] Provider container set');
+    
+    // Start the scheduled check timer now that we have the container
+    if (_isInitialized) {
+      _startScheduledCheckTimer();
+    }
   }
 
   Future<void> init() async {
@@ -92,6 +101,9 @@ class SystemTrayService with TrayListener {
 
       _isInitialized = true;
       debugPrint('[SystemTray] System tray initialized successfully');
+      
+      // Start the scheduled check timer
+      _startScheduledCheckTimer();
       
       // Try to verify the tray is actually visible
       debugPrint('[SystemTray] Attempting to verify tray visibility...');
@@ -225,6 +237,67 @@ class SystemTrayService with TrayListener {
       trayManager.removeListener(this);
       trayManager.destroy();
     }
+    _scheduledCheckTimer?.cancel();
+  }
+
+  /// Start a timer that checks for new releases at the scheduled time
+  void _startScheduledCheckTimer() {
+    debugPrint('[SystemTray] Starting scheduled check timer...');
+    
+    // Cancel any existing timer
+    _scheduledCheckTimer?.cancel();
+    
+    // Get the scheduled time from preferences
+    try {
+      if (_container == null) {
+        debugPrint('[SystemTray] Container not available yet, will retry');
+        return;
+      }
+      
+      final prefsRepo = _container!.read(preferencesRepositoryProvider);
+      final prefs = prefsRepo.getPreferences();
+      
+      // Parse scheduled time
+      int scheduleHour = 9;
+      int scheduleMinute = 0;
+      try {
+        final parts = prefs.scheduleTime.split(':');
+        if (parts.length == 2) {
+          scheduleHour = int.parse(parts[0]);
+          scheduleMinute = int.parse(parts[1]);
+        }
+      } catch (_) {}
+      
+      debugPrint('[SystemTray] Scheduled check time: ${scheduleHour.toString().padLeft(2, '0')}:${scheduleMinute.toString().padLeft(2, '0')}');
+      
+      // Calculate time until next scheduled check
+      final now = DateTime.now();
+      var nextCheck = DateTime(now.year, now.month, now.day, scheduleHour, scheduleMinute);
+      
+      // Check if scheduled time has already passed today
+      if (nextCheck.isBefore(now)) {
+        debugPrint('[SystemTray] Scheduled time has already passed today, running check immediately');
+        _checkForNewReleases();
+        
+        // Schedule for tomorrow
+        nextCheck = nextCheck.add(const Duration(days: 1));
+      }
+      
+      final timeUntilCheck = nextCheck.difference(now);
+      debugPrint('[SystemTray] Next scheduled check in ${timeUntilCheck.inMinutes} minutes at $nextCheck');
+      
+      // Set a timer to run at the scheduled time
+      _scheduledCheckTimer = Timer(timeUntilCheck, () {
+        debugPrint('[SystemTray] Scheduled check time reached, running check...');
+        _checkForNewReleases();
+        
+        // Reschedule for tomorrow
+        _startScheduledCheckTimer();
+      });
+      
+    } catch (e) {
+      debugPrint('[SystemTray] Error starting scheduled check timer: $e');
+    }
   }
 
   Future<void> _checkForNewReleases() async {
@@ -239,20 +312,54 @@ class SystemTrayService with TrayListener {
       // Get the release checker from the provider container
       final releaseChecker = _container!.read(releaseCheckerProvider);
       final notificationService = _container!.read(notificationServiceProvider);
+      final tvCacheRepo = _container!.read(tvCacheRepositoryProvider);
+      final movieCacheRepo = _container!.read(movieCacheRepositoryProvider);
+      final prefsRepo = _container!.read(preferencesRepositoryProvider);
       
       debugPrint('[SystemTray] Calling findNewReleases...');
       
-      // Perform the release check
-      final newReleases = await releaseChecker.findNewReleases();
+      // Perform the release check (ignore debug date for scheduled checks)
+      final newReleases = await releaseChecker.findNewReleases(ignoreDebugDate: true);
       
       debugPrint('[SystemTray] Release check completed. Found ${newReleases.length} new releases');
       
+      // Update last check time (like the background service does)
+      final currentPrefs = prefsRepo.getPreferences();
+      final updatedPrefs = Preferences(
+        notifyTheatre: currentPrefs.notifyTheatre,
+        notifyStreaming: currentPrefs.notifyStreaming,
+        scheduleTime: currentPrefs.scheduleTime,
+        defaultDepartments: currentPrefs.defaultDepartments,
+        notifyPhysical: currentPrefs.notifyPhysical,
+        notifyTV: currentPrefs.notifyTV,
+        pretendToday: currentPrefs.pretendToday,
+        includeCollectionsInMovieSearch: currentPrefs.includeCollectionsInMovieSearch,
+        useGridView: currentPrefs.useGridView,
+        homeSortOrder: currentPrefs.homeSortOrder,
+        groupByType: currentPrefs.groupByType,
+        allRolesSelected: currentPrefs.allRolesSelected,
+        allReleaseTypesSelected: currentPrefs.allReleaseTypesSelected,
+        autoFollowNewRoles: currentPrefs.autoFollowNewRoles,
+        lastCheckTime: DateTime.now().toIso8601String(),
+        lastViewedHistoryTime: currentPrefs.lastViewedHistoryTime,
+        movieDetailsPreference: currentPrefs.movieDetailsPreference,
+        defaultTvNotificationPrefs: currentPrefs.defaultTvNotificationPrefs,
+        notifyPersonTvEpisodes: currentPrefs.notifyPersonTvEpisodes,
+      );
+      await prefsRepo.savePreferences(updatedPrefs);
+      debugPrint('[SystemTray] Updated lastCheckTime to ${updatedPrefs.lastCheckTime}');
+      
       // Send notifications for new releases
       if (newReleases.isNotEmpty) {
+        // Add to history (like the background service does)
+        final historyRepo = _container!.read(historyRepositoryProvider);
+        for (final release in newReleases) {
+          await historyRepo.addNotificationToHistory(release);
+        }
+        debugPrint('[SystemTray] Added ${newReleases.length} releases to history');
+        
         // Get titles from cache like the background service does
         final movieTitles = <String>[];
-        final tvCacheRepo = _container!.read(tvCacheRepositoryProvider);
-        final movieCacheRepo = _container!.read(movieCacheRepositoryProvider);
         
         for (final release in newReleases) {
           String? title;
@@ -272,59 +379,73 @@ class SystemTrayService with TrayListener {
           }
         }
         
-        // Create a summary notification
-        final title = newReleases.length == 1 
-            ? 'New Release Found!' 
-            : '${newReleases.length} New Releases Found!';
-            
-        final body = movieTitles.isNotEmpty
-            ? (movieTitles.length == 1 ? movieTitles.first : '${movieTitles.length} new releases')
-            : 'Check the app for details';
-            
+        // Use the same notification formatting as the background service
+        final notificationTitle = NotificationLogic.formatTitle(movieTitles, entries: newReleases);
+        final notificationBody = NotificationLogic.formatBody(movieTitles, newReleases,
+          getMoviePosterPath: (tmdbId) {
+            final release = newReleases.firstWhere((r) => r.tmdbId == tmdbId, orElse: () => newReleases.first);
+            if (release.mediaType == 'tv') {
+              final tvShow = tvCacheRepo.getShow(tmdbId);
+              return tvShow?.posterPath;
+            } else {
+              return movieCacheRepo.getMovie(tmdbId)?.posterPath;
+            }
+          });
+        
+        // Collect poster images
+        List<String> imagePaths = [];
+        for (int i = 0; i < newReleases.length && i < 4; i++) {
+          final release = newReleases[i];
+          String? posterPath;
+          
+          if (release.mediaType == 'tv') {
+            final tvShow = tvCacheRepo.getShow(release.tmdbId);
+            posterPath = tvShow?.posterPath;
+          } else {
+            final movie = movieCacheRepo.getMovie(release.tmdbId);
+            posterPath = movie?.posterPath;
+          }
+          
+          if (posterPath != null && posterPath.isNotEmpty) {
+            imagePaths.add('https://image.tmdb.org/t/p/w200$posterPath');
+          }
+        }
+        
+        // Get priority-based release dates for 2-3 movie notifications
+        List<String>? releaseDates;
+        if (newReleases.length >= 2 && newReleases.length <= 3) {
+          releaseDates = NotificationLogic.getPriorityReleaseDates(movieTitles, newReleases);
+        }
+        
+        // Determine payload
+        String payload;
+        if (newReleases.length == 1) {
+          final entry = newReleases.first;
+          final isTV = entry.mediaType == 'tv' || entry.notificationEvents.any((e) => e.releaseType.toLowerCase() == 'tv');
+          final typePath = isTV ? 'tv' : 'movie';
+          payload = 'https://www.themoviedb.org/$typePath/${entry.tmdbId}';
+        } else {
+          payload = 'app://history';
+        }
+        
         await notificationService.showNotification(
           id: DateTime.now().millisecondsSinceEpoch ~/ 1000,
-          title: title,
-          body: body,
-          payload: 'app://history',
+          title: notificationTitle,
+          body: notificationBody,
+          payload: payload,
+          imagePaths: imagePaths.isNotEmpty ? imagePaths : null,
+          releaseDates: releaseDates,
           totalMovieCount: newReleases.length,
         );
         
         debugPrint('[SystemTray] Sent notification for ${newReleases.length} releases');
       } else {
         debugPrint('[SystemTray] No new releases found');
-        
-        // Optional: Show a "no new releases" notification
-        // You could uncomment this if you want feedback when no releases are found
-        /*
-        await notificationService.showNotification(
-          id: DateTime.now().millisecondsSinceEpoch ~/ 1000,
-          title: 'Filmmaker Alerts',
-          body: 'No new releases found.',
-          payload: 'app://history',
-          totalMovieCount: 0,
-        );
-        */
       }
       
     } catch (e) {
       debugPrint('[SystemTray] Error during release check: $e');
       debugPrint('[SystemTray] Stack trace: ${StackTrace.current}');
-      
-      // Optional: Show error notification
-      /*
-      try {
-        final notificationService = _container!.read(notificationServiceProvider);
-        await notificationService.showNotification(
-          id: DateTime.now().millisecondsSinceEpoch ~/ 1000,
-          title: 'Filmmaker Alerts - Error',
-          body: 'Failed to check for new releases.',
-          payload: 'app://history',
-          totalMovieCount: 0,
-        );
-      } catch (e2) {
-        debugPrint('[SystemTray] Failed to show error notification: $e2');
-      }
-      */
     }
   }
 

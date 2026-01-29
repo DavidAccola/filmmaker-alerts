@@ -166,19 +166,33 @@ class _HistoryScreenState extends ConsumerState<HistoryScreen> {
                       }
                     }
 
-              // Group reasons by contributor name - show for people contributors only, not TV shows
-              final reasonsMap = <String, List<String>>{};
+              // Group reasons by contributor name, collecting all their roles
+              final reasonsByContributor = <String, List<String>>{};
+              bool isWatchlistOnly = false;
+              
               for (var reason in entry.reasons) {
-                // Only include person contributors (those with typical film/TV roles), exclude "Followed Show"
-                if (reason.job != null && reason.job != 'Followed Show' &&
-                    (['Director', 'Writer', 'Producer', 'Actor', 'Actress', 'Creator', 'Editor', 'Cinematographer'].contains(reason.job))) {
-                  reasonsMap.putIfAbsent(reason.contributorName, () => []).add(reason.job!);
+                // Check if this is a watchlist entry
+                if (reason.department == 'Watchlist' && reason.job == 'Watchlist Entry') {
+                  isWatchlistOnly = true;
+                  continue; // Skip adding to reasonsByContributor, we'll handle it separately
+                }
+                
+                // Skip "Followed Show" entries (TV shows)
+                if (reason.job == 'Followed Show') {
+                  continue;
+                }
+                
+                // Collect all jobs for this contributor
+                if (reason.job != null) {
+                  reasonsByContributor.putIfAbsent(reason.contributorName, () => []).add(reason.job!);
                 }
               }
               
               String reasonsText = '';
-              if (reasonsMap.isNotEmpty) {
-                reasonsText = reasonsMap.entries.map((e) {
+              if (isWatchlistOnly) {
+                reasonsText = 'On Watchlist';
+              } else if (reasonsByContributor.isNotEmpty) {
+                reasonsText = reasonsByContributor.entries.map((e) {
                   return '${e.key} - ${e.value.join(", ")}';
                 }).join("\n");
               }

@@ -5,20 +5,23 @@ import '../data/models/status_record.dart';
 import '../data/repositories/watchlist_repository.dart';
 import '../data/repositories/episode_status_repository.dart';
 import '../data/repositories/season_status_repository.dart';
+import '../data/repositories/preferences_repository.dart';
 
 class WatchlistLogic {
   final WatchlistRepository _watchlistRepo;
   final EpisodeStatusRepository _episodeRepo;
   final SeasonStatusRepository _seasonRepo;
+  final PreferencesRepository _preferencesRepo;
 
   WatchlistLogic(
     this._watchlistRepo,
     this._episodeRepo,
     this._seasonRepo,
+    this._preferencesRepo,
   );
 
   /// Add a work to the watchlist
-  Future<void> addWorkToWatchlist({
+  Future<WatchlistEntry> addWorkToWatchlist({
     required int tmdbId,
     required WorkType type,
     required String title,
@@ -26,8 +29,33 @@ class WatchlistLogic {
     DateTime? releaseDate,
     ReleaseType? releaseType,
     List<ContributorSnapshot>? followedContributors,
+    ReleaseNotificationPreferences? releaseNotificationPrefs,
+    TvNotificationPreferences? tvNotificationPrefs,
   }) async {
-    await _watchlistRepo.addWork(
+    // If no preferences provided, create defaults from system preferences
+    ReleaseNotificationPreferences? defaultReleasePrefs;
+    TvNotificationPreferences? defaultTvPrefs;
+    
+    if (type == WorkType.movie && releaseNotificationPrefs == null) {
+      final systemPrefs = _preferencesRepo.getPreferences();
+      defaultReleasePrefs = ReleaseNotificationPreferences(
+        theatrical: systemPrefs.effectiveNotifyTheatre,
+        streaming: systemPrefs.effectiveNotifyStreaming,
+        physical: systemPrefs.effectiveNotifyPhysical,
+        tv: systemPrefs.effectiveNotifyTV,
+      );
+    } else if (type == WorkType.tvShow && tvNotificationPrefs == null) {
+      // Default TV notification preferences for watchlist TV shows
+      defaultTvPrefs = TvNotificationPreferences(
+        seriesPremiere: true,
+        seasonPremieres: true,
+        seasonFinales: false,
+        newEpisodes: false,
+        specials: false,
+      );
+    }
+
+    return await _watchlistRepo.addWork(
       tmdbId: tmdbId,
       type: type,
       title: title,
@@ -35,6 +63,8 @@ class WatchlistLogic {
       releaseDate: releaseDate,
       releaseType: releaseType,
       followedContributors: followedContributors,
+      releaseNotificationPrefs: releaseNotificationPrefs ?? defaultReleasePrefs,
+      tvNotificationPrefs: tvNotificationPrefs ?? defaultTvPrefs,
     );
   }
 
@@ -128,6 +158,23 @@ class WatchlistLogic {
     List<ContributorSnapshot> contributors,
   ) async {
     await _watchlistRepo.updateContributorSnapshot(tmdbId, type, contributors);
+  }
+
+  /// Update release notification preferences for a work
+  Future<void> updateReleaseNotificationPreferences(
+    int tmdbId,
+    WorkType type,
+    ReleaseNotificationPreferences preferences,
+  ) async {
+    await _watchlistRepo.updateReleaseNotificationPreferences(tmdbId, type, preferences);
+  }
+
+  /// Update TV notification preferences for a TV show
+  Future<void> updateTvNotificationPreferences(
+    int tmdbId,
+    TvNotificationPreferences preferences,
+  ) async {
+    await _watchlistRepo.updateTvNotificationPreferences(tmdbId, preferences);
   }
 
   /// Update contributor snapshots for all watchlist entries

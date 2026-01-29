@@ -49,6 +49,33 @@ class _ShowConfigurationScreenState
   void initState() {
     super.initState();
     _initializeLocalChanges();
+    _fetchShowEpisodes();
+  }
+
+  Future<void> _fetchShowEpisodes() async {
+    try {
+      final workLogic = ref.read(workLogicProvider);
+      
+      // Fetch show details which includes seasons
+      final showDetail = await workLogic.fetchAndCacheTvShowDetail(widget.showId);
+      
+      if (showDetail != null) {
+        // Fetch all episodes for all seasons
+        for (final season in showDetail.seasons) {
+          await workLogic.fetchAndCacheTvSeasonDetail(
+            showId: widget.showId,
+            seasonNumber: season.seasonNumber,
+          );
+        }
+      }
+      
+      // Refresh the UI
+      if (mounted) {
+        setState(() {});
+      }
+    } catch (e) {
+      debugPrint('[ShowConfigurationScreen] Error fetching episodes: $e');
+    }
   }
 
   void _initializeLocalChanges() {
@@ -82,19 +109,67 @@ class _ShowConfigurationScreenState
 
   @override
   Widget build(BuildContext context) {
+    final tvDetailRepo = ref.watch(tvDetailRepositoryProvider);
     final episodeRepo = ref.watch(episodeStatusRepositoryProvider);
     final seasonRepo = ref.watch(seasonStatusRepositoryProvider);
 
-    final episodes = episodeRepo.getEpisodesByShow(widget.showId);
-    final seasons = seasonRepo.getSeasonsByShow(widget.showId);
+    // Get the cached show details
+    final showDetail = tvDetailRepo.getTvShowDetail(widget.showId);
+    
+    if (showDetail == null) {
+      return Scaffold(
+        appBar: AppBar(title: Text(widget.showTitle)),
+        body: const Center(child: CircularProgressIndicator()),
+      );
+    }
 
-    // Group episodes by season
-    final episodesBySeason = <int, List<EpisodeStatusEntry>>{};
-    for (final episode in episodes) {
-      if (!episodesBySeason.containsKey(episode.seasonNumber)) {
-        episodesBySeason[episode.seasonNumber] = [];
+    // Get marked episodes from status repository
+    final markedEpisodes = episodeRepo.getEpisodesByShow(widget.showId);
+    final markedSeasons = seasonRepo.getSeasonsByShow(widget.showId);
+
+    // Group marked episodes by season for quick lookup
+    final markedEpisodesBySeasonAndNumber = <int, Map<int, EpisodeStatusEntry>>{};
+    for (final episode in markedEpisodes) {
+      if (!markedEpisodesBySeasonAndNumber.containsKey(episode.seasonNumber)) {
+        markedEpisodesBySeasonAndNumber[episode.seasonNumber] = {};
       }
-      episodesBySeason[episode.seasonNumber]!.add(episode);
+      markedEpisodesBySeasonAndNumber[episode.seasonNumber]![episode.episodeNumber] = episode;
+    }
+
+    // Convert cached show detail seasons to SeasonStatusEntry for display
+    final seasons = showDetail.seasons
+        .map((season) => SeasonStatusEntry(
+          showId: widget.showId,
+          seasonNumber: season.seasonNumber,
+          statusRecords: markedSeasons
+              .where((s) => s.seasonNumber == season.seasonNumber)
+              .expand((s) => s.statusRecords)
+              .toList(),
+        ))
+        .toList();
+
+    // Convert cached episodes to EpisodeStatusEntry for display
+    final episodesBySeasonMap = <int, List<EpisodeStatusEntry>>{};
+    for (final season in showDetail.seasons) {
+      // Get the season detail which contains episodes
+      final seasonDetail = tvDetailRepo.getTvSeasonDetail(widget.showId, season.seasonNumber);
+      
+      if (seasonDetail != null) {
+        episodesBySeasonMap[season.seasonNumber] = seasonDetail.episodes
+            .map((episode) {
+              final markedEpisode = markedEpisodesBySeasonAndNumber[season.seasonNumber]?[episode.episodeNumber];
+              return EpisodeStatusEntry(
+                showId: widget.showId,
+                seasonNumber: season.seasonNumber,
+                episodeNumber: episode.episodeNumber,
+                episodeTitle: episode.name,
+                statusRecords: markedEpisode?.statusRecords ?? [],
+              );
+            })
+            .toList();
+      } else {
+        episodesBySeasonMap[season.seasonNumber] = [];
+      }
     }
 
     // Sort seasons
@@ -142,7 +217,7 @@ class _ShowConfigurationScreenState
         body: Stack(
           children: [
             // Main content
-            _buildMainContent(sortedSeasons, episodesBySeason),
+            _buildMainContent(sortedSeasons, episodesBySeasonMap),
 
             // Edit mode snackbar
             if (_isEditMode)
@@ -674,16 +749,8 @@ class _ShowConfigurationScreenState
   }
 
   bool _shouldShowEpisode(EpisodeStatusEntry episode) {
-    // Check if episode has any of the selected statuses
-    final hasSelectedStatus = episode.statusRecords.any(
-      (record) => _selectedFilters.contains(record.status),
-    );
-
-    // Also show if it's marked locally
-    final isMarkedLocally =
-        _isEpisodeMarked(episode.seasonNumber, episode.episodeNumber);
-
-    return hasSelectedStatus || isMarkedLocally;
+    // Always show all episodes
+    return true;
   }
 
   bool _isSeasonMarked(int seasonNumber) {

@@ -18,14 +18,7 @@ import 'tv_show_detail_screen.dart';
 import 'watchlist_screen.dart';
 
 class HomeScreen extends ConsumerStatefulWidget {
-  final int initialTabIndex;
-  final int? scrollToWatchlistItem;
-  
-  const HomeScreen({
-    super.key,
-    this.initialTabIndex = 0,
-    this.scrollToWatchlistItem,
-  });
+  const HomeScreen({super.key});
 
   @override
   ConsumerState<HomeScreen> createState() => _HomeScreenState();
@@ -42,7 +35,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with TickerProviderStat
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: 2, vsync: this, initialIndex: widget.initialTabIndex); // People and Watchlist tabs
+    _tabController = TabController(length: 2, vsync: this, initialIndex: 0);
   }
 
   @override
@@ -90,6 +83,14 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with TickerProviderStat
   Widget build(BuildContext context) {
     final contributorsAsync = ref.watch(contributorsProvider);
     final prefsAsync = ref.watch(preferencesProvider);
+    final homeTab = ref.watch(homeTabProvider);
+
+    // Sync TabController with provider
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (_tabController.index != homeTab && mounted) {
+        _tabController.animateTo(homeTab);
+      }
+    });
 
     return Scaffold(
       appBar: AppBar(
@@ -131,6 +132,10 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with TickerProviderStat
         ),
         bottom: TabBar(
           controller: _tabController,
+          onTap: (index) {
+            // Update provider when user taps tab
+            ref.read(homeTabProvider.notifier).state = index;
+          },
           tabs: const [
             Tab(text: 'People'),
             Tab(text: 'Watchlist'),
@@ -166,7 +171,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with TickerProviderStat
               // People tab - only show person/company contributors
               _buildContributorsList(peopleContributors, prefs, prefsAsync),
               // Watchlist tab
-              WatchlistScreen(scrollToTmdbId: widget.scrollToWatchlistItem),
+              const WatchlistScreen(),
             ],
           );
         },
@@ -199,6 +204,9 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with TickerProviderStat
                 if (contributor.type == ContributorType.movie || 
                     contributor.type == ContributorType.tvShow || 
                     contributor.type == ContributorType.collection) {
+                  // Switch to Watchlist tab
+                  ref.read(homeTabProvider.notifier).state = 1;
+                  
                   // For watchlist items, show the watchlist-specific snackbar with release preferences
                   final watchlistLogic = ref.read(watchlistLogicProvider);
                   final entry = watchlistLogic.getWork(
@@ -262,6 +270,9 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with TickerProviderStat
                     );
                   }
                 } else {
+                  // Switch to People tab
+                  ref.read(homeTabProvider.notifier).state = 0;
+                  
                   // For contributors (people/companies), use the existing success snackbar
                   showSuccessSnackBar(
                     context,

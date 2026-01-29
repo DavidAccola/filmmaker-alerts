@@ -235,19 +235,21 @@ class _SearchResultsScreenState extends ConsumerState<SearchResultsScreen> {
               },
               onView: () {
                 // Pop back to home screen and switch to watchlist tab
-                // We need to replace the current HomeScreen with one that has initialTabIndex=1
                 Navigator.of(context).popUntil((route) {
                   // Pop until we find the home screen or reach the root
                   return route.isFirst || route.settings.name == '/home';
                 });
                 
-                // Now push a new HomeScreen with watchlist tab selected and scroll to item
+                // Now push a new HomeScreen with watchlist tab selected
                 Navigator.of(context).pushReplacement(
                   MaterialPageRoute(
-                    builder: (context) => HomeScreen(
-                      initialTabIndex: 1,
-                      scrollToWatchlistItem: contributor.tmdbId,
-                    ),
+                    builder: (context) {
+                      // Set the tab to Watchlist after navigation
+                      WidgetsBinding.instance.addPostFrameCallback((_) {
+                        ref.read(homeTabProvider.notifier).state = 1;
+                      });
+                      return const HomeScreen();
+                    },
                   ),
                 );
               },

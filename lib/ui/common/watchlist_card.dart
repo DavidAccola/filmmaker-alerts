@@ -4,10 +4,12 @@ import 'package:intl/intl.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../data/models/watchlist_entry.dart';
 import '../../data/models/contributor_detail.dart';
+import '../../data/models/contributor.dart'; // For TvNotificationPreferences
 import '../../data/models/status_record.dart';
 import 'adaptive_tooltip_text.dart';
 import 'snackbar_utils.dart';
 import 'release_preferences_dialog.dart';
+import 'tv_preferences_dialog.dart';
 import '../../providers/providers.dart';
 import '../screens/show_configuration_screen.dart';
 import '../screens/collection_configuration_screen.dart';
@@ -443,30 +445,60 @@ class _WatchlistCardState extends ConsumerState<WatchlistCard> {
   }
 
   Future<void> _showReleasePreferencesDialog() async {
-    final result = await showDialog<ReleaseNotificationPreferences>(
-      context: context,
-      builder: (context) => ReleasePreferencesDialog(
-        workTitle: widget.entry.title,
-        initialPreferences: widget.entry.releaseNotificationPrefs ?? ReleaseNotificationPreferences(),
-      ),
-    );
-
-    if (result != null) {
-      // Update the entry with new preferences
-      final watchlistLogic = ref.read(watchlistLogicProvider);
-      await watchlistLogic.updateReleaseNotificationPreferences(
-        widget.entry.tmdbId,
-        widget.entry.type,
-        result,
+    if (widget.entry.type == WorkType.movie) {
+      // Show movie release preferences dialog
+      final result = await showDialog<ReleaseNotificationPreferences>(
+        context: context,
+        builder: (context) => ReleasePreferencesDialog(
+          workTitle: widget.entry.title,
+          initialPreferences: widget.entry.releaseNotificationPrefs ?? ReleaseNotificationPreferences(),
+        ),
       );
-      ref.invalidate(watchlistEntriesProvider);
-      
-      if (mounted) {
-        showSimpleSnackBar(
-          context,
-          'Release preferences updated for ${widget.entry.title}',
-          duration: const Duration(seconds: 2),
+
+      if (result != null) {
+        // Update the entry with new preferences
+        final watchlistLogic = ref.read(watchlistLogicProvider);
+        await watchlistLogic.updateReleaseNotificationPreferences(
+          widget.entry.tmdbId,
+          widget.entry.type,
+          result,
         );
+        ref.invalidate(watchlistEntriesProvider);
+        
+        if (mounted) {
+          showSimpleSnackBar(
+            context,
+            'Release preferences updated for ${widget.entry.title}',
+            duration: const Duration(seconds: 2),
+          );
+        }
+      }
+    } else if (widget.entry.type == WorkType.tvShow) {
+      // Show TV show episode preferences dialog
+      final result = await showDialog<TvNotificationPreferences>(
+        context: context,
+        builder: (context) => TvPreferencesDialog(
+          workTitle: widget.entry.title,
+          initialPreferences: widget.entry.tvNotificationPrefs ?? TvNotificationPreferences(),
+        ),
+      );
+
+      if (result != null) {
+        // Update the entry with new preferences
+        final watchlistLogic = ref.read(watchlistLogicProvider);
+        await watchlistLogic.updateTvNotificationPreferences(
+          widget.entry.tmdbId,
+          result,
+        );
+        ref.invalidate(watchlistEntriesProvider);
+        
+        if (mounted) {
+          showSimpleSnackBar(
+            context,
+            'Episode preferences updated for ${widget.entry.title}',
+            duration: const Duration(seconds: 2),
+          );
+        }
       }
     }
   }

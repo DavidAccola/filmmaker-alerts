@@ -167,6 +167,12 @@ class ReleaseChecker {
     debugPrint('[ReleaseChecker] DEBUG: Watchlist movie releases check returned ${watchlistMovieNotifications.length} notifications');
     newNotifications.addAll(watchlistMovieNotifications);
 
+    // Check watchlist TV shows for new episodes
+    debugPrint('[ReleaseChecker] DEBUG: About to check watchlist TV show episodes...');
+    final watchlistTvNotifications = await _checkWatchlistTvReleases(startDateStr, todayStr, processedShowDetails, processedSeasonDetails);
+    debugPrint('[ReleaseChecker] DEBUG: Watchlist TV show check returned ${watchlistTvNotifications.length} notifications');
+    newNotifications.addAll(watchlistTvNotifications);
+
     // 2. Iterate Contributors (excluding TV shows, which are handled separately)
     debugPrint('[ReleaseChecker] DEBUG: Starting main contributor loop...');
     final nonTvContributors = contributors.where((c) => c.type != ContributorType.tvShow).toList();
@@ -1822,7 +1828,7 @@ class ReleaseChecker {
     // Get all watchlist entries
     final watchlistEntries = _watchlistRepository.getWorks();
     
-    // Filter for movies only
+    // Filter for movies only - TV shows are handled by _checkTvReleases
     final movieEntries = watchlistEntries.where((entry) => entry.type == WorkType.movie).toList();
     
     debugPrint('[ReleaseChecker] DEBUG: Found ${movieEntries.length} movies in watchlist');
@@ -1935,6 +1941,265 @@ class ReleaseChecker {
     
     debugPrint('[ReleaseChecker] DEBUG: Watchlist movie check complete, found ${watchlistNotifications.length} notifications');
     return watchlistNotifications;
+  }
+
+  /// Check for new episodes of TV shows in the watchlist
+  Future<List<NotificationHistoryEntry>> _checkWatchlistTvReleases(
+    String startDateStr,
+    String todayStr,
+    Map<int, Map<String, dynamic>> processedShowDetails,
+    Map<String, Map<String, dynamic>> processedSeasonDetails,
+  ) async {
+    final List<NotificationHistoryEntry> watchlistTvNotifications = [];
+    
+    debugPrint('[ReleaseChecker] DEBUG: === _checkWatchlistTvReleases called ===');
+    
+    // Get all watchlist entries
+    final watchlistEntries = _watchlistRepository.getWorks();
+    
+    // Filter for TV shows only
+    final tvShowEntries = watchlistEntries.where((entry) => entry.type == WorkType.tvShow).toList();
+    
+    debugPrint('[ReleaseChecker] DEBUG: Found ${tvShowEntries.length} TV shows in watchlist');
+    
+    for (final entry in tvShowEntries) {
+      try {
+        debugPrint('[ReleaseChecker] DEBUG: Checking watchlist TV show: ${entry.title} (ID: ${entry.tmdbId})');
+        
+        // Throttling
+        await Future.delayed(const Duration(milliseconds: 250));
+        
+        // Get TV show details
+        Map<String, dynamic> showDetails;
+        if (processedShowDetails.containsKey(entry.tmdbId)) {
+          debugPrint('[ReleaseChecker] DEBUG: Using cached show details for "${entry.title}"');
+          showDetails = processedShowDetails[entry.tmdbId]!;
+        } else {
+          debugPrint('[ReleaseChecker] DEBUG: Fetching show details for "${entry.title}"');
+          showDetails = await _tmdbService.getTvDetails(entry.tmdbId);
+          processedShowDetails[entry.tmdbId] = showDetails;
+        }
+        
+        // Get the watchlist entry's TV notification preferences (or use global defaults)
+        final tvPrefs = entry.tvNotificationPrefs ?? TvNotificationPreferences();
+        
+        debugPrint('[ReleaseChecker] DEBUG: TV Prefs for ${entry.title}: seriesPremiere=${tvPrefs.seriesPremiere}, seasonPremieres=${tvPrefs.seasonPremieres}, seasonFinales=${tvPrefs.seasonFinales}, newEpisodes=${tvPrefs.newEpisodes}, specials=${tvPrefs.specials}');
+        
+        // Collect all episodes for this show in our date range
+        final Map<String, List<Map<String, dynamic>>> episodesByDate = {};
+        
+        // Get detailed season information
+        final seasons = showDetails['seasons'] as List? ?? [];
+        
+        debugPrint('[ReleaseChecker] DEBUG: TV show ${showDetails['name']} has ${seasons.length} seasons');
+        
+        for (final season in seasons) {
+          final seasonNumber = season['season_number'] as int;
+          
+          try {
+            // Phase 1 Optimization: Check in-memory cache first
+            final cacheKey = '${entry.tmdbId}_$seasonNumber';
+            Map<String, dynamic> seasonDetails;
+            if (processedSeasonDetails.containsKey(cacheKey)) {
+              debugPrint('[ReleaseChecker] DEBUG: Using cached season details for S$seasonNumber');
+              seasonDetails = processedSeasonDetails[cacheKey]!;
+            } else {
+              debugPrint('[ReleaseChecker] DEBUG: Fetching season details for S$seasonNumber');
+              seasonDetails = await _tmdbService.getTvSeasonDetails(entry.tmdbId, seasonNumber);
+              processedSeasonDetails[cacheKey] = seasonDetails;
+            }
+            
+            final episodes = seasonDetails['episodes'] as List? ?? [];
+            
+            debugPrint('[ReleaseChecker] DEBUG: Season $seasonNumber has ${episodes.length} episodes');
+            
+            for (final episode in episodes) {
+              final airDate = episode['air_date'] as String?;
+              if (airDate == null || airDate.isEmpty) {
+                debugPrint('[ReleaseChecker] DEBUG: Episode ${episode['episode_number']} has no air date, skipping');
+                continue;
+              }
+              
+              // Check if episode is in our date range
+              if (airDate.compareTo(startDateStr) < 0 || airDate.compareTo(todayStr) > 0) {
+                debugPrint('[ReleaseChecker] DEBUG: Episode ${episode['episode_number']} air date $airDate is outside range $startDateStr to $todayStr, skipping');
+                continue;
+              }
+              
+              // Skip rebroadcasts
+              if (_isRebroadcast(episode)) {
+                debugPrint('[ReleaseChecker] DEBUG: Episode ${episode['episode_number']} is a rebroadcast, skipping');
+                continue;
+              }
+              
+              final episodeNumber = episode['episode_number'] as int;
+              final seasonNum = episode['season_number'] as int;
+              final episodeName = episode['name'] as String? ?? '';
+              
+              // Determine episode type
+              final episodeType = _classifyEpisode(seasonNum, episodeNumber, episodes.length, showDetails);
+              
+              // Check if user wants notifications for this episode type
+              if (!_shouldNotifyForEpisodeType(episodeType, tvPrefs, null)) {
+                debugPrint('[ReleaseChecker] DEBUG: User does not want notifications for $episodeType');
+                continue;
+              }
+              
+              // Check if we've already notified for this episode
+              if (_hasBeenNotifiedForTvEpisode(entry.tmdbId, seasonNum, episodeNumber, episodeType)) {
+                debugPrint('[ReleaseChecker] DEBUG: Already notified for S${seasonNum}E${episodeNumber}');
+                continue;
+              }
+              
+              // Add episode to the date group
+              if (!episodesByDate.containsKey(airDate)) {
+                episodesByDate[airDate] = [];
+              }
+              
+              // Add episode type to the episode data for later use
+              final episodeWithType = Map<String, dynamic>.from(episode);
+              episodeWithType['episode_type'] = episodeType;
+              episodesByDate[airDate]!.add(episodeWithType);
+            }
+          } catch (e) {
+            debugPrint('[ReleaseChecker] Error fetching season $seasonNumber for ${entry.title}: $e');
+          }
+        }
+        
+        // Create notifications for each date, grouping episodes that air on the same day
+        for (final dateEntry in episodesByDate.entries) {
+          final airDate = dateEntry.key;
+          final episodes = dateEntry.value;
+          
+          if (episodes.length == 1) {
+            // Single episode - create individual notification
+            final episode = episodes.first;
+            final episodeType = episode['episode_type'] as String;
+            
+            _addWatchlistTvNotification(
+              watchlistTvNotifications,
+              entry.title,
+              entry.tmdbId,
+              episode,
+              episodeType,
+              airDate,
+            );
+          } else {
+            // Multiple episodes on same day - create grouped notification
+            _addWatchlistGroupedTvNotification(
+              watchlistTvNotifications,
+              entry.title,
+              entry.tmdbId,
+              episodes,
+              airDate,
+            );
+          }
+        }
+        
+      } catch (e) {
+        debugPrint('[ReleaseChecker] Error checking watchlist TV show ${entry.title}: $e');
+      }
+    }
+    
+    debugPrint('[ReleaseChecker] DEBUG: Watchlist TV show check complete, found ${watchlistTvNotifications.length} notifications');
+    return watchlistTvNotifications;
+  }
+
+  /// Add a TV notification for a watchlist entry
+  void _addWatchlistTvNotification(
+    List<NotificationHistoryEntry> list,
+    String showTitle,
+    int showId,
+    Map<String, dynamic> episode,
+    String episodeType,
+    String airDate,
+  ) {
+    final now = DateTime.now();
+    final notificationTime = now.add(Duration(milliseconds: list.length)).toIso8601String();
+    
+    final event = NotificationEvent(
+      releaseType: episodeType,
+      releaseDate: airDate,
+      notifiedAt: notificationTime,
+    );
+    
+    final reason = NotificationReason(
+      contributorId: 0,
+      contributorName: 'Watchlist',
+      department: 'Watchlist',
+      job: 'Watchlist Entry',
+    );
+    
+    list.add(NotificationHistoryEntry(
+      tmdbId: showId,
+      reasons: [reason],
+      notificationEvents: [event],
+      mediaType: 'tv',
+      seasonNumber: episode['season_number'] as int?,
+      episodeNumber: episode['episode_number'] as int?,
+      episodeTitle: episode['name'] as String?,
+      tvNotificationType: episodeType,
+    ));
+  }
+
+  /// Add a grouped TV notification for a watchlist entry with multiple episodes on same day
+  void _addWatchlistGroupedTvNotification(
+    List<NotificationHistoryEntry> list,
+    String showTitle,
+    int showId,
+    List<Map<String, dynamic>> episodes,
+    String airDate,
+  ) {
+    final now = DateTime.now();
+    final notificationTime = now.add(Duration(milliseconds: list.length)).toIso8601String();
+    
+    // Determine the primary episode type for the group
+    String groupType = 'grouped_episodes';
+    final episodeTypes = episodes.map((e) => e['episode_type'] as String).toSet();
+    
+    if (episodeTypes.contains('series_premiere')) {
+      groupType = 'series_premiere';
+    } else if (episodeTypes.contains('season_premiere')) {
+      groupType = 'season_premiere';
+    } else if (episodeTypes.contains('season_finale')) {
+      groupType = 'season_finale';
+    } else if (episodeTypes.contains('special')) {
+      groupType = 'special';
+    }
+    
+    // Create one NotificationEvent per episode
+    final events = episodes.map((episode) {
+      final episodeType = episode['episode_type'] as String;
+      final seasonNum = episode['season_number'] as int;
+      final episodeNum = episode['episode_number'] as int;
+      final episodeTitle = episode['name'] as String? ?? 'Episode $episodeNum';
+      
+      return NotificationEvent(
+        releaseType: '$episodeType|$seasonNum|$episodeNum|$episodeTitle',
+        releaseDate: airDate,
+        notifiedAt: notificationTime,
+      );
+    }).toList();
+    
+    final reason = NotificationReason(
+      contributorId: 0,
+      contributorName: 'Watchlist',
+      department: 'Watchlist',
+      job: 'Watchlist Entry',
+    );
+    
+    final firstEpisode = episodes.first;
+    
+    list.add(NotificationHistoryEntry(
+      tmdbId: showId,
+      reasons: [reason],
+      notificationEvents: events,
+      mediaType: 'tv',
+      seasonNumber: firstEpisode['season_number'] as int?,
+      episodeNumber: episodes.length,
+      episodeTitle: '${episodes.length} episodes',
+      tvNotificationType: groupType,
+    ));
   }
 
   /// Check if notification is enabled for a specific release type based on watchlist entry preferences

@@ -118,7 +118,15 @@ class _WatchlistScreenState extends ConsumerState<WatchlistScreen>
 
     return watchlistAsync.when(
       data: (entries) {
+        debugPrint('[WatchlistScreen] === BUILD DEBUG ===');
+        debugPrint('[WatchlistScreen] Total entries: ${entries.length}');
+        
         final hasFrozen = entries.any((e) => e.isSnoozed);
+        debugPrint('[WatchlistScreen] Has frozen items: $hasFrozen');
+        
+        final activeEntries = entries.where((e) => !e.isSnoozed).toList();
+        final hiddenEntries = entries.where((e) => e.isSnoozed).toList();
+        debugPrint('[WatchlistScreen] Active entries: ${activeEntries.length}, Hidden entries: ${hiddenEntries.length}');
         
         // Update tab controller if frozen status changed (outside of build)
         if (_hasFrozenItems != hasFrozen) {
@@ -138,8 +146,12 @@ class _WatchlistScreenState extends ConsumerState<WatchlistScreen>
         }
 
         // Calculate filtered count for badge
-        final activeEntries = entries.where((e) => !e.isSnoozed).toList();
-        final hiddenEntries = entries.where((e) => e.isSnoozed).toList();
+        final filteredActiveEntries = activeEntries.where((e) {
+          final hasSelectedStatus = e.statusRecords.any((r) => _selectedFilters.contains(r.status));
+          return hasSelectedStatus || e.statusRecords.isEmpty;
+        }).toList();
+        
+        debugPrint('[WatchlistScreen] Filtered active entries: ${filteredActiveEntries.length}');
         
         // Count items filtered out by status (using same logic as dialog)
         int statusFilteredCount = 0;
@@ -601,9 +613,9 @@ class _WatchlistScreenState extends ConsumerState<WatchlistScreen>
                                         sliver: SliverGrid(
                                           gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
                                             maxCrossAxisExtent: 200,
-                                            childAspectRatio: 0.48,
+                                            childAspectRatio: 0.55,
                                             crossAxisSpacing: 16,
-                                            mainAxisSpacing: 16,
+                                            mainAxisSpacing: 8,
                                           ),
                                           delegate: SliverChildBuilderDelegate(
                                             (context, index) {
@@ -667,9 +679,9 @@ class _WatchlistScreenState extends ConsumerState<WatchlistScreen>
                                           sliver: SliverGrid(
                                             gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
                                               maxCrossAxisExtent: 200,
-                                              childAspectRatio: 0.48,
+                                              childAspectRatio: 0.55,
                                               crossAxisSpacing: 16,
-                                              mainAxisSpacing: 16,
+                                              mainAxisSpacing: 8,
                                             ),
                                             delegate: SliverChildBuilderDelegate(
                                               (context, index) {

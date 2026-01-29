@@ -343,6 +343,10 @@ final tvEpisodeDetailProvider = FutureProvider.autoDispose.family<TvEpisodeDetai
 // --- UI State ---
 final selectedTabProvider = StateProvider<int>((ref) => 0);
 
+/// Home screen tab state (0 = People, 1 = Watchlist)
+/// This is managed at the provider level to persist across screen resizes
+final homeTabProvider = StateProvider<int>((ref) => 0);
+
 // --- Watchlist Providers ---
 
 /// Watchlist entries provider - fetches all watchlist entries

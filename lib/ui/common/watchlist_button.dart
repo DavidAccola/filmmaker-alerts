@@ -270,10 +270,13 @@ class _WatchlistButtonState extends ConsumerState<WatchlistButton> {
     // Default view action: navigate to watchlist tab and scroll to item
     Navigator.of(context).pushReplacement(
       MaterialPageRoute(
-        builder: (context) => HomeScreen(
-          initialTabIndex: 1,
-          scrollToWatchlistItem: widget.tmdbId,
-        ),
+        builder: (context) {
+          // Set the tab to Watchlist after navigation
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            ref.read(homeTabProvider.notifier).state = 1;
+          });
+          return const HomeScreen();
+        },
       ),
     );
   }

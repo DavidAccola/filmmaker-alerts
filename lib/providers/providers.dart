@@ -326,8 +326,6 @@ final tvSeasonDetailProvider = FutureProvider.autoDispose.family<TvSeasonDetail?
 
 /// TV episode detail provider
 final tvEpisodeDetailProvider = FutureProvider.autoDispose.family<TvEpisodeDetail?, EpisodeParams>((ref, params) async {
-  final repo = ref.watch(tvDetailRepositoryProvider);
-  
   // We don't have a direct "isCached" for episodes by show/season/ep in the repo yet, 
   // but we can check if the episode's TMDB ID (if we had it) is cached.
   // For now, let's just fetch if we don't have the show's episode cached.

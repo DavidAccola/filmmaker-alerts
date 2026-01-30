@@ -2,14 +2,10 @@ import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:cached_network_image/cached_network_image.dart';
-import 'package:url_launcher/url_launcher.dart';
 import '../../data/models/contributor.dart';
 import '../../data/models/contributor_detail.dart';
 import '../../data/models/preferences.dart';
-import '../../data/models/watchlist_entry.dart';
 import '../../providers/providers.dart';
-import '../common/snackbar_utils.dart';
-import '../common/watchlist_button.dart';
 import 'movie_detail_screen.dart';
 import 'tv_show_detail_screen.dart';
 import 'tv_episode_detail_screen.dart';
@@ -17,13 +13,10 @@ import '../../logic/work_sorting_logic.dart';
 import '../../logic/tv_show_display_logic.dart';
 import '../../logic/work_filtering_logic.dart';
 import '../common/work_widget.dart';
-import '../common/tv_show_credits_widget.dart';
 import '../common/credit_expansion_section.dart';
 import '../common/external_navigation_utils.dart';
-import '../common/grouped_tv_show_widget.dart';
 import '../common/shelf_with_arrows.dart';
 import '../common/filter_toggle_widget.dart';
-import 'package:collection/collection.dart';
 import '../../core/tmdb_mapping.dart';
 import '../../core/crew_constants.dart';
 
@@ -142,7 +135,7 @@ class _ContributorDetailScreenState extends ConsumerState<ContributorDetailScree
                   _buildSection(
                     title: 'Upcoming',
                     icon: Icons.schedule,
-                    child: (detail?.upcomingWorks?.isEmpty ?? true) && (detail?.allWorks?.isEmpty ?? true)
+                    child: _isUpcomingWorksEmpty(detail)
                         ? const Padding(padding: EdgeInsets.all(16.0), child: Center(child: Text("Loading upcoming works...")))
                         : _buildUpcomingWorksSection(prefs, detail),
                   ),
@@ -188,7 +181,7 @@ class _ContributorDetailScreenState extends ConsumerState<ContributorDetailScree
         color: Theme.of(context).colorScheme.surfaceContainerHighest,
         border: Border(
           bottom: BorderSide(
-            color: Theme.of(context).colorScheme.outline.withOpacity(0.2),
+            color: Theme.of(context).colorScheme.outline.withValues(alpha: 0.2),
           ),
         ),
       ),
@@ -244,89 +237,6 @@ class _ContributorDetailScreenState extends ConsumerState<ContributorDetailScree
           ),
         ],
       ),
-    );
-  }
-
-  Widget _buildPreferenceToggle(String label, bool value, Function(bool) onChanged) {
-    return Row(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        Switch(
-          value: value,
-          onChanged: onChanged,
-        ),
-        const SizedBox(width: 8),
-        Flexible(
-          child: Text(
-            label,
-            style: Theme.of(context).textTheme.bodySmall,
-          ),
-        ),
-      ],
-    );
-  }
-
-  Widget _buildTvShowCreatorSection(Preferences prefs, ContributorDetail? detail) {
-    if (detail == null) return const SizedBox.shrink();
-
-    // Pool from Hits and Latest, but only where role is creator
-    final List<Work> allWorks = _filterByFollowedRoles(<Work>[
-      ...(detail.biggestHits),
-      ...(detail.latestReleases),
-    ].toSet().toList());
-    
-    final tvCredits = TvShowDisplayLogic.separateTvShowCredits(allWorks);
-    final creatorShows = tvCredits['shows'] ?? [];
-    
-    if (creatorShows.isEmpty) {
-      return const SizedBox.shrink();
-    }
-    
-    final sortedShows = List<Work>.from(creatorShows)..sort((a, b) {
-      if (a.releaseDate == null && b.releaseDate == null) return 0;
-      if (a.releaseDate == null) return 1;
-      if (b.releaseDate == null) return -1;
-      return b.releaseDate!.compareTo(a.releaseDate!);
-    });
-    
-    final sectionHeight = 310.0;
-
-    return Column(
-      children: [
-        _buildSection(
-          title: 'Shows Created',
-          icon: Icons.create,
-          child: ShelfWithArrows(
-            height: sectionHeight,
-            builder: (context, controller) => ListView.builder(
-              controller: controller, // Injected controller
-              scrollDirection: Axis.horizontal,
-              physics: const AlwaysScrollableScrollPhysics(),
-              itemCount: sortedShows.length,
-              itemBuilder: (context, index) {
-                final show = sortedShows[index];
-                return Padding(
-                  padding: EdgeInsets.only(right: index < sortedShows.length - 1 ? 12 : 0),
-                  child: SizedBox(
-                    width: 150,
-                    child: WorkWidget(
-                      work: show,
-                      hideRatings: prefs.hideRatingsInDetails ?? false,
-                      onTap: () => _onWorkTapped(show),
-                      onAddToWatchlist: () => _onAddToWatchlist(show),
-                      watchlistButtonPosition: WatchlistButtonPosition.topRight,
-                      showWatchlistOnHover: true,
-                      showDateInPoster: true,
-                      showRating: false,
-                      showDate: false,
-                    ),
-                  ),
-                );
-              },
-            ),
-          ),
-        ),
-      ],
     );
   }
 
@@ -723,6 +633,13 @@ class _ContributorDetailScreenState extends ConsumerState<ContributorDetailScree
     // Kept for backward compatibility with existing work widgets
   }
 
+  bool _isUpcomingWorksEmpty(ContributorDetail? detail) {
+    if (detail == null) return true;
+    final upcomingEmpty = detail.upcomingWorks.isEmpty;
+    final allWorksEmpty = detail.allWorks?.isEmpty ?? true;
+    return upcomingEmpty && allWorksEmpty;
+  }
+
   Widget _buildSection({
     required String title,
     required IconData icon,
@@ -762,7 +679,7 @@ class _ContributorDetailScreenState extends ConsumerState<ContributorDetailScree
         color: Theme.of(context).colorScheme.surfaceContainerLow,
         borderRadius: BorderRadius.circular(8),
         border: Border.all(
-          color: Theme.of(context).colorScheme.outline.withOpacity(0.2),
+          color: Theme.of(context).colorScheme.outline.withValues(alpha: 0.2),
         ),
       ),
       child: Text(
@@ -824,7 +741,7 @@ class _ContributorDetailScreenState extends ConsumerState<ContributorDetailScree
                                 decoration: BoxDecoration(
                                   borderRadius: BorderRadius.circular(8),
                                   border: Border.all(
-                                    color: Theme.of(context).colorScheme.outline.withOpacity(0.3),
+                                    color: Theme.of(context).colorScheme.outline.withValues(alpha: 0.3),
                                   ),
                                 ),
                                 child: ClipRRect(
@@ -861,7 +778,7 @@ class _ContributorDetailScreenState extends ConsumerState<ContributorDetailScree
                                 decoration: BoxDecoration(
                                   borderRadius: BorderRadius.circular(8),
                                   border: Border.all(
-                                    color: Theme.of(context).colorScheme.outline.withOpacity(0.3),
+                                    color: Theme.of(context).colorScheme.outline.withValues(alpha: 0.3),
                                   ),
                                 ),
                                 child: ClipRRect(
@@ -902,58 +819,6 @@ class _ContributorDetailScreenState extends ConsumerState<ContributorDetailScree
         );
       },
     );
-  }
-
-  Future<void> _launchTmdbUrl(BuildContext context) async {
-    final url = 'https://www.themoviedb.org/person/${widget.contributor.tmdbId}';
-    final uri = Uri.parse(url);
-    if (await canLaunchUrl(uri)) {
-      await launchUrl(uri, mode: LaunchMode.externalApplication);
-    } else {
-      if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Could not open TMDB page')),
-        );
-      }
-    }
-  }
-
-  Future<void> _launchImdbUrl(BuildContext context) async {
-    final imdbId = widget.contributor.imdbId;
-    if (imdbId != null && imdbId.isNotEmpty) {
-      final url = 'https://www.imdb.com/name/$imdbId/';
-      final uri = Uri.parse(url);
-      if (await canLaunchUrl(uri)) {
-        await launchUrl(uri, mode: LaunchMode.externalApplication);
-      } else {
-        if (context.mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('Could not open IMDb page')),
-          );
-        }
-      }
-    } else {
-      if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('IMDb ID not available for this contributor')),
-        );
-      }
-    }
-  }
-
-  String _getContributorTypeLabel(ContributorType type) {
-    switch (type) {
-      case ContributorType.person:
-        return 'Person';
-      case ContributorType.company:
-        return 'Company';
-      case ContributorType.collection:
-        return 'Collection';
-      case ContributorType.movie:
-        return 'Movie';
-      case ContributorType.tvShow:
-        return 'TV Show';
-    }
   }
 
   Widget _buildFollowedRolesChips() {
@@ -1055,9 +920,9 @@ class _ContributorDetailScreenState extends ConsumerState<ContributorDetailScree
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
       decoration: BoxDecoration(
-        color: color.withOpacity(0.1),
+        color: color.withValues(alpha: 0.1),
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: color.withOpacity(0.3)),
+        border: Border.all(color: color.withValues(alpha: 0.3)),
       ),
       child: Text(
         label,

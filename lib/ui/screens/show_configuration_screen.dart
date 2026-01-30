@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import '../../data/models/watchlist_entry.dart';
 import '../../data/models/episode_status_entry.dart';
 import '../../data/models/season_status_entry.dart';
 import '../../data/models/status_record.dart';
@@ -30,10 +29,10 @@ class _ShowConfigurationScreenState
 
   // Track local changes: Map<seasonNumber, Map<episodeNumber, WatchStatus?>>
   // null means unmarked, WatchStatus means marked with that status
-  Map<int, Map<int, WatchStatus?>> _localChanges = {};
+  final Map<int, Map<int, WatchStatus?>> _localChanges = {};
 
   // Track which seasons are marked
-  Set<int> _markedSeasons = {};
+  final Set<int> _markedSeasons = {};
 
   // Filter state
   Set<WatchStatus> _selectedFilters = {
@@ -254,7 +253,6 @@ class _ShowConfigurationScreenState
   ) {
     final screenWidth = MediaQuery.of(context).size.width;
     final isMobile = screenWidth < 768; // Improved breakpoint
-    final isTablet = screenWidth >= 768 && screenWidth < 1024;
 
     return SingleChildScrollView(
       child: Padding(

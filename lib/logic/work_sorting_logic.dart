@@ -224,9 +224,13 @@ class WorkSortingLogic {
       r.department?.toLowerCase() == 'writing'
     );
     
-    if (hasCreatorRole) roleBoost = 1.3; // 30% boost for creators
-    else if (hasDirectorRole) roleBoost = 1.2; // 20% boost for directors
-    else if (hasWriterRole) roleBoost = 1.1; // 10% boost for writers
+    if (hasCreatorRole) {
+      roleBoost = 1.3; // 30% boost for creators
+    } else if (hasDirectorRole) {
+      roleBoost = 1.2; // 20% boost for directors
+    } else if (hasWriterRole) {
+      roleBoost = 1.1; // 10% boost for writers
+    }
     
     // Improved weighting: 
     // - Bayesian Rating: 60% (quality matters most, and now properly weighted by votes)
@@ -254,18 +258,6 @@ class WorkSortingLogic {
     
     // Calculate percentile: (position / total count) × 100
     return (position / sortedValues.length) * 100.0;
-  }
-
-  /// Normalizes popularity using logarithmic scaling to handle wide range of values.
-  /// NOTE: This method is deprecated in favor of percentile-based popularity ranking.
-  @deprecated
-  static double _normalizePopularity(double popularity) {
-    if (popularity <= 0) return 0.0;
-    
-    // Use log scale to normalize popularity (typical range 0-1000+)
-    // Log base 10 of 1000 is 3, so we divide by 3 to get 0-1 range
-    final logPopularity = (popularity + 1).log() / 10.0; // +1 to avoid log(0)
-    return logPopularity.clamp(0.0, 1.0);
   }
 
   /// Sorts contributor roles based on the standard department priority order.
@@ -319,8 +311,8 @@ class WorkSortingLogic {
       // Calculate Stage 1 Department Count (Key Creative Metric)
       final stage1Depts = <String>{};
       for (final m in members) {
-        if (CrewConstants.isStage1(m.department ?? '', m.job)) {
-          stage1Depts.add(m.department ?? '');
+        if (CrewConstants.isStage1(m.department, m.job)) {
+          stage1Depts.add(m.department);
         }
       }
       personStage1DeptCount[tmdbId] = stage1Depts.length;
@@ -329,8 +321,8 @@ class WorkSortingLogic {
       // sort members internally so the primary role is first in the list
       members.sort((a, b) {
         // 1. Department Priority
-        final deptIdxA = AppConstants.departmentPriority.indexOf(a.department ?? '');
-        final deptIdxB = AppConstants.departmentPriority.indexOf(b.department ?? '');
+        final deptIdxA = AppConstants.departmentPriority.indexOf(a.department);
+        final deptIdxB = AppConstants.departmentPriority.indexOf(b.department);
         
         final deptA = deptIdxA == -1 ? 999 : deptIdxA;
         final deptB = deptIdxB == -1 ? 999 : deptIdxB;
@@ -338,8 +330,8 @@ class WorkSortingLogic {
         if (deptA != deptB) return deptA.compareTo(deptB);
         
         // 2. Role Rank within department
-        final rankA = CrewConstants.getRoleRank(a.department ?? '', a.job);
-        final rankB = CrewConstants.getRoleRank(b.department ?? '', b.job);
+        final rankA = CrewConstants.getRoleRank(a.department, a.job);
+        final rankB = CrewConstants.getRoleRank(b.department, b.job);
         
         if (rankA != rankB) return rankA.compareTo(rankB);
         
@@ -388,16 +380,16 @@ class WorkSortingLogic {
       final primaryJobA = a.job.split(', ').first;
       final primaryJobB = b.job.split(', ').first;
       
-      final isStage1A = CrewConstants.isStage1(a.department ?? '', primaryJobA);
-      final isStage1B = CrewConstants.isStage1(b.department ?? '', primaryJobB);
+      final isStage1A = CrewConstants.isStage1(a.department, primaryJobA);
+      final isStage1B = CrewConstants.isStage1(b.department, primaryJobB);
       
       if (isStage1A != isStage1B) {
         return isStage1A ? -1 : 1; // Stage 1 comes first
       }
 
       // Priority 4: Department Order (within same stage)
-      final deptIdxA = AppConstants.departmentPriority.indexOf(a.department ?? '');
-      final deptIdxB = AppConstants.departmentPriority.indexOf(b.department ?? '');
+      final deptIdxA = AppConstants.departmentPriority.indexOf(a.department);
+      final deptIdxB = AppConstants.departmentPriority.indexOf(b.department);
       
       final pA = deptIdxA == -1 ? 999 : deptIdxA;
       final pB = deptIdxB == -1 ? 999 : deptIdxB;
@@ -407,8 +399,8 @@ class WorkSortingLogic {
       }
 
       // Priority 5: Role Rank within department and stage
-      final rankA = CrewConstants.getRoleRank(a.department ?? '', primaryJobA);
-      final rankB = CrewConstants.getRoleRank(b.department ?? '', primaryJobB);
+      final rankA = CrewConstants.getRoleRank(a.department, primaryJobA);
+      final rankB = CrewConstants.getRoleRank(b.department, primaryJobB);
 
       if (rankA != rankB) {
         return rankA.compareTo(rankB);
@@ -452,8 +444,4 @@ class WorkSortingLogic {
     
     return sorted;
   }
-}
-
-extension on num {
-  double log() => math.log(this);
 }

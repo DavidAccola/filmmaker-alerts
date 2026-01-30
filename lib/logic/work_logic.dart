@@ -184,9 +184,9 @@ class WorkLogic {
         _tmdbService.getTvDetailsBasic(showId),
       ]);
 
-      final epData = results[0] as Map<String, dynamic>;
-      final creditsData = results[1] as Map<String, dynamic>;
-      final showData = results[2] as Map<String, dynamic>;
+      final epData = results[0];
+      final creditsData = results[1];
+      final showData = results[2];
 
       debugPrint('[WorkLogic] Episode data received: name="${epData['name']}", id=${epData['id']}');
       debugPrint('[WorkLogic] Show data received: name="${showData['name']}", id=${showData['id']}');

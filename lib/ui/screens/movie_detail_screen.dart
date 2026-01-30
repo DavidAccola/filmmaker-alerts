@@ -5,7 +5,6 @@ import 'package:intl/intl.dart';
 import '../../data/models/movie_detail.dart';
 import '../../data/models/contributor_detail.dart';
 import '../../data/models/preferences.dart';
-import '../../data/repositories/movie_detail_repository.dart';
 import '../../providers/providers.dart';
 import '../common/streaming_options_widget.dart';
 import '../common/external_navigation_utils.dart';
@@ -19,8 +18,6 @@ import '../common/expandable_synopsis.dart';
 import '../common/runtime_display.dart';
 import '../common/adaptive_tooltip_text.dart';
 import '../common/contributor_hover_card.dart';
-import '../../core/tmdb_mapping.dart';
-import '../../logic/contributor_logic.dart';
 import '../common/department_selection_dialog.dart';
 
 class MovieDetailScreen extends ConsumerStatefulWidget {
@@ -38,7 +35,6 @@ class MovieDetailScreen extends ConsumerStatefulWidget {
 }
 
 class _MovieDetailScreenState extends ConsumerState<MovieDetailScreen> {
-  bool _synopsisExpanded = false;
   bool _isPosterHovered = false;
 
   @override
@@ -128,7 +124,7 @@ class _MovieDetailScreenState extends ConsumerState<MovieDetailScreen> {
         color: Theme.of(context).colorScheme.surfaceContainerHighest,
         border: Border(
           bottom: BorderSide(
-            color: Theme.of(context).colorScheme.outline.withOpacity(0.2),
+            color: Theme.of(context).colorScheme.outline.withValues(alpha: 0.2),
           ),
         ),
       ),
@@ -592,7 +588,7 @@ class _MovieDetailScreenState extends ConsumerState<MovieDetailScreen> {
                                 decoration: BoxDecoration(
                                   borderRadius: BorderRadius.circular(8),
                                   border: Border.all(
-                                    color: Theme.of(context).colorScheme.outline.withOpacity(0.3),
+                                    color: Theme.of(context).colorScheme.outline.withValues(alpha: 0.3),
                                   ),
                                 ),
                                 child: ClipRRect(
@@ -629,7 +625,7 @@ class _MovieDetailScreenState extends ConsumerState<MovieDetailScreen> {
                                 decoration: BoxDecoration(
                                   borderRadius: BorderRadius.circular(8),
                                   border: Border.all(
-                                    color: Theme.of(context).colorScheme.outline.withOpacity(0.3),
+                                    color: Theme.of(context).colorScheme.outline.withValues(alpha: 0.3),
                                   ),
                                 ),
                                 child: ClipRRect(
@@ -689,7 +685,7 @@ class _MovieDetailScreenState extends ConsumerState<MovieDetailScreen> {
         knownFor = 'Actor';
       } else if (member is CrewMember) {
         // For crew, use their primary department as knownFor
-        knownFor = member.department ?? '';
+        knownFor = member.department;
       }
       
       final sparseContributor = Contributor(

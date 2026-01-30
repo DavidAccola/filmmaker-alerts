@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:intl/intl.dart';
 import '../../data/models/contributor_detail.dart';
-import '../../logic/tv_show_display_logic.dart';
 import 'adaptive_tooltip_text.dart';
 import 'watchlist_button.dart';
 
@@ -87,7 +86,7 @@ class _TvShowCreditsWidgetState extends State<TvShowCreditsWidget> {
                             begin: Alignment.bottomCenter,
                             end: Alignment.topCenter,
                             colors: [
-                              Colors.black.withOpacity(0.8),
+                              Colors.black.withValues(alpha: 0.8),
                               Colors.transparent,
                             ],
                           ),
@@ -102,7 +101,7 @@ class _TvShowCreditsWidgetState extends State<TvShowCreditsWidget> {
                       child: Container(
                         padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
                         decoration: BoxDecoration(
-                          color: Colors.black.withOpacity(0.5),
+                          color: Colors.black.withValues(alpha: 0.5),
                           borderRadius: BorderRadius.circular(4),
                         ),
                         child: Row(
@@ -139,7 +138,7 @@ class _TvShowCreditsWidgetState extends State<TvShowCreditsWidget> {
                       child: Container(
                         padding: const EdgeInsets.all(4),
                         decoration: BoxDecoration(
-                          color: Colors.black.withOpacity(0.5),
+                          color: Colors.black.withValues(alpha: 0.5),
                           borderRadius: BorderRadius.circular(4),
                         ),
                         child: const Icon(

@@ -184,11 +184,11 @@ class _TvBreadcrumbState extends State<TvBreadcrumb> {
     // Binary search for the right truncation point
     int left = 1;
     int right = showName.length - 1;
-    String result = showName.substring(0, 10) + '...';
+    String result = '${showName.substring(0, 10)}...';
     
     while (left <= right) {
       final mid = (left + right) ~/ 2;
-      final candidate = showName.substring(0, mid) + '...';
+      final candidate = '${showName.substring(0, mid)}...';
       
       if (candidate.length <= 15) {
         result = candidate;
@@ -266,8 +266,8 @@ class _TvBreadcrumbState extends State<TvBreadcrumb> {
     return SingleChildScrollView(
       scrollDirection: Axis.horizontal,
       child: Row(
-        children: widgets,
         mainAxisSize: MainAxisSize.min,
+        children: widgets,
       ),
     );
   }

@@ -6,7 +6,6 @@ import 'package:windows_notification/notification_message.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:dio/dio.dart';
 import 'dart:io';
-import '../../utils/debug_logger.dart';
 
 class NotificationService {
   FlutterLocalNotificationsPlugin? _flutterLocalNotificationsPlugin;
@@ -265,7 +264,7 @@ class NotificationService {
           
           await _windowsNotification!.showNotificationCustomTemplate(message, customTemplate);
           // DebugLogger.instance.logNotification('✅ Windows notification sent successfully with custom template');
-        } catch (e, stackTrace) {
+        } catch (e, _) {
           // DebugLogger.instance.logNotification('❌ Custom template failed: $e');
           // DebugLogger.instance.logNotification('Stack trace: ${stackTrace.toString().substring(0, 500)}...');
           
@@ -310,9 +309,7 @@ class NotificationService {
         );
         // DebugLogger.instance.logNotification('✅ Non-Windows notification sent successfully');
       }
-    } catch (e, stackTrace) {
-      // DebugLogger.instance.logNotification('❌ showNotification failed: $e');
-      // DebugLogger.instance.logNotification('Stack trace: ${stackTrace.toString().substring(0, 500)}...');
+    } catch (e, _) {
       rethrow;
     }
   }

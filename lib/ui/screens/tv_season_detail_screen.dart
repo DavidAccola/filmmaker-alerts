@@ -11,7 +11,6 @@ import 'tv_episode_detail_screen.dart';
 import 'tv_show_detail_screen.dart';
 import '../common/expandable_synopsis.dart';
 import '../common/runtime_display.dart';
-import '../common/shelf_with_arrows.dart';
 import '../common/tv_breadcrumb.dart';
 import '../common/streaming_options_widget.dart';
 import '../common/external_navigation_utils.dart';
@@ -291,7 +290,7 @@ class TvSeasonDetailScreen extends ConsumerWidget {
       elevation: 0,
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(12),
-        side: BorderSide(color: theme.colorScheme.outline.withOpacity(0.1)),
+        side: BorderSide(color: theme.colorScheme.outline.withValues(alpha: 0.1)),
       ),
       child: InkWell(
         onTap: () {
@@ -519,7 +518,7 @@ class TvSeasonDetailScreen extends ConsumerWidget {
                                 decoration: BoxDecoration(
                                   borderRadius: BorderRadius.circular(8),
                                   border: Border.all(
-                                    color: Theme.of(context).colorScheme.outline.withOpacity(0.3),
+                                    color: Theme.of(context).colorScheme.outline.withValues(alpha: 0.3),
                                   ),
                                 ),
                                 child: ClipRRect(
@@ -556,7 +555,7 @@ class TvSeasonDetailScreen extends ConsumerWidget {
                                 decoration: BoxDecoration(
                                   borderRadius: BorderRadius.circular(8),
                                   border: Border.all(
-                                    color: Theme.of(context).colorScheme.outline.withOpacity(0.3),
+                                    color: Theme.of(context).colorScheme.outline.withValues(alpha: 0.3),
                                   ),
                                 ),
                                 child: ClipRRect(

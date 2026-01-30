@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import '../../data/models/movie_status_entry.dart';
 import '../../data/models/status_record.dart';
 import '../../providers/providers.dart';
 import '../common/snackbar_utils.dart';
@@ -27,14 +26,13 @@ class _CollectionConfigurationScreenState extends ConsumerState<CollectionConfig
   String? _error;
   
   // Collection data
-  Map<String, dynamic>? _collectionData;
   List<Map<String, dynamic>> _movies = [];
   
   // Local state for tracking changes
   final Map<int, Set<WatchStatus>> _localStatuses = {};
   
   // Filter state
-  Set<WatchStatus> _statusFilters = {
+  final Set<WatchStatus> _statusFilters = {
     WatchStatus.wantToWatch,
     WatchStatus.inProgress,
     WatchStatus.watched,
@@ -58,7 +56,6 @@ class _CollectionConfigurationScreenState extends ConsumerState<CollectionConfig
       final collectionData = await tmdbService.getCollectionDetails(widget.collectionId);
       
       setState(() {
-        _collectionData = collectionData;
         _movies = List<Map<String, dynamic>>.from(collectionData['parts'] ?? []);
         _isLoading = false;
       });
@@ -467,7 +464,7 @@ class _CollectionConfigurationScreenState extends ConsumerState<CollectionConfig
               // Mode snackbar
               Container(
                 width: double.infinity,
-                color: Theme.of(context).colorScheme.primary.withOpacity(0.1),
+                color: Theme.of(context).colorScheme.primary.withValues(alpha: 0.1),
                 padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
                 child: Text(
                   'Marking movies as ${_getStatusSymbol(_selectedMode)} ${_getStatusName(_selectedMode)}',

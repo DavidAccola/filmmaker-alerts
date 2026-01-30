@@ -1,4 +1,3 @@
-import 'package:flutter/foundation.dart';
 import '../data/models/contributor.dart';
 import '../data/models/contributor_detail.dart';
 import '../core/tmdb_mapping.dart';

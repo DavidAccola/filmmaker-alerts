@@ -13,14 +13,11 @@ import '../../logic/work_sorting_logic.dart';
 import '../common/shelf_with_arrows.dart';
 import '../common/external_navigation_utils.dart';
 import '../../providers/providers.dart';
-import '../../core/tmdb_mapping.dart';
 import '../common/expandable_synopsis.dart';
 import '../common/runtime_display.dart';
 import '../common/adaptive_tooltip_text.dart';
 import '../common/contributor_hover_card.dart';
 import '../common/snackbar_utils.dart';
-import '../../logic/contributor_logic.dart';
-import '../../data/repositories/preferences_repository.dart';
 import '../common/department_selection_dialog.dart';
 import '../common/tv_breadcrumb.dart';
 import '../common/streaming_options_widget.dart';
@@ -222,7 +219,7 @@ class _TvEpisodeDetailScreenState extends ConsumerState<TvEpisodeDetailScreen> {
         color: Theme.of(context).colorScheme.surfaceContainerHighest,
         border: Border(
           bottom: BorderSide(
-            color: Theme.of(context).colorScheme.outline.withOpacity(0.2),
+            color: Theme.of(context).colorScheme.outline.withValues(alpha: 0.2),
           ),
         ),
       ),
@@ -412,27 +409,6 @@ class _TvEpisodeDetailScreenState extends ConsumerState<TvEpisodeDetailScreen> {
     );
   }
 
-  Widget _buildEpisodeBanner(TvEpisodeDetail episodeDetail) {
-    final theme = Theme.of(context);
-    
-    return AspectRatio(
-      aspectRatio: 2.35 / 1, // Wider Cinemascope-style aspect ratio to save vertical space
-      child: Container(
-        width: double.infinity,
-        color: theme.colorScheme.surfaceContainerHighest,
-        child: episodeDetail.stillPath != null
-            ? CachedNetworkImage(
-                imageUrl: 'https://image.tmdb.org/t/p/w780${episodeDetail.stillPath}',
-                fit: BoxFit.cover,
-                alignment: Alignment.topCenter, // Often faces/action are in top/center
-                placeholder: (context, url) => const Center(child: CircularProgressIndicator()),
-                errorWidget: (context, url, error) => const Icon(Icons.tv, size: 48),
-              )
-            : const Icon(Icons.tv, size: 48),
-      ),
-    );
-  }
-
   Widget _buildCastSection(String title, List<CastMember> cast) {
     final theme = Theme.of(context);
     final sortedCast = WorkSortingLogic.sortCast(cast);
@@ -459,7 +435,7 @@ class _TvEpisodeDetailScreenState extends ConsumerState<TvEpisodeDetailScreen> {
                   tmdbId: member.tmdbId,
                   name: member.name,
                   profilePath: member.profilePath,
-                  subtitle: member.character ?? '', // Ensure fallback if null
+                  subtitle: member.character,
                   character: member.character,
                   isFollowed: member.isFollowed,
                   // radius: 30, // Removed
@@ -614,7 +590,7 @@ class _TvEpisodeDetailScreenState extends ConsumerState<TvEpisodeDetailScreen> {
                                 decoration: BoxDecoration(
                                   borderRadius: BorderRadius.circular(8),
                                   border: Border.all(
-                                    color: Theme.of(context).colorScheme.outline.withOpacity(0.3),
+                                    color: Theme.of(context).colorScheme.outline.withValues(alpha: 0.3),
                                   ),
                                 ),
                                 child: ClipRRect(
@@ -651,7 +627,7 @@ class _TvEpisodeDetailScreenState extends ConsumerState<TvEpisodeDetailScreen> {
                                 decoration: BoxDecoration(
                                   borderRadius: BorderRadius.circular(8),
                                   border: Border.all(
-                                    color: Theme.of(context).colorScheme.outline.withOpacity(0.3),
+                                    color: Theme.of(context).colorScheme.outline.withValues(alpha: 0.3),
                                   ),
                                 ),
                                 child: ClipRRect(
@@ -705,7 +681,7 @@ class _TvEpisodeDetailScreenState extends ConsumerState<TvEpisodeDetailScreen> {
         knownFor = 'Actor';
       } else if (member is CrewMember) {
         // For crew, use their primary department as knownFor
-        knownFor = member.department ?? '';
+        knownFor = member.department;
       }
       
       final sparseContributor = Contributor(

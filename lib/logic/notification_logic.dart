@@ -396,11 +396,11 @@ class NotificationLogic {
       if (entry.tvNotificationType == 'grouped_episodes' && entry.notificationEvents.length > 1) {
         // For grouped episodes, use the number of notification events (each represents one episode)
         entryEpisodes = entry.notificationEvents.length;
-        debugPrint('[NotificationLogic] Entry ${entry.tmdbId}: grouped_episodes, adding ${entryEpisodes} episodes (from notificationEvents)');
+        debugPrint('[NotificationLogic] Entry ${entry.tmdbId}: grouped_episodes, adding $entryEpisodes episodes (from notificationEvents)');
       } else if (entry.tvNotificationType == 'grouped_episodes' && entry.episodeNumber != null && entry.episodeNumber! > 1) {
         // For grouped episodes where episodeNumber represents the count
         entryEpisodes = entry.episodeNumber!;
-        debugPrint('[NotificationLogic] Entry ${entry.tmdbId}: grouped_episodes, adding ${entryEpisodes} episodes (from episodeNumber)');
+        debugPrint('[NotificationLogic] Entry ${entry.tmdbId}: grouped_episodes, adding $entryEpisodes episodes (from episodeNumber)');
       } else {
         // Single episode (episodeNumber here is the actual episode number, not count)
         entryEpisodes = 1;

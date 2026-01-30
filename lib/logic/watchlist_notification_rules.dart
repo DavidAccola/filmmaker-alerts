@@ -1,6 +1,6 @@
 import '../data/models/watchlist_entry.dart';
 import '../data/models/episode_status_entry.dart';
-import '../data/models/season_status_entry.dart';
+import '../data/models/status_record.dart';
 import '../data/models/contributor_detail.dart';
 import '../data/repositories/watchlist_repository.dart';
 import '../data/repositories/episode_status_repository.dart';

@@ -4,9 +4,6 @@ import '../models/tv_cache.dart';
 import '../../core/constants.dart';
 
 class TvCacheRepository {
-  static const String _tvShowsBoxName = 'tv_shows_cache';
-  static const String _tvEpisodesBoxName = 'tv_episodes_cache';
-
   late Box<TvShowCacheEntry> _tvShowsBox;
   late Box<TvEpisodeCacheEntry> _tvEpisodesBox;
 

@@ -132,7 +132,6 @@ class _MainScreenState extends ConsumerState<MainScreen> with WindowListener {
 
               if (resultDialog != null && resultDialog is Map) {
                 final selectedDepts = resultDialog['roles'] as List<String>;
-                final allSelected = resultDialog['allRolesSelected'] as bool;
 
                 // Reconstruct contributor with correct flags
                 final enrichedForUpdate = Contributor(

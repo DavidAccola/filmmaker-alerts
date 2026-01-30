@@ -1219,11 +1219,6 @@ class ReleaseChecker {
     try {
       debugPrint('[ReleaseChecker] DEBUG: Using optimized TV processing for ${contributor.name} - Show $showId');
       
-      // Extract TV credits for this show
-      final tvCredits = groupCredits.where((credit) => 
-        credit['media_type'] == 'tv' && credit['id'] == showId
-      ).cast<Map<String, dynamic>>().toList();
-      
       // Use the ultra-efficient TV efficiency processor for single show
       final notifications = await _tvEfficiency.processSingleTvShowUltraEfficient(
         showId: showId,
@@ -1491,7 +1486,7 @@ class ReleaseChecker {
             
             // Check if we've already notified for this episode
             if (_hasBeenNotifiedForTvEpisode(movieId, seasonNum, episodeNumber, episodeType)) {
-              debugPrint('[ReleaseChecker] DEBUG: ${contributor.name} - Already notified for S${seasonNum}E${episodeNumber}');
+              debugPrint('[ReleaseChecker] DEBUG: ${contributor.name} - Already notified for S${seasonNum}E$episodeNumber');
               continue;
             }
             
@@ -1512,7 +1507,7 @@ class ReleaseChecker {
                 shouldNotify = true;
                 jobTitle = 'Creator';
                 department = 'Creator';
-                debugPrint('[ReleaseChecker] DEBUG: ${contributor.name} should be notified as Creator for S${seasonNum}E${episodeNumber}');
+                debugPrint('[ReleaseChecker] DEBUG: ${contributor.name} should be notified as Creator for S${seasonNum}E$episodeNumber');
               }
             }
             
@@ -1674,7 +1669,7 @@ class ReleaseChecker {
         return ContributorRole(
           contributorId: contributor.tmdbId,
           contributorName: contributor.name,
-          role: (job ?? character ?? (contributor.type == ContributorType.movie ? 'Movie' : (c['media_type'] == 'tv' ? 'TV Show' : 'Cast/Crew'))) as String,
+          role: job ?? character ?? (contributor.type == ContributorType.movie ? 'Movie' : (c['media_type'] == 'tv' ? 'TV Show' : 'Cast/Crew')),
           department: department,
           character: character,
         );
@@ -1709,11 +1704,11 @@ class ReleaseChecker {
 
     // ENHANCEMENT: Fetch all episodes from seasons where person has credits
     if (contributor.type == ContributorType.person) {
-      final List<Work> relevantTvShows = [
+      final List<Work> relevantTvShows = {
         ...sortedUpcoming.where((w) => w.type == WorkType.tvShow),
         ...sortedLatest.where((w) => w.type == WorkType.tvShow),
         ...sortedHits.where((w) => w.type == WorkType.tvShow),
-      ].toSet().take(10).toList();
+      }.take(10).toList();
 
       if (relevantTvShows.isNotEmpty) {
         debugPrint('[ReleaseChecker] Enriched detail: Fetching episodes for ${relevantTvShows.length} shows');
@@ -1821,7 +1816,6 @@ class ReleaseChecker {
     String todayStr,
   ) async {
     final List<NotificationHistoryEntry> watchlistNotifications = [];
-    final prefs = _preferencesRepository.getPreferences();
     
     debugPrint('[ReleaseChecker] DEBUG: === _checkWatchlistMovieReleases called ===');
     
@@ -2034,7 +2028,6 @@ class ReleaseChecker {
               
               final episodeNumber = episode['episode_number'] as int;
               final seasonNum = episode['season_number'] as int;
-              final episodeName = episode['name'] as String? ?? '';
               
               // Determine episode type
               final episodeType = _classifyEpisode(seasonNum, episodeNumber, episodes.length, showDetails);
@@ -2047,7 +2040,7 @@ class ReleaseChecker {
               
               // Check if we've already notified for this episode
               if (_hasBeenNotifiedForTvEpisode(entry.tmdbId, seasonNum, episodeNumber, episodeType)) {
-                debugPrint('[ReleaseChecker] DEBUG: Already notified for S${seasonNum}E${episodeNumber}');
+                debugPrint('[ReleaseChecker] DEBUG: Already notified for S${seasonNum}E$episodeNumber');
                 continue;
               }
               

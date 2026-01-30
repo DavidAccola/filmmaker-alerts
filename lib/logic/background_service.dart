@@ -18,10 +18,8 @@ import '../data/repositories/tv_cache_repository.dart';
 import '../data/repositories/watchlist_repository.dart';
 import '../data/services/notification_service.dart';
 import '../data/services/tmdb_service.dart';
-import '../utils/debug_logger.dart';
 import 'release_checker.dart';
 import 'notification_logic.dart';
-import '../utils/debug_logger.dart';
 
 const String taskName = 'checkNewReleases';
 
@@ -345,9 +343,9 @@ class BackgroundTaskProcessor {
             totalMovieCount: newReleases.length,
           );
           // DebugLogger.instance.logBackground('✅ showNotification completed successfully');
-        } catch (e, stackTrace) {
+        } catch (e, _) {
           // DebugLogger.instance.logBackground('❌ showNotification failed: $e');
-          // DebugLogger.instance.logBackground('Stack trace: ${stackTrace.toString().substring(0, 500)}...');
+          // DebugLogger.instance.logBackground('Stack trace: ...');
           rethrow;
         }
       } else {

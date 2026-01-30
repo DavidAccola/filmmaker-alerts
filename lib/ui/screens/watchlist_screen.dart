@@ -95,7 +95,6 @@ class _WatchlistScreenState extends ConsumerState<WatchlistScreen>
     // Estimate the scroll position based on grid layout
     // Grid has 2 columns with maxCrossAxisExtent: 200, childAspectRatio: 0.48
     // So each item is roughly 200 wide and 200/0.48 = ~416 tall
-    const itemWidth = 200.0;
     const itemHeight = 416.0; // More accurate height estimate
     const spacing = 16.0;
     const padding = 16.0;

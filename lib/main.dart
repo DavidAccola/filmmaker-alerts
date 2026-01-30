@@ -167,7 +167,8 @@ void main() async {
   if (!kIsWeb && (Platform.isAndroid || Platform.isIOS)) {
     await Workmanager().initialize(
       callbackDispatcher,
-      isInDebugMode: kDebugMode,
+      // Note: isInDebugMode is deprecated but we keep it for backward compatibility
+      // The parameter has no effect in newer versions
     );
     
     // Get user's scheduled notification time from preferences

@@ -109,15 +109,15 @@ class _StreamingOptionsWidgetState extends State<StreamingOptionsWidget>
           decoration: BoxDecoration(
             gradient: LinearGradient(
               colors: [
-                Theme.of(context).colorScheme.primaryContainer.withOpacity(0.3),
-                Theme.of(context).colorScheme.secondaryContainer.withOpacity(0.2),
+                Theme.of(context).colorScheme.primaryContainer.withValues(alpha: 0.3),
+                Theme.of(context).colorScheme.secondaryContainer.withValues(alpha: 0.2),
               ],
               begin: Alignment.topLeft,
               end: Alignment.bottomRight,
             ),
             borderRadius: BorderRadius.circular(12),
             border: Border.all(
-              color: Theme.of(context).colorScheme.primary.withOpacity(0.2),
+              color: Theme.of(context).colorScheme.primary.withValues(alpha: 0.2),
               width: 1.5,
             ),
           ),
@@ -171,12 +171,21 @@ class _StreamingOptionsWidgetState extends State<StreamingOptionsWidget>
 
   Widget _buildCompactSummary(BuildContext context, Map<String, List<StreamingOption>> merged) {
     final counts = <String>[];
-    if (merged.containsKey('Stream')) counts.add('${merged['Stream']!.length} Stream');
-    if (merged.containsKey('Free')) counts.add('${merged['Free']!.length} Free');
-    if (merged.containsKey('Buy or Rent')) counts.add('${merged['Buy or Rent']!.length} Buy or Rent');
-    else {
-      if (merged.containsKey('Rent')) counts.add('${merged['Rent']!.length} Rent');
-      if (merged.containsKey('Buy')) counts.add('${merged['Buy']!.length} Buy');
+    if (merged.containsKey('Stream')) {
+      counts.add('${merged['Stream']!.length} Stream');
+    }
+    if (merged.containsKey('Free')) {
+      counts.add('${merged['Free']!.length} Free');
+    }
+    if (merged.containsKey('Buy or Rent')) {
+      counts.add('${merged['Buy or Rent']!.length} Buy or Rent');
+    } else {
+      if (merged.containsKey('Rent')) {
+        counts.add('${merged['Rent']!.length} Rent');
+      }
+      if (merged.containsKey('Buy')) {
+        counts.add('${merged['Buy']!.length} Buy');
+      }
     }
 
     return Text(
@@ -315,7 +324,7 @@ class _StreamingOptionsWidgetState extends State<StreamingOptionsWidget>
               color: Theme.of(context).colorScheme.surface,
               borderRadius: BorderRadius.circular(6),
               border: Border.all(
-                color: Theme.of(context).colorScheme.outline.withOpacity(0.15),
+                color: Theme.of(context).colorScheme.outline.withValues(alpha: 0.15),
               ),
             ),
             child: option.logoPath != null
@@ -355,7 +364,7 @@ class _StreamingOptionsWidgetState extends State<StreamingOptionsWidget>
           color: Theme.of(context).colorScheme.surfaceContainerLow,
           borderRadius: BorderRadius.circular(8),
           border: Border.all(
-            color: Theme.of(context).colorScheme.outline.withOpacity(0.15),
+            color: Theme.of(context).colorScheme.outline.withValues(alpha: 0.15),
           ),
         ),
         child: Center(
@@ -395,10 +404,10 @@ class _StreamingOptionsWidgetState extends State<StreamingOptionsWidget>
     return Container(
       padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 16),
       decoration: BoxDecoration(
-        color: Theme.of(context).colorScheme.surfaceContainerLow.withOpacity(0.5),
+        color: Theme.of(context).colorScheme.surfaceContainerLow.withValues(alpha: 0.5),
         borderRadius: BorderRadius.circular(12),
         border: Border.all(
-          color: Theme.of(context).colorScheme.outline.withOpacity(0.1),
+          color: Theme.of(context).colorScheme.outline.withValues(alpha: 0.1),
         ),
       ),
       child: Row(
@@ -489,14 +498,6 @@ class _StreamingOptionsWidgetState extends State<StreamingOptionsWidget>
       watchLink: watchLink,
       locale: widget.locale,
     );
-  }
-
-  /// Get the locale/region code from preferences
-  String? _getLocaleFromContext(BuildContext context) {
-    // This will be called from the widget, so we need to get preferences
-    // We'll use a simple approach: return the streaming country from preferences
-    // In a real implementation, you'd use ref.watch(preferencesProvider) if available
-    return null; // Will be handled by the caller passing it explicitly
   }
 
   void _launchJustWatch(BuildContext context) {

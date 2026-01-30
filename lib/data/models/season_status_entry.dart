@@ -1,5 +1,4 @@
 import 'package:hive/hive.dart';
-import 'watchlist_entry.dart';
 import 'status_record.dart'; // For StatusRecord
 
 part 'season_status_entry.g.dart';

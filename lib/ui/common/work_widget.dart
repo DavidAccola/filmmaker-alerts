@@ -2,12 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:intl/intl.dart';
 import '../../data/models/contributor_detail.dart';
-import '../../data/models/watchlist_entry.dart';
 import '../../logic/work_sorting_logic.dart';
 import 'adaptive_tooltip_text.dart';
-import '../../logic/tv_show_display_logic.dart';
 import 'watchlist_button.dart';
-import '../../providers/providers.dart';
 
 enum WatchlistButtonPosition {
   bottomRight,
@@ -141,7 +138,7 @@ class _WorkWidgetState extends State<WorkWidget> {
                             begin: Alignment.bottomCenter,
                             end: Alignment.topCenter,
                             colors: [
-                              Colors.black.withOpacity(0.8),
+                              Colors.black.withValues(alpha: 0.8),
                               Colors.transparent,
                             ],
                           ),
@@ -157,7 +154,7 @@ class _WorkWidgetState extends State<WorkWidget> {
                         child: Container(
                           padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
                           decoration: BoxDecoration(
-                            color: Colors.black.withOpacity(0.5),
+                            color: Colors.black.withValues(alpha: 0.5),
                             borderRadius: BorderRadius.circular(4),
                           ),
                           child: widget.showDateInPoster 
@@ -197,7 +194,7 @@ class _WorkWidgetState extends State<WorkWidget> {
                       child: Container(
                         padding: const EdgeInsets.all(4),
                         decoration: BoxDecoration(
-                          color: Colors.black.withOpacity(0.5),
+                          color: Colors.black.withValues(alpha: 0.5),
                           borderRadius: BorderRadius.circular(4),
                         ),
                         child: Icon(
@@ -214,7 +211,7 @@ class _WorkWidgetState extends State<WorkWidget> {
                         opacity: _isHovered ? 1.0 : 0.0,
                         duration: const Duration(milliseconds: 200),
                         child: Container(
-                          color: Colors.black.withOpacity(0.7),
+                          color: Colors.black.withValues(alpha: 0.7),
                           padding: const EdgeInsets.all(8),
                           alignment: Alignment.center,
                           child: Text(
@@ -391,9 +388,9 @@ class _WorkWidgetState extends State<WorkWidget> {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
       decoration: BoxDecoration(
-        color: color.withOpacity(0.1),
+        color: color.withValues(alpha: 0.1),
         borderRadius: BorderRadius.circular(4),
-        border: Border.all(color: color.withOpacity(0.3)),
+        border: Border.all(color: color.withValues(alpha: 0.3)),
       ),
       child: Text(
         label,

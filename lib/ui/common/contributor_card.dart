@@ -41,7 +41,7 @@ class _ContributorCardState extends State<ContributorCard> {
         ? latestWork!.posterPath
         : widget.contributor.profilePath;
 
-    String _formatDate(String dateStr) {
+    String formatDate(String dateStr) {
       try {
         final date = DateTime.parse(dateStr);
         return DateFormat('MMMM d, yyyy').format(date).replaceAll(' ', '\u00A0');
@@ -94,7 +94,7 @@ class _ContributorCardState extends State<ContributorCard> {
                 if (origDate != null && latestDate != null && origDate != latestDate) {
                   releaseLines.add(
                     AdaptiveTooltipText.rich(
-                      customTooltip: '${origType ?? 'Original'}: ${_formatDate(origDate)}',
+                      customTooltip: '${origType ?? 'Original'}: ${formatDate(origDate)}',
                       maxWidth: textColumnWidth,
                       TextSpan(
                         style: dateStyle,
@@ -103,14 +103,14 @@ class _ContributorCardState extends State<ContributorCard> {
                             text: '${origType ?? 'Original'}: ',
                             style: const TextStyle(fontWeight: FontWeight.bold),
                           ),
-                          TextSpan(text: _formatDate(origDate)),
+                          TextSpan(text: formatDate(origDate)),
                         ],
                       ),
                     ),
                   );
                   releaseLines.add(
                     AdaptiveTooltipText.rich(
-                      customTooltip: '${latestType ?? 'Latest'}: ${_formatDate(latestDate)}',
+                      customTooltip: '${latestType ?? 'Latest'}: ${formatDate(latestDate)}',
                       maxWidth: textColumnWidth,
                       TextSpan(
                         style: dateStyle,
@@ -119,7 +119,7 @@ class _ContributorCardState extends State<ContributorCard> {
                             text: '${latestType ?? 'Latest'}: ',
                             style: const TextStyle(fontWeight: FontWeight.bold),
                           ),
-                          TextSpan(text: _formatDate(latestDate)),
+                          TextSpan(text: formatDate(latestDate)),
                         ],
                       ),
                     ),
@@ -127,7 +127,7 @@ class _ContributorCardState extends State<ContributorCard> {
                 } else if (latestDate != null) {
                   releaseLines.add(
                     AdaptiveTooltipText.rich(
-                      customTooltip: '${latestType ?? 'Release'}: ${_formatDate(latestDate)}',
+                      customTooltip: '${latestType ?? 'Release'}: ${formatDate(latestDate)}',
                       maxWidth: textColumnWidth,
                       TextSpan(
                         style: dateStyle,
@@ -136,7 +136,7 @@ class _ContributorCardState extends State<ContributorCard> {
                             text: '${latestType ?? 'Release'}: ',
                             style: const TextStyle(fontWeight: FontWeight.bold),
                           ),
-                          TextSpan(text: _formatDate(latestDate)),
+                          TextSpan(text: formatDate(latestDate)),
                         ],
                       ),
                     ),
@@ -144,13 +144,13 @@ class _ContributorCardState extends State<ContributorCard> {
                 } else {
                   releaseLines.add(
                     AdaptiveTooltipText.rich(
-                      customTooltip: 'Release: ${_formatDate(latestWork.releaseDate)}',
+                      customTooltip: 'Release: ${formatDate(latestWork.releaseDate)}',
                       maxWidth: textColumnWidth,
                       TextSpan(
                         style: dateStyle,
                         children: [
                           const TextSpan(text: 'Release: ', style: TextStyle(fontWeight: FontWeight.bold)),
-                          TextSpan(text: _formatDate(latestWork.releaseDate)),
+                          TextSpan(text: formatDate(latestWork.releaseDate)),
                         ],
                       ),
                     ),
@@ -163,7 +163,7 @@ class _ContributorCardState extends State<ContributorCard> {
                 );
               } else if (isTvShow) {
                 // TV SHOW LAYOUT: Latest: Episode Name - S#E# (Date)
-                final formattedDate = _formatDate(latestWork.releaseDate);
+                final formattedDate = formatDate(latestWork.releaseDate);
                 
                 final titleSpan = TextSpan(
                   style: textStyle,
@@ -216,13 +216,13 @@ class _ContributorCardState extends State<ContributorCard> {
                 } else {
                   latestWorkWidget = AdaptiveTooltipText.rich(
                     fullRichSpan,
-                    customTooltip: '${latestWork.title} (${_formatDate(latestWork.releaseDate)})',
+                    customTooltip: '${latestWork.title} (${formatDate(latestWork.releaseDate)})',
                     maxWidth: textColumnWidth,
                   );
                 }
               } else {
                 // PERSON LAYOUT: Latest: Title (Date)
-                final formattedDate = _formatDate(latestWork.releaseDate);
+                final formattedDate = formatDate(latestWork.releaseDate);
                 final jobOrDept = latestWork.job ?? latestWork.department;
                 
                 final titleSpan = TextSpan(
@@ -284,7 +284,7 @@ class _ContributorCardState extends State<ContributorCard> {
                 } else {
                   latestWorkWidget = AdaptiveTooltipText.rich(
                     fullRichSpan,
-                    customTooltip: '${latestWork.title} (${_formatDate(latestWork.releaseDate)})',
+                    customTooltip: '${latestWork.title} (${formatDate(latestWork.releaseDate)})',
                     maxWidth: textColumnWidth,
                   );
                 }

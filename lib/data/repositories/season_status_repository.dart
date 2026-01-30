@@ -1,6 +1,5 @@
 import 'package:hive/hive.dart';
 import '../models/season_status_entry.dart';
-import '../models/watchlist_entry.dart';
 import '../models/status_record.dart';
 
 class SeasonStatusRepository {
@@ -120,9 +119,4 @@ class SeasonStatusRepository {
     }
   }
 
-  /// Find the key for a season
-  String? _findKey(int showId, int seasonNumber) {
-    final uniqueKey = '${showId}_$seasonNumber';
-    return _box.containsKey(uniqueKey) ? uniqueKey : null;
-  }
 }

@@ -1,4 +1,3 @@
-import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../data/models/contributor_detail.dart';
@@ -60,7 +59,6 @@ class WatchlistButton extends ConsumerStatefulWidget {
 }
 
 class _WatchlistButtonState extends ConsumerState<WatchlistButton> {
-  bool _isHovered = false;
   bool _isLoading = false;
 
   @override
@@ -153,9 +151,6 @@ class _WatchlistButtonState extends ConsumerState<WatchlistButton> {
           final existingEntry = watchlistLogic.getWork(widget.tmdbId, widget.workType);
           if (existingEntry != null && mounted) {
             if (widget.workType == WorkType.movie) {
-              final prefs = existingEntry.releaseNotificationPrefs;
-              final selectedTypes = prefs?.selectedTypes ?? [];
-              
               showAlreadyInWatchlistSnackBar(
                 context,
                 widget.workTitle,
@@ -168,9 +163,6 @@ class _WatchlistButtonState extends ConsumerState<WatchlistButton> {
                 },
               );
             } else if (widget.workType == WorkType.tvShow) {
-              final tvPrefs = existingEntry.tvNotificationPrefs;
-              final selectedTypes = tvPrefs?.selectedTypes ?? [];
-              
               showAlreadyInWatchlistSnackBar(
                 context,
                 widget.workTitle,

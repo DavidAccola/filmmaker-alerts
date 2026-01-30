@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:cached_network_image/cached_network_image.dart';
-import 'package:intl/intl.dart';
 import '../../data/models/tv_detail.dart';
 import '../../data/models/contributor_detail.dart';
 import '../../data/models/preferences.dart';
@@ -11,7 +10,6 @@ import '../common/external_navigation_utils.dart';
 import '../common/snackbar_utils.dart';
 import '../common/watchlist_button.dart';
 import 'contributor_detail_screen.dart';
-import 'tv_episode_detail_screen.dart';
 import 'tv_season_detail_screen.dart';
 import '../../data/models/contributor.dart';
 import '../../data/models/movie_detail.dart';
@@ -21,8 +19,6 @@ import '../common/expandable_synopsis.dart';
 import '../common/runtime_display.dart';
 import '../common/adaptive_tooltip_text.dart';
 import '../common/contributor_hover_card.dart';
-import '../../logic/contributor_logic.dart';
-import '../../data/repositories/preferences_repository.dart';
 import '../common/department_selection_dialog.dart';
 
 class TvShowDetailScreen extends ConsumerStatefulWidget {
@@ -40,7 +36,6 @@ class TvShowDetailScreen extends ConsumerStatefulWidget {
 }
 
 class _TvShowDetailScreenState extends ConsumerState<TvShowDetailScreen> {
-  bool _synopsisExpanded = false;
   bool _isPosterHovered = false;
 
   @override
@@ -126,7 +121,7 @@ class _TvShowDetailScreenState extends ConsumerState<TvShowDetailScreen> {
         color: Theme.of(context).colorScheme.surfaceContainerHighest,
         border: Border(
           bottom: BorderSide(
-            color: Theme.of(context).colorScheme.outline.withOpacity(0.2),
+            color: Theme.of(context).colorScheme.outline.withValues(alpha: 0.2),
           ),
         ),
       ),
@@ -415,32 +410,6 @@ class _TvShowDetailScreenState extends ConsumerState<TvShowDetailScreen> {
       return '$startYear–$endYear';
     }
     return '$startYear–Present';
-  }
-
-  Widget _buildStatusChip(String status) {
-    final theme = Theme.of(context);
-    Color color = Colors.grey;
-    if (status.toLowerCase() == 'returning series' || status.toLowerCase() == 'in production') {
-      color = Colors.green;
-    } else if (status.toLowerCase() == 'ended' || status.toLowerCase() == 'canceled') {
-      color = Colors.orange;
-    }
-
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-      decoration: BoxDecoration(
-        color: color.withOpacity(0.1),
-        borderRadius: BorderRadius.circular(4),
-        border: Border.all(color: color.withOpacity(0.5)),
-      ),
-      child: Text(
-        status,
-        style: theme.textTheme.labelSmall?.copyWith(
-          color: color,
-          fontWeight: FontWeight.bold,
-        ),
-      ),
-    );
   }
 
   Widget _buildSynopsisSection(TvShowDetail showDetail) {
@@ -736,7 +705,7 @@ class _TvShowDetailScreenState extends ConsumerState<TvShowDetailScreen> {
                                 decoration: BoxDecoration(
                                   borderRadius: BorderRadius.circular(8),
                                   border: Border.all(
-                                    color: Theme.of(context).colorScheme.outline.withOpacity(0.3),
+                                    color: Theme.of(context).colorScheme.outline.withValues(alpha: 0.3),
                                   ),
                                 ),
                                 child: ClipRRect(
@@ -773,7 +742,7 @@ class _TvShowDetailScreenState extends ConsumerState<TvShowDetailScreen> {
                                 decoration: BoxDecoration(
                                   borderRadius: BorderRadius.circular(8),
                                   border: Border.all(
-                                    color: Theme.of(context).colorScheme.outline.withOpacity(0.3),
+                                    color: Theme.of(context).colorScheme.outline.withValues(alpha: 0.3),
                                   ),
                                 ),
                                 child: ClipRRect(
@@ -827,7 +796,7 @@ class _TvShowDetailScreenState extends ConsumerState<TvShowDetailScreen> {
         knownFor = 'Actor';
       } else if (member is CrewMember) {
         // For crew, use their primary department as knownFor
-        knownFor = member.department ?? '';
+        knownFor = member.department;
       }
       
       final sparseContributor = Contributor(
@@ -934,13 +903,6 @@ class _TvShowDetailScreenState extends ConsumerState<TvShowDetailScreen> {
         showSimpleSnackBar(context, 'Error: $e');
       }
     }
-  }
-
-  String _formatVoteCount(int count) {
-    if (count >= 1000) {
-      return '${(count / 1000).toStringAsFixed(1)}K';
-    }
-    return count.toString();
   }
 }
 

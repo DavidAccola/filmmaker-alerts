@@ -92,7 +92,7 @@ class PointsOfInterestWidget extends StatelessWidget {
             padding: const EdgeInsets.only(bottom: 12.0),
             child: _buildContributorTile(context, contributor, roles),
           );
-        }).toList(),
+        }),
       ],
     );
   }
@@ -118,7 +118,7 @@ class PointsOfInterestWidget extends StatelessWidget {
             color: Theme.of(context).colorScheme.surfaceContainerLow,
             borderRadius: BorderRadius.circular(8),
             border: Border.all(
-              color: Theme.of(context).colorScheme.outline.withOpacity(0.2),
+              color: Theme.of(context).colorScheme.outline.withValues(alpha: 0.2),
             ),
           ),
           child: Row(

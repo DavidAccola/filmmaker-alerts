@@ -50,7 +50,6 @@ class _WatchlistCardState extends ConsumerState<WatchlistCard> {
     final watchedRecords = entry.statusRecords.where((r) => r.status == WatchStatus.watched).toList();
     final hasWatched = watchedRecords.isNotEmpty;
     final watchCount = watchedRecords.isNotEmpty ? watchedRecords.first.watchCount : 0;
-    final hasDNF = entry.statusRecords.any((r) => r.status == WatchStatus.dnf);
 
     Widget poster = entry.posterPath != null
         ? CachedNetworkImage(
@@ -514,48 +513,6 @@ class _WatchlistCardState extends ConsumerState<WatchlistCard> {
       return DateFormat('MMM d').format(date);
     }
     return DateFormat('MMM d, yyyy').format(date);
-  }
-
-  Widget _buildReleaseTypeChip(BuildContext context, ReleaseType releaseType) {
-    final theme = Theme.of(context);
-    String label;
-    Color color;
-
-    switch (releaseType) {
-      case ReleaseType.theatrical:
-        label = 'Theatrical';
-        color = theme.colorScheme.primary;
-        break;
-      case ReleaseType.streaming:
-        label = 'Streaming';
-        color = Colors.purple;
-        break;
-      case ReleaseType.digital:
-        label = 'Digital';
-        color = Colors.blue;
-        break;
-      case ReleaseType.physical:
-        label = 'Physical';
-        color = Colors.green;
-        break;
-    }
-
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
-      decoration: BoxDecoration(
-        color: color.withOpacity(0.1),
-        borderRadius: BorderRadius.circular(3),
-        border: Border.all(color: color.withOpacity(0.3)),
-      ),
-      child: Text(
-        label,
-        style: theme.textTheme.labelSmall?.copyWith(
-          color: color,
-          fontWeight: FontWeight.w500,
-          fontSize: 8,
-        ),
-      ),
-    );
   }
 }
 

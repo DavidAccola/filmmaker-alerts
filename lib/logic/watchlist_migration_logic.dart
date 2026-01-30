@@ -100,7 +100,7 @@ class WatchlistMigrationLogic {
       c.type == ContributorType.collection
     ).toList();
 
-    final watchlistEntries = await _watchlistLogic.getWatchlistWorks();
+    final watchlistEntries = _watchlistLogic.getWatchlistWorks();
     
     int contributorsInWatchlist = 0;
     int orphanedContributors = 0;

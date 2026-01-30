@@ -29,7 +29,7 @@ class MovieStatusEntry extends HiveObject {
     List<StatusRecord>? statusRecords,
   }) : statusRecords = statusRecords ?? [];
   
-  String get uniqueKey => '${collectionId}_${movieId}';
+  String get uniqueKey => '${collectionId}_$movieId';
   
   bool get isReleased {
     if (releaseDate == null) return true;

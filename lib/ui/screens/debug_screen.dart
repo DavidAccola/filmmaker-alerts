@@ -7,7 +7,6 @@ import '../../data/models/preferences.dart';
 import '../../data/models/contributor.dart'; // For TvNotificationPreferences
 import '../../data/models/contributor_detail.dart'; // For WorkType
 import '../../data/models/watchlist_entry.dart'; // For ReleaseNotificationPreferences
-import '../../utils/debug_logger.dart';
 import 'package:flutter/services.dart';
 import '../common/snackbar_utils.dart';
 
@@ -1356,7 +1355,6 @@ class DebugScreen extends ConsumerWidget {
     try {
       final watchlistRepo = ref.read(watchlistRepositoryProvider);
       final prefsRepo = ref.read(preferencesRepositoryProvider);
-      final movieCacheRepo = ref.read(movieCacheRepositoryProvider);
       
       final watchlistEntries = watchlistRepo.getWorks();
       final prefs = prefsRepo.getPreferences();

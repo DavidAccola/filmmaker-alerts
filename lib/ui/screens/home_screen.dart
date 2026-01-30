@@ -181,7 +181,6 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with TickerProviderStat
           
           // Separate contributors by type
           final peopleContributors = _filterPeopleContributors(contributors);
-          final watchlistContributors = _filterWatchlistContributors(contributors);
           
           return TabBarView(
             controller: _tabController!,
@@ -858,17 +857,6 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with TickerProviderStat
     return contributors.where((c) => 
       c.type == ContributorType.person || 
       c.type == ContributorType.company
-    ).toList();
-  }
-
-  List<Contributor> _filterWatchlistContributors(List<Contributor> contributors) {
-    // DEPRECATED: This method should no longer be used
-    // Movies/TV shows/collections should be in the actual watchlist, not contributors
-    debugPrint('[HomeScreen] WARNING: _filterWatchlistContributors is deprecated');
-    return contributors.where((c) => 
-      c.type == ContributorType.movie || 
-      c.type == ContributorType.tvShow || 
-      c.type == ContributorType.collection
     ).toList();
   }
 

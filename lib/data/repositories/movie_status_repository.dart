@@ -16,7 +16,7 @@ class MovieStatusRepository {
     required String movieTitle,
     DateTime? releaseDate,
   }) async {
-    final key = '${collectionId}_${movieId}';
+    final key = '${collectionId}_$movieId';
     
     MovieStatusEntry? existing = _box.get(key);
     if (existing != null) {
@@ -37,7 +37,7 @@ class MovieStatusRepository {
 
   /// Gets a movie status entry by collection and movie ID
   MovieStatusEntry? getMovie(int collectionId, int movieId) {
-    final key = '${collectionId}_${movieId}';
+    final key = '${collectionId}_$movieId';
     return _box.get(key);
   }
 
@@ -101,7 +101,7 @@ class MovieStatusRepository {
 
   /// Removes a movie status entry entirely
   Future<void> removeMovie(int collectionId, int movieId) async {
-    final key = '${collectionId}_${movieId}';
+    final key = '${collectionId}_$movieId';
     await _box.delete(key);
     debugPrint('[MovieStatusRepository] Removed movie status entry: $key');
   }
@@ -141,12 +141,4 @@ class MovieStatusRepository {
     }
   }
 
-  /// Helper to find the box key for a movie
-  String? _findKey(int collectionId, int movieId) {
-    final targetKey = '${collectionId}_${movieId}';
-    for (final key in _box.keys) {
-      if (key == targetKey) return key as String;
-    }
-    return null;
-  }
 }

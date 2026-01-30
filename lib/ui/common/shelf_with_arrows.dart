@@ -86,11 +86,11 @@ class _ShelfWithArrowsState extends State<ShelfWithArrows> {
                   height: 60,
                   width: 45,
                   decoration: BoxDecoration(
-                    color: (isDark ? Colors.black : Colors.white).withOpacity(0.85),
+                    color: (isDark ? Colors.black : Colors.white).withValues(alpha: 0.85),
                     borderRadius: const BorderRadius.horizontal(right: Radius.circular(30)),
                     boxShadow: [
                       BoxShadow(
-                        color: Colors.black.withOpacity(0.2),
+                        color: Colors.black.withValues(alpha: 0.2),
                         blurRadius: 8,
                         spreadRadius: 1,
                         offset: const Offset(2, 0),
@@ -124,11 +124,11 @@ class _ShelfWithArrowsState extends State<ShelfWithArrows> {
                   height: 60,
                   width: 45,
                   decoration: BoxDecoration(
-                    color: (isDark ? Colors.black : Colors.white).withOpacity(0.85),
+                    color: (isDark ? Colors.black : Colors.white).withValues(alpha: 0.85),
                     borderRadius: const BorderRadius.horizontal(left: Radius.circular(30)),
                     boxShadow: [
                       BoxShadow(
-                        color: Colors.black.withOpacity(0.2),
+                        color: Colors.black.withValues(alpha: 0.2),
                         blurRadius: 8,
                         spreadRadius: 1,
                         offset: const Offset(-2, 0),

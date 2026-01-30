@@ -10,7 +10,7 @@ class DepartmentSelectionDialog extends StatefulWidget {
   final bool initialAllRolesSelected;
   final bool allowTrueAll;
 
-  DepartmentSelectionDialog({
+  const DepartmentSelectionDialog({
     super.key,
     required this.name,
     required this.availableDepartments,

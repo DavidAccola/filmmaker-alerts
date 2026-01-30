@@ -40,7 +40,6 @@ class _GroupedTvShowWidgetState extends State<GroupedTvShowWidget> {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final firstEpisode = widget.episodes.last;
     final latestEpisode = widget.episodes.first;
 
     // Check if show is more than 3 years old
@@ -87,7 +86,7 @@ class _GroupedTvShowWidgetState extends State<GroupedTvShowWidget> {
                             begin: Alignment.bottomCenter,
                             end: Alignment.topCenter,
                             colors: [
-                              Colors.black.withOpacity(0.8),
+                              Colors.black.withValues(alpha: 0.8),
                               Colors.transparent,
                             ],
                           ),
@@ -103,7 +102,7 @@ class _GroupedTvShowWidgetState extends State<GroupedTvShowWidget> {
                         child: Container(
                           padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
                           decoration: BoxDecoration(
-                            color: Colors.black.withOpacity(0.5),
+                            color: Colors.black.withValues(alpha: 0.5),
                             borderRadius: BorderRadius.circular(4),
                           ),
                           child: Row(
@@ -134,7 +133,7 @@ class _GroupedTvShowWidgetState extends State<GroupedTvShowWidget> {
                       child: Container(
                         padding: const EdgeInsets.all(4),
                         decoration: BoxDecoration(
-                          color: Colors.black.withOpacity(0.5),
+                          color: Colors.black.withValues(alpha: 0.5),
                           borderRadius: BorderRadius.circular(4),
                         ),
                         child: const Icon(
@@ -150,7 +149,7 @@ class _GroupedTvShowWidgetState extends State<GroupedTvShowWidget> {
                       opacity: _isHovered ? 1.0 : 0.0,
                       duration: const Duration(milliseconds: 200),
                       child: Container(
-                        color: Colors.black.withOpacity(0.7),
+                        color: Colors.black.withValues(alpha: 0.7),
                         padding: const EdgeInsets.all(8),
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
@@ -196,7 +195,7 @@ class _GroupedTvShowWidgetState extends State<GroupedTvShowWidget> {
                         child: Container(
                           padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
                           decoration: BoxDecoration(
-                            color: theme.colorScheme.primaryContainer.withOpacity(0.9),
+                            color: theme.colorScheme.primaryContainer.withValues(alpha: 0.9),
                             borderRadius: BorderRadius.circular(4),
                           ),
                           child: Text(

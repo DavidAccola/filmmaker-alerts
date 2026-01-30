@@ -1,6 +1,5 @@
 import 'package:hive/hive.dart';
 import '../models/episode_status_entry.dart';
-import '../models/watchlist_entry.dart';
 import '../models/status_record.dart';
 
 class EpisodeStatusRepository {
@@ -134,9 +133,4 @@ class EpisodeStatusRepository {
     }
   }
 
-  /// Find the key for an episode
-  String? _findKey(int showId, int seasonNumber, int episodeNumber) {
-    final uniqueKey = '${showId}_${seasonNumber}_$episodeNumber';
-    return _box.containsKey(uniqueKey) ? uniqueKey : null;
-  }
 }

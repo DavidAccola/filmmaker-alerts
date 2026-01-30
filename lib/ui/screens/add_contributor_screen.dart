@@ -7,7 +7,6 @@ import '../../data/models/contributor_detail.dart';
 import '../../data/models/watchlist_entry.dart';
 import '../../providers/providers.dart';
 import '../common/snackbar_utils.dart';
-import '../common/watchlist_button.dart';
 import 'search_results_screen.dart';
 
 class AddContributorScreen extends ConsumerStatefulWidget {

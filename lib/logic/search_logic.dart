@@ -23,7 +23,6 @@ class SearchLogic {
   // Cache for trending data to make dynamic hints efficient
   Map<String, dynamic>? _cachedTrendingMovies;
   Map<String, dynamic>? _cachedTrendingPeople;
-  Map<String, dynamic>? _cachedPopularPeople;
   Map<String, dynamic>? _cachedUpcomingMovies;
   List<Map<String, dynamic>>? _cachedFeaturedPeople;
   DateTime? _cacheTime;
@@ -133,7 +132,6 @@ class SearchLogic {
       if (!_isCacheValid()) {
         _cachedTrendingMovies = await _tmdbService.getTrendingMovies();
         _cachedTrendingPeople = await _tmdbService.getTrendingPeople();
-        _cachedPopularPeople = await _tmdbService.getPopularPeople();
         _cachedUpcomingMovies = await _tmdbService.getUpcomingMovies();
         
         // PIVOT: Fetch people from upcoming movies for Person hints

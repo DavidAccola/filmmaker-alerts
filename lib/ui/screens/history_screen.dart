@@ -2,7 +2,6 @@ import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter/foundation.dart';
-import 'package:url_launcher/url_launcher.dart';
 import '../../data/models/preferences.dart';
 import '../../data/models/notification_history.dart';
 import '../../data/models/contributor_detail.dart';
@@ -10,11 +9,9 @@ import '../../providers/providers.dart';
 import '../common/snackbar_utils.dart';
 import '../common/watchlist_button.dart';
 import '../common/tmdb_attribution.dart';
-import '../common/external_navigation_utils.dart';
 import 'movie_detail_screen.dart';
 import 'tv_show_detail_screen.dart';
 import 'tv_episode_detail_screen.dart';
-import '../../utils/debug_logger.dart';
 
 class HistoryScreen extends ConsumerStatefulWidget {
   const HistoryScreen({super.key});
@@ -24,7 +21,7 @@ class HistoryScreen extends ConsumerStatefulWidget {
 }
 
 class _HistoryScreenState extends ConsumerState<HistoryScreen> {
-  late Map<int, bool> _posterHoverStates = {};
+  final Map<int, bool> _posterHoverStates = {};
 
   @override
   Widget build(BuildContext context) {
@@ -68,9 +65,7 @@ class _HistoryScreenState extends ConsumerState<HistoryScreen> {
                   await historyRepo.clearAllHistory();
                   ref.invalidate(historyProvider);
                   if (context.mounted) {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(content: Text('All notification history cleared')),
-                    );
+                    showSimpleSnackBar(context, 'All notification history cleared');
                   }
                 }
               },
@@ -125,7 +120,7 @@ class _HistoryScreenState extends ConsumerState<HistoryScreen> {
                 // hasUnviewedBatch = true;
               } else {
                 try {
-                  final lastViewed = DateTime.parse(lastViewedTime);
+                  DateTime.parse(lastViewedTime);
                   // hasUnviewedBatch = mostRecentNotificationTime.isAfter(lastViewed);
                 } catch (e) {
                   // hasUnviewedBatch = true;
@@ -219,12 +214,12 @@ class _HistoryScreenState extends ConsumerState<HistoryScreen> {
                 margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
                 decoration: BoxDecoration(
                   color: !isRecentBatch 
-                      ? Theme.of(context).colorScheme.surface.withOpacity(0.6)
+                      ? Theme.of(context).colorScheme.surface.withValues(alpha: 0.6)
                       : Theme.of(context).colorScheme.surface,
                   borderRadius: const BorderRadius.all(Radius.circular(4)),
                   boxShadow: [
                     BoxShadow(
-                      color: Colors.black.withOpacity(0.12),
+                      color: Colors.black.withValues(alpha: 0.12),
                       blurRadius: 2,
                       offset: const Offset(0, 2),
                     ),
@@ -614,30 +609,10 @@ class _HistoryScreenState extends ConsumerState<HistoryScreen> {
     return [];
   }
 
-  /// Get display label for TV notification type
-  String _getTvNotificationTypeLabel(String tvNotificationType) {
-    switch (tvNotificationType) {
-      case 'series_premiere':
-        return 'Series Premiere';
-      case 'season_premiere':
-        return 'Season Premiere';
-      case 'season_finale':
-        return 'Season Finale';
-      case 'special':
-        return 'Special';
-      case 'grouped_episodes':
-        return 'Multiple Episodes';
-      case 'episode':
-        return 'New Episode';
-      default:
-        return '';
-    }
-  }
-
   void _markHistoryAsViewed(WidgetRef ref) async {
     try {
       final prefsRepo = ref.read(preferencesRepositoryProvider);
-      final currentPrefs = await prefsRepo.getPreferences();
+      final currentPrefs = prefsRepo.getPreferences();
       
       final updatedPrefs = Preferences(
         notifyTheatre: currentPrefs.notifyTheatre,
@@ -713,23 +688,5 @@ class _HistoryScreenState extends ConsumerState<HistoryScreen> {
         ),
       );
     }
-  }
-
-  Future<void> _launchTmdbUrl(BuildContext context, NotificationHistoryEntry entry) async {
-    final tmdbId = entry.tmdbId;
-    final isTV = entry.mediaType == 'tv';
-    
-    await ExternalNavigationUtils.launchTmdbTitle(
-      context,
-      tmdbId: tmdbId,
-      isTV: isTV,
-    );
-  }
-
-  Future<void> _launchImdbUrl(BuildContext context, String imdbId) async {
-    await ExternalNavigationUtils.launchImdbTitle(
-      context,
-      imdbId: imdbId,
-    );
   }
 }

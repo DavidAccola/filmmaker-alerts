@@ -480,10 +480,6 @@ class ContributorLogic {
     for (final credit in allCredits) {
       if (credit == null || credit['id'] == null) continue;
       final id = credit['id'] as int;
-      final title = credit['title'] ?? credit['name'] ?? 'Unknown';
-      final status = credit['status'] as String?;
-      final releaseDate = credit['release_date'] ?? credit['first_air_date'] ?? credit['air_date'];
-      
       
       final mediaType = credit['media_type'] ?? (contributor.type == ContributorType.movie ? 'movie' : 'tv');
       final isEpisode = credit['episode_number'] != null;
@@ -525,7 +521,7 @@ class ContributorLogic {
         return ContributorRole(
           contributorId: contributor.tmdbId,
           contributorName: contributor.name,
-          role: (job ?? character ?? (contributor.type == ContributorType.movie ? 'Movie' : (c['media_type'] == 'tv' ? 'TV Show' : 'Cast/Crew'))) as String,
+          role: job ?? character ?? (contributor.type == ContributorType.movie ? 'Movie' : (c['media_type'] == 'tv' ? 'TV Show' : 'Cast/Crew')),
           department: department,
           character: character,
         );
@@ -648,12 +644,12 @@ class ContributorLogic {
         w.type == WorkType.tvShow && latestShowTitles.contains(w.title)
       ).toList();
 
-      final List<Work> relevantTvShows = [
+      final List<Work> relevantTvShows = {
         ...sortedUpcoming.where((w) => w.type == WorkType.tvShow),
         ...sortedLatest.where((w) => w.type == WorkType.tvShow),
         ...sortedHits.where((w) => w.type == WorkType.tvShow),
         ...showsForLatestEpisodes,
-      ].toSet().take(20).toList(); // Increased limit to 20 for more thorough Latest Releases coverage
+      }.take(20).toList(); // Increased limit to 20 for more thorough Latest Releases coverage
 
       if (relevantTvShows.isNotEmpty) {
         debugPrint('[ContributorLogic] Enrichment: Fetching episodes for ${relevantTvShows.length} shows');

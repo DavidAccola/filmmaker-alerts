@@ -114,7 +114,7 @@ class _ReWatchDialogState extends State<ReWatchDialog> {
                   ],
                 ),
               );
-            }).toList(),
+            }),
 
             // Add button
             const SizedBox(height: 8),

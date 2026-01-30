@@ -331,7 +331,7 @@ class _CreditExpansionSectionState extends State<CreditExpansionSection> {
                           _buildWorksList(worksInDept, dept),
                         ],
                       );
-                    }).toList()
+                    })
                   else
                     _buildChronologicalList(),
                     
@@ -365,7 +365,7 @@ class _CreditExpansionSectionState extends State<CreditExpansionSection> {
                                   colors: [
                                     Colors.white,
                                     Colors.white,
-                                    Colors.white.withOpacity(0.3),
+                                    Colors.white.withValues(alpha: 0.3),
                                     Colors.transparent,
                                   ],
                                   stops: const [0.0, 0.5, 0.85, 1.0],
@@ -496,7 +496,7 @@ class _CreditExpansionSectionState extends State<CreditExpansionSection> {
 
         return _buildWorkItem(
           work, 
-          children: episodes.map((ep) => _buildWorkItem(ep, isEpisode: true)).toList()
+          children: episodes.map((ep) => _buildWorkItem(ep, isEpisode: true)).toList(),
         );
       }).toList(),
     );
@@ -582,9 +582,9 @@ class _CreditExpansionSectionState extends State<CreditExpansionSection> {
       } else {
           renderedGroups.add(
             _buildWorkItem(
-              showWork!, 
-              children: episodes.map((ep) => _buildWorkItem(ep, isEpisode: true, currentDepartmentFilter: filterDept)).toList(), // Pass filter to children too
+              showWork, 
               currentDepartmentFilter: filterDept,
+              children: episodes.map((ep) => _buildWorkItem(ep, isEpisode: true, currentDepartmentFilter: filterDept)).toList(), // Pass filter to children too
             )
           );
       }
@@ -603,15 +603,15 @@ class _CreditExpansionSectionState extends State<CreditExpansionSection> {
 
 
 
-  Widget _buildWorkItem(Work work, {bool isEpisode = false, List<Widget>? children, String? currentDepartmentFilter}) {
+  Widget _buildWorkItem(Work work, {bool isEpisode = false, String? currentDepartmentFilter, List<Widget>? children}) {
     return _CreditWorkItem(
       work: work,
       isEpisode: isEpisode,
-      children: children,
       currentDepartmentFilter: currentDepartmentFilter,
       hideRatings: widget.hideRatings,
       onWorkTap: widget.onWorkTap,
       onAddToWatchlist: widget.onAddToWatchlist,
+      children: children,
     );
   }
 
@@ -739,7 +739,7 @@ class _CreditWorkItemState extends State<_CreditWorkItem> {
                       width: 60,
                       padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
                       decoration: BoxDecoration(
-                        color: theme.colorScheme.primary.withOpacity(0.1),
+                        color: theme.colorScheme.primary.withValues(alpha: 0.1),
                         borderRadius: BorderRadius.circular(4),
                       ),
                       child: Text(
@@ -815,7 +815,7 @@ class _CreditWorkItemState extends State<_CreditWorkItem> {
                           Text(
                             _formatDateRange(work),
                             style: theme.textTheme.labelSmall?.copyWith(
-                              color: theme.colorScheme.onSurfaceVariant.withOpacity(0.7),
+                              color: theme.colorScheme.onSurfaceVariant.withValues(alpha: 0.7),
                               fontSize: 10,
                             ),
                           ),

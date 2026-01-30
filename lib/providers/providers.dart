@@ -1,5 +1,6 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_riverpod/legacy.dart';
 import '../data/models/contributor.dart';
 import '../data/models/contributor_detail.dart';
 import '../data/models/movie_detail.dart';

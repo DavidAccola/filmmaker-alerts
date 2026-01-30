@@ -79,7 +79,7 @@ class NotificationService {
 
         debugPrint('[NotificationService] Calling plugin initialize...');
         final result = await _flutterLocalNotificationsPlugin!.initialize(
-          initializationSettings,
+          settings: initializationSettings,
           onDidReceiveNotificationResponse: (NotificationResponse response) async {
             debugPrint('[NotificationService] Received notification response: ${response.payload}');
             final String? payload = response.payload;
@@ -301,10 +301,10 @@ class NotificationService {
 
         // DebugLogger.instance.logNotification('Calling plugin show with minimal details...');
         await _flutterLocalNotificationsPlugin!.show(
-          id,
-          title,
-          body,
-          notificationDetails,
+          id: id,
+          title: title,
+          body: body,
+          notificationDetails: notificationDetails,
           payload: payload,
         );
         // DebugLogger.instance.logNotification('✅ Non-Windows notification sent successfully');

@@ -174,7 +174,7 @@ class _ContributorDetailScreenState extends ConsumerState<ContributorDetailScree
     );
   }
 
-  Widget _buildHeader(prefs) {
+  Widget _buildHeader(Preferences prefs) {
     return Container(
       padding: const EdgeInsets.all(16.0),
       decoration: BoxDecoration(

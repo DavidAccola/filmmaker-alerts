@@ -11,7 +11,7 @@ void main() {
   late Dio dio;
 
   setUp(() {
-    dotenv.testLoad(fileInput: 'TMDB_API_KEY=testkey');
+    dotenv.loadFromString('TMDB_API_KEY=testkey');
     dio = Dio(BaseOptions(baseUrl: 'https://api.themoviedb.org/3'));
     // Interceptors are added by the service constructor
     service = TmdbService(dio: dio);

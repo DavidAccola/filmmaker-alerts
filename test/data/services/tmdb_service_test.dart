@@ -10,7 +10,7 @@ void main() {
   late DioAdapter dioAdapter;
 
   setUp(() {
-    dotenv.testLoad(fileInput: 'TMDB_API_KEY=test_key');
+    dotenv.loadFromString('TMDB_API_KEY=test_key');
     dio = Dio(BaseOptions(
       baseUrl: 'https://api.themoviedb.org/3',
       queryParameters: {'api_key': 'test_key'},

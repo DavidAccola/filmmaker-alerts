@@ -95,133 +95,146 @@ class _WatchlistCardState extends ConsumerState<WatchlistCard> {
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(12),
         ),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
+        child: InkWell(
+          onTap: () {
+            if (entry.type == WorkType.tvShow) {
+              Navigator.of(context).push(
+                MaterialPageRoute(
+                  builder: (context) => ShowConfigurationScreen(
+                    showId: entry.tmdbId,
+                    showTitle: entry.title,
+                  ),
+                ),
+              );
+            } else if (entry.type == WorkType.movie && 
+                      entry.followedContributors.any((c) => c.role == 'Collection')) {
+              Navigator.of(context).push(
+                MaterialPageRoute(
+                  builder: (context) => CollectionConfigurationScreen(
+                    collectionId: entry.tmdbId,
+                    collectionTitle: entry.title,
+                  ),
+                ),
+              );
+            } else {
+              widget.onTap?.call();
+            }
+          },
+          child: Column(
+          mainAxisSize: MainAxisSize.max,
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            // Poster image area
-            InkWell(
-              onTap: () {
-                if (entry.type == WorkType.tvShow) {
-                  // Navigate to show configuration screen for TV shows
-                  Navigator.of(context).push(
-                    MaterialPageRoute(
-                      builder: (context) => ShowConfigurationScreen(
-                        showId: entry.tmdbId,
-                        showTitle: entry.title,
-                      ),
-                    ),
-                  );
-                } else if (entry.type == WorkType.movie && 
-                          entry.followedContributors.any((c) => c.role == 'Collection')) {
-                  // Navigate to collection configuration screen for collections
-                  Navigator.of(context).push(
-                    MaterialPageRoute(
-                      builder: (context) => CollectionConfigurationScreen(
-                        collectionId: entry.tmdbId,
-                        collectionTitle: entry.title,
-                      ),
-                    ),
-                  );
-                } else {
-                  // For regular movies, call the original onTap
-                  widget.onTap?.call();
-                }
-              },
-              borderRadius: const BorderRadius.vertical(top: Radius.circular(12)),
-              child: SizedBox(
-                height: 200,
-                width: double.infinity,
-                child: Stack(
-                  fit: StackFit.expand,
-                  children: [
-                    // Fallback background for transparent posters
-                    Container(
-                      color: theme.colorScheme.surface,
-                      child: poster,
-                    ),
+            // Poster image area - takes remaining space after title and buttons
+            Expanded(
+              child: Stack(
+                fit: StackFit.expand,
+                children: [
+                  // Fallback background for transparent posters
+                  Container(
+                    color: theme.colorScheme.surface,
+                    child: poster,
+                  ),
 
-                    // Three-dot menu button (upper-right)
+                  // Three-dot menu button (upper-right)
+                  Positioned(
+                    top: 8,
+                    right: 8,
+                    child: Material(
+                      color: Colors.black.withValues(alpha: 0.6),
+                      borderRadius: BorderRadius.circular(20),
+                      child: PopupMenuButton<String>(
+                        icon: const Icon(Icons.more_vert, color: Colors.white, size: 20),
+                        padding: EdgeInsets.zero,
+                        onSelected: (value) {
+                          switch (value) {
+                            case 'release_preferences':
+                              _showReleasePreferencesDialog();
+                              break;
+                            case 'delete':
+                              widget.onDelete?.call();
+                              break;
+                            case 'snooze':
+                              widget.onSnooze?.call();
+                              break;
+                            case 'toggle_notifications':
+                              widget.onToggleNotificationSnooze?.call();
+                              break;
+                            case 'dnf':
+                              widget.onStatusChanged?.call(WatchStatus.dnf);
+                              break;
+                          }
+                        },
+                        itemBuilder: (context) {
+                          if (entry.isSnoozed) {
+                            return [
+                              const PopupMenuItem(
+                                value: 'snooze',
+                                child: Text('Unhide'),
+                              ),
+                              const PopupMenuItem(
+                                value: 'dnf',
+                                child: Text('Did not finish'),
+                              ),
+                              const PopupMenuItem(
+                                value: 'release_preferences',
+                                child: Text('Release Preferences'),
+                              ),
+                              const PopupMenuItem(
+                                value: 'delete',
+                                child: Text('Delete'),
+                              ),
+                            ];
+                          } else {
+                            return [
+                              PopupMenuItem(
+                                value: 'toggle_notifications',
+                                child: Text(entry.notificationsSnoozed ? 'Unpause Notifications' : 'Pause Notifications'),
+                              ),
+                              const PopupMenuItem(
+                                value: 'release_preferences',
+                                child: Text('Release Preferences'),
+                              ),
+                              const PopupMenuItem(
+                                value: 'snooze',
+                                child: Text('Hide'),
+                              ),
+                              const PopupMenuItem(
+                                value: 'delete',
+                                child: Text('Delete'),
+                              ),
+                            ];
+                          }
+                        },
+                      ),
+                    ),
+                  ),
+
+                  // Notification snooze indicator
+                  if (entry.notificationsSnoozed)
                     Positioned(
                       top: 8,
-                      right: 8,
-                      child: Material(
-                        color: Colors.black.withValues(alpha: 0.6),
-                        borderRadius: BorderRadius.circular(20),
-                        child: PopupMenuButton<String>(
-                          icon: const Icon(Icons.more_vert, color: Colors.white, size: 20),
-                          padding: EdgeInsets.zero,
-                          onSelected: (value) {
-                            switch (value) {
-                              case 'release_preferences':
-                                _showReleasePreferencesDialog();
-                                break;
-                              case 'delete':
-                                widget.onDelete?.call();
-                                break;
-                              case 'snooze':
-                                widget.onSnooze?.call();
-                                break;
-                              case 'toggle_notifications':
-                                widget.onToggleNotificationSnooze?.call();
-                                break;
-                              case 'dnf':
-                                widget.onStatusChanged?.call(WatchStatus.dnf);
-                                break;
-                            }
-                          },
-                          itemBuilder: (context) {
-                            if (entry.isSnoozed) {
-                              // Hidden menu: Unhide, Did Not Finish, Release Preferences, Delete
-                              return [
-                                const PopupMenuItem(
-                                  value: 'snooze',
-                                  child: Text('Unhide'),
-                                ),
-                                const PopupMenuItem(
-                                  value: 'dnf',
-                                  child: Text('Did not finish'),
-                                ),
-                                const PopupMenuItem(
-                                  value: 'release_preferences',
-                                  child: Text('Release Preferences'),
-                                ),
-                                const PopupMenuItem(
-                                  value: 'delete',
-                                  child: Text('Delete'),
-                                ),
-                              ];
-                            } else {
-                              // Main watchlist menu: Pause/Unpause Notifications, Release Preferences, Hide, Delete
-                              return [
-                                PopupMenuItem(
-                                  value: 'toggle_notifications',
-                                  child: Text(entry.notificationsSnoozed ? 'Unpause Notifications' : 'Pause Notifications'),
-                                ),
-                                const PopupMenuItem(
-                                  value: 'release_preferences',
-                                  child: Text('Release Preferences'),
-                                ),
-                                const PopupMenuItem(
-                                  value: 'snooze',
-                                  child: Text('Hide'),
-                                ),
-                                const PopupMenuItem(
-                                  value: 'delete',
-                                  child: Text('Delete'),
-                                ),
-                              ];
-                            }
-                          },
+                      left: 8,
+                      child: Container(
+                        padding: const EdgeInsets.all(6),
+                        decoration: BoxDecoration(
+                          color: Colors.black.withValues(alpha: 0.6),
+                          borderRadius: BorderRadius.circular(6),
+                        ),
+                        child: const Icon(
+                          Icons.notifications_off,
+                          size: 16,
+                          color: Colors.white,
                         ),
                       ),
                     ),
 
-                    // Notification snooze indicator
-                    if (entry.notificationsSnoozed)
-                      Positioned(
-                        top: 8,
-                        left: 8,
+                  // DNF indicator (when hidden)
+                  if (entry.isSnoozed && entry.statusRecords.any((r) => r.status == WatchStatus.dnf))
+                    Positioned(
+                      top: 8,
+                      left: entry.notificationsSnoozed ? 40 : 8,
+                      child: Tooltip(
+                        message: 'Did not finish',
                         child: Container(
                           padding: const EdgeInsets.all(6),
                           decoration: BoxDecoration(
@@ -229,76 +242,54 @@ class _WatchlistCardState extends ConsumerState<WatchlistCard> {
                             borderRadius: BorderRadius.circular(6),
                           ),
                           child: const Icon(
-                            Icons.notifications_off,
+                            Icons.close,
                             size: 16,
                             color: Colors.white,
                           ),
                         ),
                       ),
+                    ),
 
-                    // DNF indicator (when hidden)
-                    if (entry.isSnoozed && entry.statusRecords.any((r) => r.status == WatchStatus.dnf))
-                      Positioned(
-                        top: 8,
-                        left: entry.notificationsSnoozed ? 40 : 8,
-                        child: Tooltip(
-                          message: 'Did not finish',
-                          child: Container(
-                            padding: const EdgeInsets.all(6),
-                            decoration: BoxDecoration(
-                              color: Colors.black.withValues(alpha: 0.6),
-                              borderRadius: BorderRadius.circular(6),
-                            ),
-                            child: const Icon(
-                              Icons.close,
-                              size: 16,
-                              color: Colors.white,
-                            ),
-                          ),
-                        ),
-                      ),
-
-                    // Release date in bottom-left
-                    if (entry.releaseDate != null)
-                      Positioned(
-                        bottom: 8,
-                        left: 8,
-                        child: Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                          decoration: BoxDecoration(
-                            color: Colors.black.withValues(alpha: 0.6),
-                            borderRadius: BorderRadius.circular(6),
-                          ),
-                          child: Text(
-                            _formatReleaseDate(entry.releaseDate!),
-                            style: theme.textTheme.labelSmall?.copyWith(
-                              color: Colors.white,
-                              fontWeight: FontWeight.w600,
-                              fontSize: 10,
-                            ),
-                          ),
-                        ),
-                      ),
-
-                    // Media type icon in bottom-right
+                  // Release date in bottom-left
+                  if (entry.releaseDate != null)
                     Positioned(
                       bottom: 8,
-                      right: 8,
+                      left: 8,
                       child: Container(
-                        padding: const EdgeInsets.all(6),
+                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                         decoration: BoxDecoration(
                           color: Colors.black.withValues(alpha: 0.6),
                           borderRadius: BorderRadius.circular(6),
                         ),
-                        child: Icon(
-                          entry.type == WorkType.movie ? Icons.movie : Icons.tv,
-                          size: 16,
-                          color: Colors.white,
+                        child: Text(
+                          _formatReleaseDate(entry.releaseDate!),
+                          style: theme.textTheme.labelSmall?.copyWith(
+                            color: Colors.white,
+                            fontWeight: FontWeight.w600,
+                            fontSize: 10,
+                          ),
                         ),
                       ),
                     ),
-                  ],
-                ),
+
+                  // Media type icon in bottom-right
+                  Positioned(
+                    bottom: 8,
+                    right: 8,
+                    child: Container(
+                      padding: const EdgeInsets.all(6),
+                      decoration: BoxDecoration(
+                        color: Colors.black.withValues(alpha: 0.6),
+                        borderRadius: BorderRadius.circular(6),
+                      ),
+                      child: Icon(
+                        entry.type == WorkType.movie ? Icons.movie : Icons.tv,
+                        size: 16,
+                        color: Colors.white,
+                      ),
+                    ),
+                  ),
+                ],
               ),
             ),
 
@@ -323,6 +314,7 @@ class _WatchlistCardState extends ConsumerState<WatchlistCard> {
 
             // Status bar
             Container(
+              height: 44, // Fixed height to prevent cutoff
               decoration: BoxDecoration(
                 color: theme.colorScheme.surfaceContainerHighest,
                 border: Border(
@@ -333,7 +325,7 @@ class _WatchlistCardState extends ConsumerState<WatchlistCard> {
                 ),
                 borderRadius: const BorderRadius.vertical(bottom: Radius.circular(12)),
               ),
-              padding: const EdgeInsets.symmetric(vertical: 6, horizontal: 4),
+              padding: const EdgeInsets.symmetric(horizontal: 4),
               child: Row(
                 mainAxisAlignment: MainAxisAlignment.spaceEvenly,
                 children: [
@@ -376,6 +368,7 @@ class _WatchlistCardState extends ConsumerState<WatchlistCard> {
               ),
             ),
           ],
+        ),
         ),
       ),
     );

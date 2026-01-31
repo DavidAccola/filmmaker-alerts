@@ -196,19 +196,24 @@ class _ContributorDetailScreenState extends ConsumerState<ContributorDetailScree
                 height: 90,
                 decoration: BoxDecoration(
                   color: widget.contributor.type == ContributorType.company
-                      ? Colors.white
+                      ? (Theme.of(context).brightness == Brightness.dark ? Colors.grey[300] : Colors.white)
                       : Theme.of(context).colorScheme.surfaceContainerHighest,
                   borderRadius: BorderRadius.circular(8),
                 ),
                 child: widget.contributor.profilePath != null
                     ? ClipRRect(
                         borderRadius: BorderRadius.circular(8),
-                        child: CachedNetworkImage(
-                          imageUrl: 'https://image.tmdb.org/t/p/w200${widget.contributor.profilePath}',
-                          fit: widget.contributor.type == ContributorType.company
-                              ? BoxFit.contain
-                              : BoxFit.cover,
-                          errorWidget: (_, __, ___) => const Icon(Icons.person, size: 40),
+                        child: Padding(
+                          padding: widget.contributor.type == ContributorType.company
+                              ? const EdgeInsets.symmetric(horizontal: 6)
+                              : EdgeInsets.zero,
+                          child: CachedNetworkImage(
+                            imageUrl: 'https://image.tmdb.org/t/p/w200${widget.contributor.profilePath}',
+                            fit: widget.contributor.type == ContributorType.company
+                                ? BoxFit.contain
+                                : BoxFit.cover,
+                            errorWidget: (_, __, ___) => const Icon(Icons.person, size: 40),
+                          ),
                         ),
                       )
                     : const Icon(Icons.person, size: 40),

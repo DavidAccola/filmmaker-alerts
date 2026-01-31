@@ -200,15 +200,15 @@ class _StreamingOptionsWidgetState extends State<StreamingOptionsWidget>
     BuildContext context,
     Map<String, List<StreamingOption>> merged,
   ) {
-    // Order: Free, Stream, Buy or Rent (or Buy/Rent separately)
+    // Order: Free, Stream, Buy or Rent (or Rent/Buy separately)
     final orderedKeys = <String>[];
     if (merged.containsKey('Free')) orderedKeys.add('Free');
     if (merged.containsKey('Stream')) orderedKeys.add('Stream');
     if (merged.containsKey('Buy or Rent')) {
       orderedKeys.add('Buy or Rent');
     } else {
-      if (merged.containsKey('Buy')) orderedKeys.add('Buy');
       if (merged.containsKey('Rent')) orderedKeys.add('Rent');
+      if (merged.containsKey('Buy')) orderedKeys.add('Buy');
     }
 
     return Column(

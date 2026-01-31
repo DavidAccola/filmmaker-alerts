@@ -241,17 +241,34 @@ class _HistoryScreenState extends ConsumerState<HistoryScreen> {
                             child: SizedBox(
                               width: 60,
                               child: Stack(
-                                fit: StackFit.expand,
                                 children: [
-                                  ClipRRect(
-                                    borderRadius: BorderRadius.zero,
-                                    child: item.posterPath != null
-                                        ? CachedNetworkImage(
-                                            imageUrl: 'https://image.tmdb.org/t/p/w200${item.posterPath}',
-                                            fit: BoxFit.cover,
-                                            errorWidget: (_, __, ___) => const Icon(Icons.movie),
-                                          )
-                                        : Container(color: Colors.grey, child: const Icon(Icons.movie)),
+                                  Align(
+                                    alignment: Alignment.topCenter,
+                                    child: ClipRRect(
+                                      borderRadius: const BorderRadius.only(
+                                        bottomLeft: Radius.circular(4),
+                                      ),
+                                      child: item.posterPath != null
+                                          ? CachedNetworkImage(
+                                              imageUrl: 'https://image.tmdb.org/t/p/w200${item.posterPath}',
+                                              fit: BoxFit.fitWidth,
+                                              width: 60,
+                                              placeholder: (_, __) => const SizedBox(
+                                                width: 60,
+                                                height: 90,
+                                              ),
+                                              errorWidget: (_, __, ___) => const SizedBox(
+                                                width: 60,
+                                                height: 90,
+                                                child: Icon(Icons.movie, color: Colors.grey),
+                                              ),
+                                            )
+                                          : const SizedBox(
+                                              width: 60,
+                                              height: 90,
+                                              child: Icon(Icons.movie, color: Colors.grey),
+                                            ),
+                                    ),
                                   ),
                                   Positioned(
                                     top: 2,

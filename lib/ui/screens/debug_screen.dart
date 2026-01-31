@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'dart:io';
+import 'package:window_manager/window_manager.dart';
 import '../../providers/providers.dart';
 import '../../logic/notification_logic.dart';
 import '../../data/models/preferences.dart';
@@ -9,6 +10,38 @@ import '../../data/models/contributor_detail.dart'; // For WorkType
 import '../../data/models/watchlist_entry.dart'; // For ReleaseNotificationPreferences
 import 'package:flutter/services.dart';
 import '../common/snackbar_utils.dart';
+
+/// Device dimension presets for testing responsive layouts
+class DevicePreset {
+  final String name;
+  final double width;
+  final double height;
+  final String category;
+
+  const DevicePreset(this.name, this.width, this.height, this.category);
+}
+
+const List<DevicePreset> _devicePresets = [
+  // Phones
+  DevicePreset('Samsung Galaxy S24 Ultra', 412, 915, 'Phone'),
+  DevicePreset('Samsung Galaxy S24', 360, 780, 'Phone'),
+  DevicePreset('Pixel 9 Pro XL', 411, 914, 'Phone'),
+  DevicePreset('Pixel 9', 412, 915, 'Phone'),
+  DevicePreset('iPhone 15 Pro Max', 430, 932, 'Phone'),
+  DevicePreset('iPhone 15', 393, 852, 'Phone'),
+  
+  // Tablets
+  DevicePreset('iPad Pro 12.9"', 1024, 1366, 'Tablet'),
+  DevicePreset('iPad Pro 11"', 834, 1194, 'Tablet'),
+  DevicePreset('iPad Air', 820, 1180, 'Tablet'),
+  DevicePreset('Samsung Galaxy Tab S9 Ultra', 900, 1422, 'Tablet'),
+  DevicePreset('Samsung Galaxy Tab S9', 753, 1193, 'Tablet'),
+  
+  // Desktop
+  DevicePreset('Desktop 1080p', 1920, 1080, 'Desktop'),
+  DevicePreset('Desktop 1440p', 2560, 1440, 'Desktop'),
+  DevicePreset('Laptop 13"', 1280, 800, 'Desktop'),
+];
 
 class DebugScreen extends ConsumerWidget {
   const DebugScreen({super.key});
@@ -41,6 +74,12 @@ class DebugScreen extends ConsumerWidget {
               'Is Windows: ${Platform.isWindows}',
               style: const TextStyle(fontSize: 16),
             ),
+            const SizedBox(height: 20),
+            
+            // Device Dimension Presets (Desktop only)
+            if (Platform.isWindows || Platform.isLinux || Platform.isMacOS)
+              _DeviceDimensionsCard(),
+            
             const SizedBox(height: 20),
             
             // Pretend Today Date Picker
@@ -1753,5 +1792,164 @@ class _QuickOptionChip extends StatelessWidget {
         ),
       ),
     );
+  }
+}
+
+
+class _DeviceDimensionsCard extends StatelessWidget {
+  @override
+  Widget build(BuildContext context) {
+    final currentSize = MediaQuery.of(context).size;
+    
+    return Card(
+      margin: const EdgeInsets.symmetric(horizontal: 32),
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                const Icon(Icons.devices, size: 20),
+                const SizedBox(width: 8),
+                const Text(
+                  'Device Dimension Presets',
+                  style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                ),
+                const Spacer(),
+                Text(
+                  '${currentSize.width.toInt()} × ${currentSize.height.toInt()}',
+                  style: TextStyle(
+                    fontSize: 12,
+                    color: Colors.grey[600],
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 8),
+            const Text(
+              'Click to resize window to device dimensions',
+              style: TextStyle(fontSize: 12, color: Colors.grey),
+            ),
+            const SizedBox(height: 16),
+            
+            // Phones section
+            _buildCategorySection(context, 'Phones', 'Phone'),
+            const SizedBox(height: 12),
+            
+            // Tablets section
+            _buildCategorySection(context, 'Tablets', 'Tablet'),
+            const SizedBox(height: 12),
+            
+            // Desktop section
+            _buildCategorySection(context, 'Desktop', 'Desktop'),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildCategorySection(BuildContext context, String title, String category) {
+    final devices = _devicePresets.where((d) => d.category == category).toList();
+    
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          title,
+          style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
+        ),
+        const SizedBox(height: 8),
+        Wrap(
+          spacing: 8,
+          runSpacing: 8,
+          children: devices.map((device) => _DeviceChip(device: device)).toList(),
+        ),
+      ],
+    );
+  }
+}
+
+class _DeviceChip extends StatelessWidget {
+  final DevicePreset device;
+
+  const _DeviceChip({required this.device});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      decoration: BoxDecoration(
+        border: Border.all(color: Theme.of(context).colorScheme.outline),
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          // Main device button (portrait)
+          InkWell(
+            onTap: () => _resizeWindow(context, device.width, device.height, device.name, 'portrait'),
+            borderRadius: const BorderRadius.horizontal(left: Radius.circular(7)),
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    device.name,
+                    style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w500),
+                  ),
+                  Text(
+                    '${device.width.toInt()} × ${device.height.toInt()}',
+                    style: TextStyle(fontSize: 10, color: Colors.grey[600]),
+                  ),
+                ],
+              ),
+            ),
+          ),
+          // Rotate button (landscape) - only for phones and tablets
+          if (device.category != 'Desktop')
+            Container(
+              decoration: BoxDecoration(
+                border: Border(
+                  left: BorderSide(color: Theme.of(context).colorScheme.outline),
+                ),
+              ),
+              child: InkWell(
+                onTap: () => _resizeWindow(context, device.height, device.width, device.name, 'landscape'),
+                borderRadius: const BorderRadius.horizontal(right: Radius.circular(7)),
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+                  child: Icon(
+                    Icons.screen_rotation,
+                    size: 16,
+                    color: Theme.of(context).colorScheme.onSurfaceVariant,
+                  ),
+                ),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _resizeWindow(BuildContext context, double width, double height, String name, String orientation) async {
+    try {
+      await windowManager.setSize(Size(width, height));
+      await windowManager.center();
+      
+      if (context.mounted) {
+        final orientationLabel = orientation == 'landscape' ? ' (landscape)' : '';
+        showSimpleSnackBar(
+          context,
+          'Resized to $name$orientationLabel (${width.toInt()} × ${height.toInt()})',
+        );
+      }
+    } catch (e) {
+      if (context.mounted) {
+        showSimpleSnackBar(context, 'Error resizing window: $e');
+      }
+    }
   }
 }

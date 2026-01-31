@@ -34,7 +34,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with TickerProviderStat
 
   /// Helper to update FAB raised state via provider
   void _setFabRaised(bool raised) {
-    ref.read(fabRaisedProvider.notifier).state = raised;
+    ref.read(fabRaisedProvider.notifier).setRaised(raised);
   }
 
   void _initTabController(int initialIndex) {
@@ -50,7 +50,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with TickerProviderStat
       // Update provider when user swipes or taps tab
       final currentProviderValue = ref.read(homeTabProvider);
       if (currentProviderValue != _tabController!.index) {
-        ref.read(homeTabProvider.notifier).state = _tabController!.index;
+        ref.read(homeTabProvider.notifier).setTab(_tabController!.index);
       }
     }
   }
@@ -159,7 +159,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with TickerProviderStat
           controller: _tabController!,
           onTap: (index) {
             // Update provider when user taps tab
-            ref.read(homeTabProvider.notifier).state = index;
+            ref.read(homeTabProvider.notifier).setTab(index);
           },
           tabs: const [
             Tab(text: 'People'),
@@ -192,272 +192,6 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with TickerProviderStat
             ],
           );
         },
-      ),
-      floatingActionButton: AnimatedPadding(
-        duration: const Duration(milliseconds: 200),
-        curve: Curves.easeInOut,
-        padding: EdgeInsets.only(bottom: fabBottomPadding),
-        child: Tooltip(
-          message: 'Find More to Follow',
-          waitDuration: const Duration(milliseconds: 250),
-          child: FloatingActionButton(
-            backgroundColor: const Color(0xFF2196F3), // Modern blue
-            foregroundColor: Colors.white,
-            onPressed: () async {
-              final result = await Navigator.push(context, MaterialPageRoute(builder: (_) => const AddContributorScreen()));
-              
-              if (context.mounted && result is Map && result['contributor'] is Contributor) {
-                final contributor = result['contributor'] as Contributor;
-                final roles = result['roles'] as List<String>?;
-                final availableRoles = result['availableRoles'] as List<String>? ?? [];
-                final allSelectedInit = result['allRolesSelected'] as bool? ?? false;
-
-                // Set the newly added contributor ID for key assignment
-                setState(() {
-                  _newlyAddedContributorId = contributor.tmdbId;
-                });
-
-                // Check if this is a watchlist item (movie/TV show/collection) or a contributor (person/company)
-                if (contributor.type == ContributorType.movie || 
-                    contributor.type == ContributorType.tvShow || 
-                    contributor.type == ContributorType.collection) {
-                  // Switch to Watchlist tab and set scroll target
-                  ref.read(homeTabProvider.notifier).state = 1;
-                  ref.read(watchlistScrollTargetProvider.notifier).state = contributor.tmdbId;
-                  
-                  // Clear scroll target after a delay
-                  Future.delayed(const Duration(seconds: 2), () {
-                    ref.read(watchlistScrollTargetProvider.notifier).state = null;
-                  });
-                  
-                  // For watchlist items, show the watchlist-specific snackbar with release preferences
-                  final watchlistLogic = ref.read(watchlistLogicProvider);
-                  final entry = watchlistLogic.getWork(
-                    contributor.tmdbId, 
-                    contributor.type == ContributorType.movie ? WorkType.movie : WorkType.tvShow
-                  );
-                  
-                  if (entry != null) {
-                    final prefs = entry.releaseNotificationPrefs;
-                    final selectedTypes = prefs?.selectedTypes ?? [];
-                    
-                    showWatchlistWithPreferencesSnackBar(
-                      context,
-                      workTitle: contributor.name,
-                      selectedReleaseTypes: selectedTypes,
-                      onUndo: () async {
-                        await watchlistLogic.removeWorkFromWatchlist(
-                          contributor.tmdbId,
-                          contributor.type == ContributorType.movie ? WorkType.movie : WorkType.tvShow,
-                        );
-                        ref.invalidate(watchlistEntriesProvider);
-                      },
-                      onEditPreferences: () async {
-                        // Show release preferences dialog (similar to watchlist_button.dart)
-                        final result = await showDialog<ReleaseNotificationPreferences>(
-                          context: context,
-                          builder: (context) => ReleasePreferencesDialog(
-                            workTitle: contributor.name,
-                            initialPreferences: entry.releaseNotificationPrefs ?? ReleaseNotificationPreferences(),
-                          ),
-                        );
-
-                        if (result != null) {
-                          // Update the entry with new preferences
-                          await watchlistLogic.updateReleaseNotificationPreferences(
-                            contributor.tmdbId, 
-                            contributor.type == ContributorType.movie ? WorkType.movie : WorkType.tvShow, 
-                            result
-                          );
-                          ref.invalidate(watchlistEntriesProvider);
-                          
-                          if (mounted) {
-                            showSimpleSnackBar(
-                              context,
-                              'Release preferences updated for ${contributor.name}',
-                              duration: const Duration(seconds: 2),
-                              onSnackBarVisibilityChanged: (isVisible) {
-                                _setFabRaised(isVisible);
-                              },
-                            );
-                          }
-                        }
-                      },
-                      onSnackBarVisibilityChanged: (isVisible) {
-                        _setFabRaised(isVisible);
-                      },
-                    );
-                  }
-                } else {
-                  // Switch to People tab
-                  ref.read(homeTabProvider.notifier).state = 0;
-                  
-                  // For contributors (people/companies), use the existing success snackbar
-                  showSuccessSnackBar(
-                    context,
-                    contributor: contributor,
-                    roles: roles ?? [],
-                    availableRoles: availableRoles,
-                    tvNotificationPrefs: result['tvNotificationPrefs'] as TvNotificationPreferences?,
-                    onSnackBarVisibilityChanged: (isVisible) {
-                      _setFabRaised(isVisible);
-                    },
-                    onChange: () async {
-                    final logic = ref.read(contributorLogicProvider);
-                    final repo = ref.read(preferencesRepositoryProvider);
-                    final prefs = repo.getPreferences();
-
-                    if (contributor.type == ContributorType.tvShow) {
-                      // Handle TV show preferences dialog
-                      final tvResult = await showDialog<Map<String, dynamic>>(
-                        context: context,
-                        builder: (context) => _TvNotificationPreferencesDialog(
-                          showName: contributor.name,
-                          currentPrefs: contributor.tvNotificationPrefs ?? TvNotificationPreferences(),
-                        ),
-                      );
-
-                      if (tvResult != null) {
-                        final newPrefs = tvResult['preferences'] as TvNotificationPreferences;
-                        final oldPrefs = contributor.tvNotificationPrefs ?? TvNotificationPreferences();
-                        
-                        // Check if preferences actually changed
-                        final hasChanges = oldPrefs.seriesPremiere != newPrefs.seriesPremiere ||
-                                          oldPrefs.seasonPremieres != newPrefs.seasonPremieres ||
-                                          oldPrefs.seasonFinales != newPrefs.seasonFinales ||
-                                          oldPrefs.newEpisodes != newPrefs.newEpisodes ||
-                                          oldPrefs.specials != newPrefs.specials;
-                        
-                        if (hasChanges) {
-                          final updatedContributor = Contributor(
-                            tmdbId: contributor.tmdbId,
-                            name: contributor.name,
-                            type: contributor.type,
-                            profilePath: contributor.profilePath,
-                            notifyForDepartments: contributor.notifyForDepartments,
-                            availableDepartments: contributor.availableDepartments,
-                            knownFor: contributor.knownFor,
-                            latestWork: contributor.latestWork,
-                            followedAt: contributor.followedAt,
-                            tvNotificationPrefs: newPrefs,
-                            showStatus: contributor.showStatus,
-                            totalSeasons: contributor.totalSeasons,
-                            nextEpisodeDate: contributor.nextEpisodeDate,
-                          );
-
-                          await logic.updateContributorRoles(updatedContributor, contributor.notifyForDepartments);
-                          ref.invalidate(contributorsProvider);
-                          if (context.mounted) {
-                            showSimpleSnackBar(
-                              context,
-                              'TV preferences updated.',
-                              onSnackBarVisibilityChanged: (isVisible) {
-                                _setFabRaised(isVisible);
-                              },
-                            );
-                          }
-                        } else {
-                          // No changes made
-                          if (context.mounted) {
-                            showSimpleSnackBar(
-                              context,
-                              'No changes made to TV preferences.',
-                              onSnackBarVisibilityChanged: (isVisible) {
-                                _setFabRaised(isVisible);
-                              },
-                            );
-                          }
-                        }
-                      }
-                    } else {
-                      // Handle person role selection dialog
-                      final resultDialog = await showDialog<dynamic>(
-                        context: context,
-                        builder: (context) => DepartmentSelectionDialog(
-                          name: contributor.name,
-                          availableDepartments: availableRoles,
-                          initialSelectedDepartments: roles ?? [],
-                          defaultDepartments: prefs.effectiveDefaultDepartments,
-                          initialAllRolesSelected: allSelectedInit,
-                          allowTrueAll: prefs.autoFollowNewRoles ?? true,
-                        ),
-                      );
-
-                      if (resultDialog != null && resultDialog is Map) {
-                        final selectedDepts = resultDialog['roles'] as List<String>;
-                        final allSelected = resultDialog['allRolesSelected'] as bool;
-                        
-                        // Check if roles actually changed
-                        final oldRoles = Set<String>.from(roles ?? []);
-                        final newRoles = Set<String>.from(selectedDepts);
-                        final oldAllSelected = allSelectedInit;
-                        
-                        const setEquality = SetEquality<String>();
-                        final hasRoleChanges = !setEquality.equals(oldRoles, newRoles) || oldAllSelected != allSelected;
-                        
-                        if (hasRoleChanges) {
-                          final enrichedForUpdate = Contributor(
-                            tmdbId: contributor.tmdbId,
-                            name: contributor.name,
-                            type: contributor.type,
-                            profilePath: contributor.profilePath,
-                            notifyForDepartments: selectedDepts,
-                            availableDepartments: availableRoles, 
-                            knownFor: contributor.knownFor,
-                            allRolesSelected: allSelected,
-                            followedAt: contributor.followedAt,
-                            latestWork: contributor.latestWork,
-                            tvNotificationPrefs: contributor.tvNotificationPrefs, // Preserve TV preferences
-                            showStatus: contributor.showStatus,
-                            totalSeasons: contributor.totalSeasons,
-                            nextEpisodeDate: contributor.nextEpisodeDate,
-                          );
-
-                          await logic.updateContributorRoles(enrichedForUpdate, selectedDepts);
-                          ref.invalidate(contributorsProvider);
-                          if (context.mounted) {
-                            showSimpleSnackBar(
-                              context,
-                              'Roles updated.',
-                              onSnackBarVisibilityChanged: (isVisible) {
-                                _setFabRaised(isVisible);
-                              },
-                            );
-                          }
-                        } else {
-                          // No changes made
-                          if (context.mounted) {
-                            showSimpleSnackBar(
-                              context,
-                              'No changes made to roles.',
-                              onSnackBarVisibilityChanged: (isVisible) {
-                                _setFabRaised(isVisible);
-                              },
-                            );
-                          }
-                        }
-                      }
-                    }
-                  },
-                );
-                }
-                
-                // Scroll to the newly added contributor
-                _scrollToNewContributor(contributor);
-                
-                // Clear the newly added contributor ID after a delay
-                Future.delayed(const Duration(seconds: 2), () {
-                  if (mounted) {
-                    setState(() {
-                      _newlyAddedContributorId = null;
-                    });
-                  }
-                });
-              }
-            },
-            child: const Icon(Icons.add),
-          ),
-        ),
       ),
     );
   }
@@ -736,28 +470,36 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with TickerProviderStat
                 if (useGrid)
                   SliverPadding(
                     padding: const EdgeInsets.symmetric(horizontal: 16),
-                    sliver: SliverGrid(
-                      gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
-                        maxCrossAxisExtent: 420,
-                        childAspectRatio: 2.7,
-                        crossAxisSpacing: 10,
-                        mainAxisSpacing: 10,
-                      ),
-                      delegate: SliverChildBuilderDelegate(
-                        (context, index) {
-                          final contributor = groups[type]![index];
-                          return ContributorCard(
-                            key: contributor.tmdbId == _newlyAddedContributorId 
-                                ? _newContributorKey 
-                                : ValueKey(contributor.tmdbId),
-                            contributor: contributor,
-                            onTap: () => _navigateToDetail(contributor),
-                            onRemove: () => _removeContributor(context, ref, contributor),
-                            onEditRoles: () => _editRoles(context, ref, contributor),
-                          );
-                        },
-                        childCount: groups[type]!.length,
-                      ),
+                    sliver: SliverLayoutBuilder(
+                      builder: (context, constraints) {
+                        // Use a smaller aspect ratio (taller cards) on narrower screens
+                        final screenWidth = constraints.crossAxisExtent;
+                        final aspectRatio = screenWidth < 500 ? 2.3 : 2.7;
+                        
+                        return SliverGrid(
+                          gridDelegate: SliverGridDelegateWithMaxCrossAxisExtent(
+                            maxCrossAxisExtent: 420,
+                            childAspectRatio: aspectRatio,
+                            crossAxisSpacing: 10,
+                            mainAxisSpacing: 10,
+                          ),
+                          delegate: SliverChildBuilderDelegate(
+                            (context, index) {
+                              final contributor = groups[type]![index];
+                              return ContributorCard(
+                                key: contributor.tmdbId == _newlyAddedContributorId 
+                                    ? _newContributorKey 
+                                    : ValueKey(contributor.tmdbId),
+                                contributor: contributor,
+                                onTap: () => _navigateToDetail(contributor),
+                                onRemove: () => _removeContributor(context, ref, contributor),
+                                onEditRoles: () => _editRoles(context, ref, contributor),
+                              );
+                            },
+                            childCount: groups[type]!.length,
+                          ),
+                        );
+                      },
                     ),
                   )
                 else

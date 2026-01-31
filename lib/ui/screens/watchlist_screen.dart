@@ -9,6 +9,7 @@ import '../common/watchlist_card.dart';
 import '../common/snackbar_utils.dart';
 import '../common/rewatch_dialog.dart';
 import 'add_contributor_screen.dart';
+import 'movie_detail_screen.dart';
 
 enum WatchlistSortOption {
   addOrder,
@@ -52,7 +53,7 @@ class _WatchlistScreenState extends ConsumerState<WatchlistScreen>
 
   /// Helper to update FAB raised state via provider (shared with HomeScreen)
   void _setFabRaised(bool raised) {
-    ref.read(fabRaisedProvider.notifier).state = raised;
+    ref.read(fabRaisedProvider.notifier).setRaised(raised);
   }
 
   @override
@@ -93,9 +94,9 @@ class _WatchlistScreenState extends ConsumerState<WatchlistScreen>
     final maxScroll = _scrollController.position.maxScrollExtent;
     
     // Estimate the scroll position based on grid layout
-    // Grid has 2 columns with maxCrossAxisExtent: 200, childAspectRatio: 0.48
-    // So each item is roughly 200 wide and 200/0.48 = ~416 tall
-    const itemHeight = 416.0; // More accurate height estimate
+    // Grid has columns with maxCrossAxisExtent: 150, childAspectRatio: 0.43
+    // So each item is roughly 150 wide and 150/0.43 = ~349 tall
+    const itemHeight = 349.0; // Height estimate for scroll calculation
     const spacing = 16.0;
     const padding = 16.0;
     const itemsPerRow = 2;
@@ -187,12 +188,6 @@ class _WatchlistScreenState extends ConsumerState<WatchlistScreen>
               padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
               child: Row(
                 children: [
-                  // Add test data button (for testing)
-                  IconButton(
-                    icon: const Icon(Icons.add),
-                    onPressed: _addTestData,
-                    tooltip: 'Add Test Data',
-                  ),
                   const Spacer(),
                   // Filter button with dropdown menu
                   PopupMenuButton<String>(
@@ -585,12 +580,10 @@ class _WatchlistScreenState extends ConsumerState<WatchlistScreen>
                                         child: Row(
                                           children: [
                                             SizedBox(
-                                              width: 200,
+                                              width: 150,
                                               child: WatchlistCard(
                                                 entry: entry,
-                                                onTap: () {
-                                                  // TODO: Navigate to detail screen
-                                                },
+                                                onTap: () => _navigateToDetail(entry),
                                                 onDelete: () => _handleDelete(entry),
                                                 onSnooze: () => _handleHide(entry),
                                                 onToggleNotificationSnooze: () =>
@@ -609,114 +602,118 @@ class _WatchlistScreenState extends ConsumerState<WatchlistScreen>
                                       );
                                     },
                                   )
-                                : CustomScrollView(
-                                    controller: _scrollController,
-                                    slivers: [
-                                      // Active items grid
-                                      SliverPadding(
-                                        padding: const EdgeInsets.all(16),
-                                        sliver: SliverGrid(
-                                          gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
-                                            maxCrossAxisExtent: 200,
-                                            childAspectRatio: 0.55,
-                                            crossAxisSpacing: 16,
-                                            mainAxisSpacing: 8,
-                                          ),
-                                          delegate: SliverChildBuilderDelegate(
-                                            (context, index) {
-                                              final entry = sortedEntries[index];
-                                              return AnimatedSwitcher(
-                                                duration: const Duration(milliseconds: 300),
-                                                child: WatchlistCard(
-                                                  key: ValueKey(entry.uniqueKey),
-                                                  entry: entry,
-                                                  onTap: () {
-                                                    // TODO: Navigate to detail screen
-                                                  },
-                                                  onDelete: () => _handleDelete(entry),
-                                                  onSnooze: () => _handleHide(entry),
-                                                  onToggleNotificationSnooze: () =>
-                                                      _handleToggleNotificationSnooze(entry),
-                                                  onStatusChanged: (status) =>
-                                                      _handleStatusChanged(entry, status),
-                                                ),
-                                              );
-                                            },
-                                            childCount: sortedEntries.length,
-                                          ),
-                                        ),
-                                      ),
+                                : LayoutBuilder(
+                                    builder: (context, constraints) {
+                                      // Use taller cards on small screens to prevent overflow
+                                      final isSmallScreen = constraints.maxWidth < 400;
+                                      final aspectRatio = isSmallScreen ? 0.38 : 0.43;
                                       
-                                      // Hidden section header (if showing hidden items)
-                                      if (sortedHiddenEntries.isNotEmpty) ...[
-                                        SliverToBoxAdapter(
-                                          child: Padding(
-                                            padding: const EdgeInsets.fromLTRB(16, 24, 16, 8),
-                                            child: Row(
-                                              children: [
-                                                Expanded(
-                                                  child: Divider(
-                                                    color: theme.colorScheme.outlineVariant,
-                                                  ),
-                                                ),
-                                                Padding(
-                                                  padding: const EdgeInsets.symmetric(horizontal: 16),
-                                                  child: Text(
-                                                    'HIDDEN',
-                                                    style: theme.textTheme.labelMedium?.copyWith(
-                                                      color: theme.colorScheme.onSurfaceVariant,
-                                                    ),
-                                                  ),
-                                                ),
-                                                Expanded(
-                                                  child: Divider(
-                                                    color: theme.colorScheme.outlineVariant,
-                                                  ),
-                                                ),
-                                              ],
-                                            ),
-                                          ),
-                                        ),
-                                        
-                                        // Hidden items grid
-                                        SliverPadding(
-                                          padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
-                                          sliver: SliverGrid(
-                                            gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
-                                              maxCrossAxisExtent: 200,
-                                              childAspectRatio: 0.55,
-                                              crossAxisSpacing: 16,
-                                              mainAxisSpacing: 8,
-                                            ),
-                                            delegate: SliverChildBuilderDelegate(
-                                              (context, index) {
-                                                final entry = sortedHiddenEntries[index];
-                                                return Opacity(
-                                                  opacity: 0.5,
-                                                  child: AnimatedSwitcher(
+                                      return CustomScrollView(
+                                        controller: _scrollController,
+                                        slivers: [
+                                          // Active items grid
+                                          SliverPadding(
+                                            padding: const EdgeInsets.all(16),
+                                            sliver: SliverGrid(
+                                              gridDelegate: SliverGridDelegateWithMaxCrossAxisExtent(
+                                                maxCrossAxisExtent: 150,
+                                                childAspectRatio: aspectRatio,
+                                                crossAxisSpacing: 12,
+                                                mainAxisSpacing: 6,
+                                              ),
+                                              delegate: SliverChildBuilderDelegate(
+                                                (context, index) {
+                                                  final entry = sortedEntries[index];
+                                                  return AnimatedSwitcher(
                                                     duration: const Duration(milliseconds: 300),
                                                     child: WatchlistCard(
                                                       key: ValueKey(entry.uniqueKey),
                                                       entry: entry,
-                                                      onTap: () {
-                                                        // TODO: Navigate to detail screen
-                                                      },
+                                                      onTap: () => _navigateToDetail(entry),
                                                       onDelete: () => _handleDelete(entry),
-                                                      onSnooze: () => _handleUnhide(entry),
+                                                      onSnooze: () => _handleHide(entry),
                                                       onToggleNotificationSnooze: () =>
                                                           _handleToggleNotificationSnooze(entry),
                                                       onStatusChanged: (status) =>
                                                           _handleStatusChanged(entry, status),
                                                     ),
-                                                  ),
-                                                );
-                                              },
-                                              childCount: sortedHiddenEntries.length,
+                                                  );
+                                                },
+                                                childCount: sortedEntries.length,
+                                              ),
                                             ),
                                           ),
-                                        ),
-                                      ],
-                                    ],
+                                          
+                                          // Hidden section header (if showing hidden items)
+                                          if (sortedHiddenEntries.isNotEmpty) ...[
+                                            SliverToBoxAdapter(
+                                              child: Padding(
+                                                padding: const EdgeInsets.fromLTRB(16, 24, 16, 8),
+                                                child: Row(
+                                                  children: [
+                                                    Expanded(
+                                                      child: Divider(
+                                                        color: theme.colorScheme.outlineVariant,
+                                                      ),
+                                                    ),
+                                                    Padding(
+                                                      padding: const EdgeInsets.symmetric(horizontal: 16),
+                                                      child: Text(
+                                                        'HIDDEN',
+                                                        style: theme.textTheme.labelMedium?.copyWith(
+                                                          color: theme.colorScheme.onSurfaceVariant,
+                                                        ),
+                                                      ),
+                                                    ),
+                                                    Expanded(
+                                                      child: Divider(
+                                                        color: theme.colorScheme.outlineVariant,
+                                                      ),
+                                                    ),
+                                                  ],
+                                                ),
+                                              ),
+                                            ),
+                                            
+                                            // Hidden items grid
+                                            SliverPadding(
+                                              padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+                                              sliver: SliverGrid(
+                                                gridDelegate: SliverGridDelegateWithMaxCrossAxisExtent(
+                                                  maxCrossAxisExtent: 150,
+                                                  childAspectRatio: aspectRatio,
+                                                  crossAxisSpacing: 12,
+                                                  mainAxisSpacing: 6,
+                                                ),
+                                                delegate: SliverChildBuilderDelegate(
+                                                  (context, index) {
+                                                    final entry = sortedHiddenEntries[index];
+                                                    return Opacity(
+                                                      opacity: 0.5,
+                                                      child: AnimatedSwitcher(
+                                                        duration: const Duration(milliseconds: 300),
+                                                        child: WatchlistCard(
+                                                          key: ValueKey(entry.uniqueKey),
+                                                          entry: entry,
+                                                          onTap: () => _navigateToDetail(entry),
+                                                          onDelete: () => _handleDelete(entry),
+                                                          onSnooze: () => _handleUnhide(entry),
+                                                          onToggleNotificationSnooze: () =>
+                                                              _handleToggleNotificationSnooze(entry),
+                                                          onStatusChanged: (status) =>
+                                                              _handleStatusChanged(entry, status),
+                                                        ),
+                                                      ),
+                                                    );
+                                                  },
+                                                  childCount: sortedHiddenEntries.length,
+                                                ),
+                                              ),
+                                            ),
+                                          ],
+                                        ],
+                                      );
+                                    },
                                   ),
                           ),
                         ],
@@ -847,53 +844,17 @@ class _WatchlistScreenState extends ConsumerState<WatchlistScreen>
     return sorted;
   }
 
-  Future<void> _addTestData() async {
-    final logic = ref.read(watchlistLogicProvider);
-    
-    // Add a few test movies and shows
-    await logic.addWorkToWatchlist(
-      tmdbId: 550,
-      type: WorkType.movie,
-      title: 'Fight Club',
-      posterPath: '/pB8BM7pdSp6B6Ih7QZ4DrQ3PmJK.jpg',
-      releaseDate: DateTime(1999, 10, 15),
-      releaseType: ReleaseType.theatrical,
-    );
-    
-    await logic.addWorkToWatchlist(
-      tmdbId: 13,
-      type: WorkType.movie,
-      title: 'Forrest Gump',
-      posterPath: '/arw2vcBveWOVZr6pxd9XTd1TdQa.jpg',
-      releaseDate: DateTime(1994, 7, 6),
-      releaseType: ReleaseType.theatrical,
-    );
-    
-    await logic.addWorkToWatchlist(
-      tmdbId: 1396,
-      type: WorkType.tvShow,
-      title: 'Breaking Bad',
-      posterPath: '/ggFHVNu6YYI5L9pCfOacjizRGt.jpg',
-      releaseDate: DateTime(2008, 1, 20),
-      releaseType: ReleaseType.streaming,
-    );
-    
-    await logic.addWorkToWatchlist(
-      tmdbId: 94605,
-      type: WorkType.tvShow,
-      title: 'Arcane',
-      posterPath: '/fqldf2t8ztc9aiwn3k6mlX3tvRT.jpg',
-      releaseDate: DateTime(2021, 11, 6),
-      releaseType: ReleaseType.streaming,
-    );
-    
-    ref.invalidate(watchlistEntriesProvider);
-    
-    if (mounted) {
-      showSimpleSnackBar(
+  void _navigateToDetail(WatchlistEntry entry) {
+    // Only navigate for movies - TV shows have their own detail flow
+    if (entry.type == WorkType.movie) {
+      Navigator.push(
         context,
-        'Added 4 test items to watchlist',
-        onSnackBarVisibilityChanged: (isVisible) => _setFabRaised(isVisible),
+        MaterialPageRoute(
+          builder: (context) => MovieDetailScreen(
+            movieId: entry.tmdbId,
+            movieTitle: entry.title,
+          ),
+        ),
       );
     }
   }

@@ -235,12 +235,12 @@ class _SearchResultsScreenState extends ConsumerState<SearchResultsScreen> {
               },
               onView: () {
                 // Set tab and scroll target via providers
-                ref.read(homeTabProvider.notifier).state = 1;
-                ref.read(watchlistScrollTargetProvider.notifier).state = contributor.tmdbId;
+                ref.read(homeTabProvider.notifier).setTab(1);
+                ref.read(watchlistScrollTargetProvider.notifier).setTarget(contributor.tmdbId);
                 
                 // Clear scroll target after a delay
                 Future.delayed(const Duration(seconds: 2), () {
-                  ref.read(watchlistScrollTargetProvider.notifier).state = null;
+                  ref.read(watchlistScrollTargetProvider.notifier).clear();
                 });
                 
                 // Pop back to home screen
@@ -381,16 +381,21 @@ class _SearchResultsScreenState extends ConsumerState<SearchResultsScreen> {
                                 height: 75,
                                 decoration: BoxDecoration(
                                   color: contributor.type == ContributorType.company 
-                                      ? Colors.white 
+                                      ? (theme.brightness == Brightness.dark ? Colors.grey[300] : Colors.white)
                                       : theme.colorScheme.surfaceContainerHighest,
                                   borderRadius: BorderRadius.circular(4.0),
                                 ),
                                 clipBehavior: Clip.antiAlias,
                                 child: contributor.profilePath != null
-                                    ? CachedNetworkImage(
-                                        imageUrl: 'https://image.tmdb.org/t/p/w200${contributor.profilePath}',
-                                        fit: BoxFit.contain,
-                                        errorWidget: (_, __, ___) => const Icon(Icons.broken_image),
+                                    ? Padding(
+                                        padding: contributor.type == ContributorType.company
+                                            ? const EdgeInsets.symmetric(horizontal: 4)
+                                            : EdgeInsets.zero,
+                                        child: CachedNetworkImage(
+                                          imageUrl: 'https://image.tmdb.org/t/p/w200${contributor.profilePath}',
+                                          fit: BoxFit.contain,
+                                          errorWidget: (_, __, ___) => const Icon(Icons.broken_image),
+                                        ),
                                       )
                                     : Icon(contributor.type == ContributorType.person ? Icons.person : Icons.business),
                               ),
@@ -416,6 +421,7 @@ class _SearchResultsScreenState extends ConsumerState<SearchResultsScreen> {
                                       iconSize: 18,
                                       isCardHovered: isCardHovered,
                                     ),
+                              onTap: isFollowed ? null : () => _addContributor(contributor),
                             ),
                           ),
                         );

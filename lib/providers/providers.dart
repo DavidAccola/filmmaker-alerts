@@ -1,6 +1,5 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:flutter_riverpod/legacy.dart';
 import '../data/models/contributor.dart';
 import '../data/models/contributor_detail.dart';
 import '../data/models/movie_detail.dart';
@@ -340,17 +339,62 @@ final tvEpisodeDetailProvider = FutureProvider.autoDispose.family<TvEpisodeDetai
 });
 
 // --- UI State ---
-final selectedTabProvider = StateProvider<int>((ref) => 0);
+
+/// Notifier for main navigation tab state (0 = Home, 1 = History, 2 = Settings)
+class SelectedTabNotifier extends Notifier<int> {
+  @override
+  int build() => 0;
+
+  void setTab(int index) {
+    state = index;
+  }
+}
+
+/// Notifier for home screen tab state (0 = People, 1 = Watchlist)
+class HomeTabNotifier extends Notifier<int> {
+  @override
+  int build() => 0;
+
+  void setTab(int index) {
+    state = index;
+  }
+}
+
+/// Notifier for watchlist scroll target - TMDB ID of item to scroll to, or null
+class WatchlistScrollTargetNotifier extends Notifier<int?> {
+  @override
+  int? build() => null;
+
+  void setTarget(int? tmdbId) {
+    state = tmdbId;
+  }
+
+  void clear() {
+    state = null;
+  }
+}
+
+/// Notifier for FAB raised state - controls whether FAB should be raised for snackbars
+class FabRaisedNotifier extends Notifier<bool> {
+  @override
+  bool build() => false;
+
+  void setRaised(bool raised) {
+    state = raised;
+  }
+}
+
+final selectedTabProvider = NotifierProvider<SelectedTabNotifier, int>(SelectedTabNotifier.new);
 
 /// Home screen tab state (0 = People, 1 = Watchlist)
 /// This is managed at the provider level to persist across screen resizes
-final homeTabProvider = StateProvider<int>((ref) => 0);
+final homeTabProvider = NotifierProvider<HomeTabNotifier, int>(HomeTabNotifier.new);
 
 /// Scroll target for watchlist - set this to scroll to a specific item
-final watchlistScrollTargetProvider = StateProvider<int?>((ref) => null);
+final watchlistScrollTargetProvider = NotifierProvider<WatchlistScrollTargetNotifier, int?>(WatchlistScrollTargetNotifier.new);
 
 /// FAB visibility state - controls whether the FAB should be raised for snackbars
-final fabRaisedProvider = StateProvider<bool>((ref) => false);
+final fabRaisedProvider = NotifierProvider<FabRaisedNotifier, bool>(FabRaisedNotifier.new);
 
 // --- Watchlist Providers ---
 

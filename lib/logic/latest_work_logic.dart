@@ -160,7 +160,17 @@ class LatestWorkLogic {
     final isTV = latest['first_air_date'] != null; // TV content has first_air_date instead of release_date
     
     // Aggregation: Find all credits for this specific movie/show to list all roles (e.g. Director, Writer)
-    final allRolesForLatest = validCredits.where((c) => c['id'] == latest['id']);
+    final allRolesForLatest = validCredits.where((c) => c['id'] == latest['id']).toList();
+    
+    // Sort so crew roles come before acting roles
+    allRolesForLatest.sort((a, b) {
+      final aIsCast = a['_is_cast'] == true;
+      final bIsCast = b['_is_cast'] == true;
+      if (aIsCast && !bIsCast) return 1;  // Cast after crew
+      if (!aIsCast && bIsCast) return -1; // Crew before cast
+      return 0;
+    });
+    
     final Set<String> distinctJobs = {};
     
     for (var role in allRolesForLatest) {

@@ -14,20 +14,6 @@ showSimpleSnackBar(context, 'Your message here');
 showSimpleSnackBar(context, 'Message', duration: const Duration(seconds: 3));
 ```
 
-### For simple messages with FAB repositioning (in screens with FloatingActionButton):
-Use `showSimpleSnackBar()` with the `onSnackBarVisibilityChanged` callback:
-```dart
-showSimpleSnackBar(
-  context,
-  'Your message here',
-  onSnackBarVisibilityChanged: (isVisible) {
-    setState(() {
-      _fabBottomPadding = isVisible ? 70.0 : 0.0;
-    });
-  },
-);
-```
-
 ### For success messages when following contributors:
 Use `showSuccessSnackBar()`:
 ```dart
@@ -38,7 +24,6 @@ showSuccessSnackBar(
   availableRoles: allRoles,
   onChange: () { /* handle role change */ },
   tvNotificationPrefs: tvPrefs, // optional, for TV shows
-  onSnackBarVisibilityChanged: (isVisible) { /* handle FAB animation */ }, // optional
 );
 ```
 
@@ -49,7 +34,6 @@ showRemovalSnackBar(
   context,
   message: 'Removed ${contributor.name}',
   onUndo: () { /* handle undo */ },
-  onSnackBarVisibilityChanged: (isVisible) { /* handle FAB animation */ }, // optional
 );
 ```
 
@@ -62,43 +46,7 @@ showRemovalSnackBar(
 - ✅ Hover adds half the used time back
 - ✅ Consistent Material design styling
 - ✅ Proper color theming (dark/light mode)
-
-## FAB Repositioning Pattern:
-When a screen has a FloatingActionButton that should move up to avoid snackbars:
-
-1. Add a state variable to track FAB padding:
-```dart
-double _fabBottomPadding = 0.0;
-```
-
-2. Wrap the FAB with AnimatedPadding and AnimatedOpacity:
-```dart
-floatingActionButton: AnimatedOpacity(
-  opacity: _fabBottomPadding > 0 ? 0.7 : 1.0,
-  duration: const Duration(milliseconds: 200),
-  child: AnimatedPadding(
-    duration: const Duration(milliseconds: 200),
-    curve: Curves.easeInOut,
-    padding: EdgeInsets.only(bottom: _fabBottomPadding),
-    child: FloatingActionButton(
-      // ... FAB content
-    ),
-  ),
-),
-```
-
-3. Pass the callback to all snackbars shown from that screen:
-```dart
-showSimpleSnackBar(
-  context,
-  'Message',
-  onSnackBarVisibilityChanged: (isVisible) {
-    setState(() {
-      _fabBottomPadding = isVisible ? 70.0 : 0.0;
-    });
-  },
-);
-```
+- ✅ Fixed positioning at bottom edge (doesn't interfere with FAB)
 
 ## DO NOT use:
 - ❌ `ScaffoldMessenger.of(context).showSnackBar(SnackBar(...))`

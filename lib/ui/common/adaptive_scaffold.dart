@@ -6,6 +6,7 @@ class AdaptiveScaffold extends StatelessWidget {
   final ValueChanged<int> onDestinationSelected;
   final List<NavigationDestination> destinations;
   final Widget? trailing;
+  final Widget? floatingActionButton;
 
   const AdaptiveScaffold({
     super.key,
@@ -14,6 +15,7 @@ class AdaptiveScaffold extends StatelessWidget {
     required this.onDestinationSelected,
     required this.destinations,
     this.trailing,
+    this.floatingActionButton,
   });
 
   @override
@@ -25,6 +27,7 @@ class AdaptiveScaffold extends StatelessWidget {
           // Mobile / Tablet Portrait -> Bottom Navigation Bar
           return Scaffold(
             body: body,
+            floatingActionButton: floatingActionButton,
             bottomNavigationBar: NavigationBar(
               selectedIndex: selectedIndex,
               onDestinationSelected: onDestinationSelected,
@@ -53,6 +56,7 @@ class AdaptiveScaffold extends StatelessWidget {
                 Expanded(child: body),
               ],
             ),
+            floatingActionButton: floatingActionButton,
           );
         }
       },

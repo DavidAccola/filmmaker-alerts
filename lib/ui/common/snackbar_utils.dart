@@ -19,6 +19,7 @@ void showSimpleSnackBar(
       backgroundColor: Colors.transparent,
       elevation: 0,
       padding: EdgeInsets.zero,
+      behavior: SnackBarBehavior.fixed,
       content: _SimpleSnackBarContent(
         message: message,
         duration: duration,
@@ -74,6 +75,7 @@ void showSuccessSnackBar(
       backgroundColor: Colors.transparent,
       elevation: 0,
       padding: EdgeInsets.zero,
+      behavior: SnackBarBehavior.fixed,
       content: _TimerSnackBarContent(
         message: message,
         duration: timerDuration,
@@ -100,6 +102,7 @@ void showRemovalSnackBar(
       backgroundColor: Colors.transparent,
       elevation: 0,
       padding: EdgeInsets.zero,
+      behavior: SnackBarBehavior.fixed,
       content: _TimerSnackBarContent(
         message: message,
         duration: const Duration(seconds: 4),
@@ -129,6 +132,7 @@ void showWatchlistSnackBar(
       backgroundColor: Colors.transparent,
       elevation: 0,
       padding: EdgeInsets.zero,
+      behavior: SnackBarBehavior.fixed,
       content: _WatchlistSnackBarContent(
         message: message,
         duration: const Duration(seconds: 5),
@@ -174,6 +178,7 @@ void showWatchlistWithPreferencesSnackBar(
       backgroundColor: Colors.transparent,
       elevation: 0,
       padding: EdgeInsets.zero,
+      behavior: SnackBarBehavior.fixed,
       content: _TimerSnackBarContent(
         message: message,
         duration: timerDuration,
@@ -212,6 +217,7 @@ void showTvWatchlistSnackBar(
       backgroundColor: Colors.transparent,
       elevation: 0,
       padding: EdgeInsets.zero,
+      behavior: SnackBarBehavior.fixed,
       content: _TimerSnackBarContent(
         message: message,
         duration: timerDuration,
@@ -238,6 +244,7 @@ void showAlreadyFollowedSnackBar(
       backgroundColor: Colors.transparent,
       elevation: 0,
       padding: EdgeInsets.zero,
+      behavior: SnackBarBehavior.fixed,
       content: _TimerSnackBarContent(
         message: '$contributorName already followed',
         duration: const Duration(seconds: 4),
@@ -451,6 +458,7 @@ void showAlreadyInWatchlistSnackBar(
       backgroundColor: Colors.transparent,
       elevation: 0,
       padding: EdgeInsets.zero,
+      behavior: SnackBarBehavior.fixed,
       content: _TimerSnackBarContent(
         message: '$title already in watchlist',
         duration: const Duration(seconds: 4),
@@ -508,6 +516,7 @@ void showUnreleasedWarningSnackBar(
       backgroundColor: Colors.transparent,
       elevation: 0,
       padding: EdgeInsets.zero,
+      behavior: SnackBarBehavior.fixed,
       content: _WarningSnackBarContent(
         message: '⚠️ $title hasn\'t been released yet',
         duration: const Duration(seconds: 4),
@@ -533,6 +542,7 @@ void showSnoozedSnackBar(
       backgroundColor: Colors.transparent,
       elevation: 0,
       padding: EdgeInsets.zero,
+      behavior: SnackBarBehavior.fixed,
       content: _TimerSnackBarContent(
         message: '$title frozen',
         duration: const Duration(seconds: 4),
@@ -584,6 +594,7 @@ void showDragReorderWarningSnackBar(
       backgroundColor: Colors.transparent,
       elevation: 0,
       padding: EdgeInsets.zero,
+      behavior: SnackBarBehavior.fixed,
       content: _WarningSnackBarContent(
         message: '⚠️ You have filters on. Reordering may jump over filtered items.',
         duration: const Duration(seconds: 4),

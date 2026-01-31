@@ -100,61 +100,6 @@ class _MainScreenState extends ConsumerState<MainScreen> with WindowListener {
     debugPrint('[MainScreen] Window restored');
   }
 
-  void _handleContributorResult(dynamic result) {
-    if (result is Map && result['contributor'] is Contributor) {
-      final contributor = result['contributor'] as Contributor;
-      final roles = result['roles'] as List<String>?;
-      final availableRoles = result['availableRoles'] as List<String>? ?? [];
-      final allSelectedInit = result['allRolesSelected'] as bool? ?? false;
-
-      if (!mounted) return;
-
-      showSuccessSnackBar(
-        context,
-        contributor: contributor,
-        roles: roles ?? [],
-        availableRoles: availableRoles,
-        onChange: () async {
-              final logic = ref.read(contributorLogicProvider);
-              final prefs = ref.read(preferencesRepositoryProvider).getPreferences();
-
-              final resultDialog = await showDialog<dynamic>(
-                context: context,
-                builder: (context) => DepartmentSelectionDialog(
-                  name: contributor.name,
-                  availableDepartments: availableRoles,
-                  initialSelectedDepartments: roles ?? [],
-                  defaultDepartments: prefs.effectiveDefaultDepartments,
-                  initialAllRolesSelected: allSelectedInit,
-                  allowTrueAll: prefs.autoFollowNewRoles ?? true,
-                ),
-              );
-
-              if (resultDialog != null && resultDialog is Map) {
-                final selectedDepts = resultDialog['roles'] as List<String>;
-
-                // Reconstruct contributor with correct flags
-                final enrichedForUpdate = Contributor(
-                  tmdbId: contributor.tmdbId,
-                  name: contributor.name,
-                  type: contributor.type,
-                  profilePath: contributor.profilePath,
-                  notifyForDepartments: selectedDepts,
-                  availableDepartments: availableRoles,
-                  knownFor: contributor.knownFor,
-                );
-
-                await logic.updateContributorRoles(enrichedForUpdate, selectedDepts);
-                ref.invalidate(contributorsProvider);
-                if (mounted) {
-                  showSimpleSnackBar(context, 'Roles updated.');
-                }
-              }
-        },
-      );
-    }
-  }
-
   @override
   Widget build(BuildContext context) {
     // Listen for contributor data to check onboarding
@@ -171,7 +116,7 @@ class _MainScreenState extends ConsumerState<MainScreen> with WindowListener {
                 context,
                 MaterialPageRoute(builder: (_) => const AddContributorScreen()),
               );
-              _handleContributorResult(result);
+              _handleAddContributorResult(result);
             }
           });
         } else if (list.isNotEmpty) {
@@ -181,6 +126,9 @@ class _MainScreenState extends ConsumerState<MainScreen> with WindowListener {
     });
 
     final selectedIndex = ref.watch(selectedTabProvider);
+    
+    // Show FAB only on Home (0) and History (1) tabs
+    final showFab = selectedIndex == 0 || selectedIndex == 1;
 
     return CallbackShortcuts(
       bindings: {
@@ -189,7 +137,7 @@ class _MainScreenState extends ConsumerState<MainScreen> with WindowListener {
             context,
             MaterialPageRoute(builder: (_) => const AddContributorScreen()),
           );
-          _handleContributorResult(result);
+          _handleAddContributorResult(result);
         },
         const SingleActivator(LogicalKeyboardKey.keyR, control: true): () {
           if (kDebugMode) {
@@ -203,7 +151,7 @@ class _MainScreenState extends ConsumerState<MainScreen> with WindowListener {
         child: AdaptiveScaffold(
           selectedIndex: selectedIndex,
           onDestinationSelected: (index) {
-            ref.read(selectedTabProvider.notifier).state = index;
+            ref.read(selectedTabProvider.notifier).setTab(index);
           },
           destinations: const [
             NavigationDestination(
@@ -228,8 +176,103 @@ class _MainScreenState extends ConsumerState<MainScreen> with WindowListener {
             ),
           ],
           body: _screens[selectedIndex],
+          floatingActionButton: showFab ? Tooltip(
+            message: 'Find More to Follow',
+            waitDuration: const Duration(milliseconds: 250),
+            child: FloatingActionButton(
+              backgroundColor: const Color(0xFF2196F3),
+              foregroundColor: Colors.white,
+              onPressed: () async {
+                final result = await Navigator.push(
+                  context,
+                  MaterialPageRoute(builder: (_) => const AddContributorScreen()),
+                );
+                _handleAddContributorResult(result);
+              },
+              child: const Icon(Icons.add),
+            ),
+          ) : null,
         ),
       ),
     );
+  }
+  
+  void _handleAddContributorResult(dynamic result) {
+    if (!mounted) return;
+    if (result is! Map || result['contributor'] is! Contributor) return;
+    
+    final contributor = result['contributor'] as Contributor;
+    final roles = result['roles'] as List<String>?;
+    final availableRoles = result['availableRoles'] as List<String>? ?? [];
+    final allSelectedInit = result['allRolesSelected'] as bool? ?? false;
+    
+    // Check if this is a watchlist item or a contributor
+    if (contributor.type == ContributorType.movie || 
+        contributor.type == ContributorType.tvShow || 
+        contributor.type == ContributorType.collection) {
+      // Navigate to Home tab, then Watchlist tab
+      ref.read(selectedTabProvider.notifier).setTab(0);
+      ref.read(homeTabProvider.notifier).setTab(1);
+      ref.read(watchlistScrollTargetProvider.notifier).setTarget(contributor.tmdbId);
+      
+      // Clear scroll target after a delay
+      Future.delayed(const Duration(seconds: 2), () {
+        ref.read(watchlistScrollTargetProvider.notifier).clear();
+      });
+      
+      // Show snackbar for watchlist item
+      showSimpleSnackBar(
+        context,
+        'Added "${contributor.name}" to watchlist',
+      );
+    } else {
+      // Navigate to Home tab, then People tab
+      ref.read(selectedTabProvider.notifier).setTab(0);
+      ref.read(homeTabProvider.notifier).setTab(0);
+      
+      // Show success snackbar for contributor
+      showSuccessSnackBar(
+        context,
+        contributor: contributor,
+        roles: roles ?? [],
+        availableRoles: availableRoles,
+        onChange: () async {
+          final logic = ref.read(contributorLogicProvider);
+          final prefs = ref.read(preferencesRepositoryProvider).getPreferences();
+
+          final resultDialog = await showDialog<dynamic>(
+            context: context,
+            builder: (context) => DepartmentSelectionDialog(
+              name: contributor.name,
+              availableDepartments: availableRoles,
+              initialSelectedDepartments: roles ?? [],
+              defaultDepartments: prefs.effectiveDefaultDepartments,
+              initialAllRolesSelected: allSelectedInit,
+              allowTrueAll: prefs.autoFollowNewRoles ?? true,
+            ),
+          );
+
+          if (resultDialog != null && resultDialog is Map) {
+            final selectedDepts = resultDialog['roles'] as List<String>;
+
+            final enrichedForUpdate = Contributor(
+              tmdbId: contributor.tmdbId,
+              name: contributor.name,
+              type: contributor.type,
+              profilePath: contributor.profilePath,
+              notifyForDepartments: selectedDepts,
+              availableDepartments: availableRoles,
+              knownFor: contributor.knownFor,
+            );
+
+            await logic.updateContributorRoles(enrichedForUpdate, selectedDepts);
+            ref.invalidate(contributorsProvider);
+            if (mounted) {
+              showSimpleSnackBar(context, 'Roles updated.');
+            }
+          }
+        },
+      );
+    }
   }
 }

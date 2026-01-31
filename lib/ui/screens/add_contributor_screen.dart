@@ -309,6 +309,7 @@ class _AddContributorScreenState extends ConsumerState<AddContributorScreen> {
                 ),
                 const SizedBox(height: 16),
                 SegmentedButton<ContributorType>(
+                  showSelectedIcon: false,
                   segments: const [
                     ButtonSegment(value: ContributorType.person, label: Text('Person')),
                     ButtonSegment(value: ContributorType.company, label: Text('Company')),
@@ -369,20 +370,25 @@ class _AddContributorScreenState extends ConsumerState<AddContributorScreen> {
                     width: 40,
                     height: 60,
                     color: contributor.type == ContributorType.company 
-                        ? Colors.white 
+                        ? (Theme.of(context).brightness == Brightness.dark ? Colors.grey[300] : Colors.white)
                         : Theme.of(context).colorScheme.surfaceContainerHighest,
                     child: contributor.profilePath != null
-                        ? CachedNetworkImage(
-                            imageUrl: 'https://image.tmdb.org/t/p/w200${contributor.profilePath}',
-                            fit: BoxFit.contain,
-                            errorWidget: (_, __, ___) => const Icon(Icons.person),
+                        ? Padding(
+                            padding: contributor.type == ContributorType.company
+                                ? const EdgeInsets.symmetric(horizontal: 4)
+                                : EdgeInsets.zero,
+                            child: CachedNetworkImage(
+                              imageUrl: 'https://image.tmdb.org/t/p/w200${contributor.profilePath}',
+                              fit: BoxFit.contain,
+                              errorWidget: (_, __, ___) => const Icon(Icons.person),
+                            ),
                           )
                         : const Icon(Icons.person),
                   ),
                   title: Text(contributor.name),
                   subtitle: Text(contributor.knownFor),
                   trailing: Icon(
-                    isWatchlistItem ? Icons.bookmark_add : Icons.person_add,
+                    Icons.add_circle,
                     color: isWatchlistItem 
                         ? Theme.of(context).colorScheme.primary
                         : Theme.of(context).colorScheme.secondary,

@@ -63,6 +63,9 @@ class _ContributorCardState extends State<ContributorCard> {
             // Calculate width available for text (Card width - Image width - Paddings)
             // Image width is 90, Padding is 12*2 = 24. Total = 114
             final textColumnWidth = (constraints.maxWidth - 114).clamp(0.0, double.infinity);
+            
+            // On small screens, put "Latest:" on its own line
+            final isSmallScreen = constraints.maxWidth < 400;
 
             // Prepare for smart wrapping measurement
             Widget? latestWorkWidget;
@@ -165,128 +168,177 @@ class _ContributorCardState extends State<ContributorCard> {
                 // TV SHOW LAYOUT: Latest: Episode Name - S#E# (Date)
                 final formattedDate = formatDate(latestWork.releaseDate);
                 
-                final titleSpan = TextSpan(
-                  style: textStyle,
-                  children: [
-                    TextSpan(text: 'Latest: ', style: latestLabelStyle),
-                    TextSpan(text: latestWork.title, style: titleStyle),
-                  ],
-                );
-
-                final detailsSpan = TextSpan(
-                  style: dateStyle,
-                  children: [
-                    if (formattedDate.isNotEmpty)
-                      TextSpan(text: '($formattedDate)'),
-                  ],
-                );
-
-                // Try a single line first
-                final fullRichSpan = TextSpan(
-                  style: textStyle,
-                  children: [
-                    titleSpan,
-                    const TextSpan(text: ' '),
-                    detailsSpan,
-                  ],
-                );
-
-                final tp = TextPainter(
-                  text: fullRichSpan,
-                  maxLines: 1,
-                  textDirection: ui.TextDirection.ltr,
-                )..layout(maxWidth: textColumnWidth);
-
-                if (tp.didExceedMaxLines) {
-                  // Split into two lines
+                if (isSmallScreen) {
+                  // On small screens, put "Latest:" on its own line
                   latestWorkWidget = Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      AdaptiveTooltipText.rich(
-                        titleSpan,
-                        customTooltip: latestWork.title,
+                      Text.rich(TextSpan(text: 'Latest:', style: latestLabelStyle.copyWith(fontSize: 12))),
+                      AdaptiveTooltipText(
+                        latestWork.title,
+                        style: titleStyle.copyWith(fontSize: 12),
                         maxWidth: textColumnWidth,
                       ),
-                      AdaptiveTooltipText.rich(
-                        detailsSpan,
-                        maxWidth: textColumnWidth,
-                      ),
+                      if (formattedDate.isNotEmpty)
+                        Text.rich(TextSpan(text: '($formattedDate)', style: dateStyle)),
                     ],
                   );
                 } else {
-                  latestWorkWidget = AdaptiveTooltipText.rich(
-                    fullRichSpan,
-                    customTooltip: '${latestWork.title} (${formatDate(latestWork.releaseDate)})',
-                    maxWidth: textColumnWidth,
+                  final titleSpan = TextSpan(
+                    style: textStyle,
+                    children: [
+                      TextSpan(text: 'Latest: ', style: latestLabelStyle),
+                      TextSpan(text: latestWork.title, style: titleStyle),
+                    ],
                   );
+
+                  final detailsSpan = TextSpan(
+                    style: dateStyle,
+                    children: [
+                      if (formattedDate.isNotEmpty)
+                        TextSpan(text: '($formattedDate)'),
+                    ],
+                  );
+
+                  // Try a single line first
+                  final fullRichSpan = TextSpan(
+                    style: textStyle,
+                    children: [
+                      titleSpan,
+                      const TextSpan(text: ' '),
+                      detailsSpan,
+                    ],
+                  );
+
+                  final tp = TextPainter(
+                    text: fullRichSpan,
+                    maxLines: 1,
+                    textDirection: ui.TextDirection.ltr,
+                  )..layout(maxWidth: textColumnWidth);
+
+                  if (tp.didExceedMaxLines) {
+                    // Split into two lines
+                    latestWorkWidget = Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        AdaptiveTooltipText.rich(
+                          titleSpan,
+                          customTooltip: latestWork.title,
+                          maxWidth: textColumnWidth,
+                        ),
+                        AdaptiveTooltipText.rich(
+                          detailsSpan,
+                          maxWidth: textColumnWidth,
+                        ),
+                      ],
+                    );
+                  } else {
+                    latestWorkWidget = AdaptiveTooltipText.rich(
+                      fullRichSpan,
+                      customTooltip: '${latestWork.title} (${formatDate(latestWork.releaseDate)})',
+                      maxWidth: textColumnWidth,
+                    );
+                  }
                 }
               } else {
                 // PERSON LAYOUT: Latest: Title (Date)
                 final formattedDate = formatDate(latestWork.releaseDate);
                 final jobOrDept = latestWork.job ?? latestWork.department;
                 
-                final titleSpan = TextSpan(
-                  style: textStyle,
-                  children: [
-                    TextSpan(text: 'Latest: ', style: latestLabelStyle),
-                    TextSpan(text: latestWork.title, style: titleStyle),
-                  ],
-                );
-
-                final detailsSpan = TextSpan(
-                  style: dateStyle,
-                  children: [
-                    if (formattedDate.isNotEmpty)
-                      TextSpan(text: '($formattedDate)'),
-                    if (formattedDate.isNotEmpty && jobOrDept.isNotEmpty)
-                      const TextSpan(text: ' - '),
-                    if (jobOrDept.isNotEmpty)
-                      TextSpan(
-                        text: jobOrDept,
-                        style: const TextStyle(fontStyle: FontStyle.italic),
-                      ),
-                  ],
-                );
-
-                // We try a single line first
-                final fullRichSpan = TextSpan(
-                  style: textStyle,
-                  children: [
-                    titleSpan,
-                    const TextSpan(text: ' '),
-                    detailsSpan,
-                  ],
-                );
-
-                // Use TextPainter to handle the split decision instead of LayoutBuilder
-                final tp = TextPainter(
-                  text: fullRichSpan,
-                  maxLines: 1,
-                  textDirection: ui.TextDirection.ltr,
-                )..layout(maxWidth: textColumnWidth);
-
-                if (tp.didExceedMaxLines) {
-                  // Split into two lines
+                if (isSmallScreen) {
+                  // On small screens, put "Latest:" on its own line
                   latestWorkWidget = Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      AdaptiveTooltipText.rich(
-                        titleSpan,
-                        customTooltip: latestWork.title,
+                      Text.rich(TextSpan(text: 'Latest:', style: latestLabelStyle.copyWith(fontSize: 12))),
+                      AdaptiveTooltipText(
+                        latestWork.title,
+                        style: titleStyle.copyWith(fontSize: 12),
                         maxWidth: textColumnWidth,
                       ),
-                      AdaptiveTooltipText.rich(
-                        detailsSpan,
-                        maxWidth: textColumnWidth,
-                      ),
+                      if (formattedDate.isNotEmpty || jobOrDept.isNotEmpty)
+                        Text.rich(
+                          TextSpan(
+                            style: dateStyle,
+                            children: [
+                              if (formattedDate.isNotEmpty)
+                                TextSpan(text: '($formattedDate)'),
+                              if (formattedDate.isNotEmpty && jobOrDept.isNotEmpty)
+                                const TextSpan(text: ' - '),
+                              if (jobOrDept.isNotEmpty)
+                                TextSpan(
+                                  text: jobOrDept,
+                                  style: const TextStyle(fontStyle: FontStyle.italic),
+                                ),
+                            ],
+                          ),
+                        ),
                     ],
                   );
                 } else {
-                  latestWorkWidget = AdaptiveTooltipText.rich(
-                    fullRichSpan,
-                    customTooltip: '${latestWork.title} (${formatDate(latestWork.releaseDate)})',
-                    maxWidth: textColumnWidth,
+                  final titleSpan = TextSpan(
+                    style: textStyle,
+                    children: [
+                      TextSpan(text: 'Latest: ', style: latestLabelStyle),
+                      TextSpan(text: latestWork.title, style: titleStyle),
+                    ],
                   );
+
+                  final detailsSpan = TextSpan(
+                    style: dateStyle,
+                    children: [
+                      if (formattedDate.isNotEmpty)
+                        TextSpan(text: '($formattedDate)'),
+                      if (formattedDate.isNotEmpty && jobOrDept.isNotEmpty)
+                        const TextSpan(text: ' - '),
+                      if (jobOrDept.isNotEmpty)
+                        TextSpan(
+                          text: jobOrDept,
+                          style: const TextStyle(fontStyle: FontStyle.italic),
+                        ),
+                    ],
+                  );
+
+                  // We try a single line first
+                  final fullRichSpan = TextSpan(
+                    style: textStyle,
+                    children: [
+                      titleSpan,
+                      const TextSpan(text: ' '),
+                      detailsSpan,
+                    ],
+                  );
+
+                  // Use TextPainter to handle the split decision instead of LayoutBuilder
+                  final tp = TextPainter(
+                    text: fullRichSpan,
+                    maxLines: 1,
+                    textDirection: ui.TextDirection.ltr,
+                  )..layout(maxWidth: textColumnWidth);
+
+                  if (tp.didExceedMaxLines) {
+                    // Split into two lines
+                    latestWorkWidget = Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        AdaptiveTooltipText.rich(
+                          titleSpan,
+                          customTooltip: latestWork.title,
+                          maxWidth: textColumnWidth,
+                        ),
+                        AdaptiveTooltipText.rich(
+                          detailsSpan,
+                          maxWidth: textColumnWidth,
+                        ),
+                      ],
+                    );
+                  } else {
+                    latestWorkWidget = AdaptiveTooltipText.rich(
+                      fullRichSpan,
+                      customTooltip: '${latestWork.title} (${formatDate(latestWork.releaseDate)})',
+                      maxWidth: textColumnWidth,
+                    );
+                  }
                 }
               }
             }
@@ -308,20 +360,25 @@ class _ContributorCardState extends State<ContributorCard> {
                             width: 90,
                             height: double.infinity,
                             color: widget.contributor.type == ContributorType.company 
-                                ? Colors.white 
+                                ? (theme.brightness == Brightness.dark ? Colors.grey[300] : Colors.white)
                                 : theme.colorScheme.surfaceContainerHighest, // Background for 'contain' fit
                             child: mainImagePath != null
-                                ? CachedNetworkImage(
-                                    imageUrl: 'https://image.tmdb.org/t/p/w200$mainImagePath',
-                                    fit: BoxFit.contain,
-                                    placeholder: (context, url) => Shimmer.fromColors(
-                                      baseColor: theme.colorScheme.surfaceContainerHighest,
-                                      highlightColor: theme.colorScheme.surface,
-                                      child: Container(
-                                        color: theme.colorScheme.surface,
+                                ? Padding(
+                                    padding: widget.contributor.type == ContributorType.company 
+                                        ? const EdgeInsets.symmetric(horizontal: 8)
+                                        : EdgeInsets.zero,
+                                    child: CachedNetworkImage(
+                                      imageUrl: 'https://image.tmdb.org/t/p/w200$mainImagePath',
+                                      fit: BoxFit.contain,
+                                      placeholder: (context, url) => Shimmer.fromColors(
+                                        baseColor: theme.colorScheme.surfaceContainerHighest,
+                                        highlightColor: theme.colorScheme.surface,
+                                        child: Container(
+                                          color: theme.colorScheme.surface,
+                                        ),
                                       ),
+                                      errorWidget: (context, url, error) => const Icon(Icons.error),
                                     ),
-                                    errorWidget: (context, url, error) => const Icon(Icons.error),
                                   )
                                 : const Center(
                                     child: Icon(Icons.person, size: 30),
@@ -432,7 +489,8 @@ class _ContributorCardState extends State<ContributorCard> {
                               padding: EdgeInsets.symmetric(vertical: 4.0),
                               child: Divider(height: 1),
                             ),
-                            Expanded(
+                            ConstrainedBox(
+                              constraints: const BoxConstraints(minHeight: 40),
                               child: MouseRegion(
                                 onEnter: (_) {
                                   // Only enable poster switching for people, not movies/TV shows

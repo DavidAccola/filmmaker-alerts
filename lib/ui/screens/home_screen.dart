@@ -157,6 +157,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with TickerProviderStat
         ),
         bottom: TabBar(
           controller: _tabController!,
+          labelStyle: const TextStyle(fontWeight: FontWeight.w500),
           onTap: (index) {
             // Update provider when user taps tab
             ref.read(homeTabProvider.notifier).setTab(index);
@@ -525,7 +526,13 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with TickerProviderStat
                   ),
               ],
               const SliverToBoxAdapter(child: SizedBox(height: 80)),
-              const SliverToBoxAdapter(child: TmdbAttribution()),
+              const SliverFillRemaining(
+                hasScrollBody: false,
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.end,
+                  children: [TmdbAttribution()],
+                ),
+              ),
             ],
           );
         }
@@ -561,34 +568,50 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with TickerProviderStat
                   ),
                 ),
               ),
-              const SliverToBoxAdapter(child: TmdbAttribution()),
+              const SliverFillRemaining(
+                hasScrollBody: false,
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.end,
+                  children: [TmdbAttribution()],
+                ),
+              ),
             ],
           );
         } else {
-          return ListView.builder(
+          return CustomScrollView(
             controller: _scrollController,
-            padding: const EdgeInsets.all(8),
-            itemCount: sortedList.length + 1, // +1 for attribution
-            itemBuilder: (context, index) {
-              if (index == sortedList.length) {
-                // Show attribution at the end
-                return const TmdbAttribution();
-              }
-              
-              final contributor = sortedList[index];
-              return Padding(
-                padding: const EdgeInsets.only(bottom: 8.0),
-                child: ContributorCard(
-                  key: contributor.tmdbId == _newlyAddedContributorId 
-                      ? _newContributorKey 
-                      : ValueKey(contributor.tmdbId),
-                  contributor: contributor,
-                  onTap: () => _navigateToDetail(contributor),
-                  onRemove: () => _removeContributor(context, ref, contributor),
-                  onEditRoles: () => _editRoles(context, ref, contributor),
+            slivers: [
+              SliverPadding(
+                padding: const EdgeInsets.all(8),
+                sliver: SliverList(
+                  delegate: SliverChildBuilderDelegate(
+                    (context, index) {
+                      final contributor = sortedList[index];
+                      return Padding(
+                        padding: const EdgeInsets.only(bottom: 8.0),
+                        child: ContributorCard(
+                          key: contributor.tmdbId == _newlyAddedContributorId 
+                              ? _newContributorKey 
+                              : ValueKey(contributor.tmdbId),
+                          contributor: contributor,
+                          onTap: () => _navigateToDetail(contributor),
+                          onRemove: () => _removeContributor(context, ref, contributor),
+                          onEditRoles: () => _editRoles(context, ref, contributor),
+                        ),
+                      );
+                    },
+                    childCount: sortedList.length,
+                  ),
                 ),
-              );
-            },
+              ),
+              const SliverFillRemaining(
+                hasScrollBody: false,
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.end,
+                  children: [TmdbAttribution()],
+                ),
+              ),
+            ],
           );
         }
       },

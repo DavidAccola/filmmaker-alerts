@@ -73,12 +73,12 @@ class _ContributorCardState extends State<ContributorCard> {
             if (latestWork != null) {
               const textStyle = TextStyle(fontSize: 12);
               final latestLabelStyle = TextStyle(
-                fontWeight: FontWeight.bold,
+                fontWeight: FontWeight.w600,
                 color: theme.colorScheme.primary,
               );
               const titleStyle = TextStyle(fontWeight: FontWeight.w600);
               final dateStyle = TextStyle(
-                color: theme.colorScheme.secondary,
+                color: theme.colorScheme.onSurfaceVariant,
                 fontSize: 11,
               );
 
@@ -105,7 +105,7 @@ class _ContributorCardState extends State<ContributorCard> {
                         children: [
                           TextSpan(
                             text: '${origType ?? 'Original'}: ',
-                            style: const TextStyle(fontWeight: FontWeight.bold),
+                            style: const TextStyle(fontWeight: FontWeight.w600),
                           ),
                           TextSpan(text: formatDate(origDate)),
                         ],
@@ -121,7 +121,7 @@ class _ContributorCardState extends State<ContributorCard> {
                         children: [
                           TextSpan(
                             text: '${latestType ?? 'Latest'}: ',
-                            style: const TextStyle(fontWeight: FontWeight.bold),
+                            style: const TextStyle(fontWeight: FontWeight.w600),
                           ),
                           TextSpan(text: formatDate(latestDate)),
                         ],
@@ -138,7 +138,7 @@ class _ContributorCardState extends State<ContributorCard> {
                         children: [
                           TextSpan(
                             text: '${latestType ?? 'Release'}: ',
-                            style: const TextStyle(fontWeight: FontWeight.bold),
+                            style: const TextStyle(fontWeight: FontWeight.w600),
                           ),
                           TextSpan(text: formatDate(latestDate)),
                         ],
@@ -153,7 +153,7 @@ class _ContributorCardState extends State<ContributorCard> {
                       TextSpan(
                         style: dateStyle,
                         children: [
-                          const TextSpan(text: 'Release: ', style: TextStyle(fontWeight: FontWeight.bold)),
+                          const TextSpan(text: 'Release: ', style: TextStyle(fontWeight: FontWeight.w600)),
                           TextSpan(text: formatDate(latestWork.releaseDate)),
                         ],
                       ),
@@ -423,7 +423,7 @@ class _ContributorCardState extends State<ContributorCard> {
                                   children: [
                                     AdaptiveTooltipText(
                                       widget.contributor.name,
-                                      style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold),
+                                      style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w600),
                                       maxWidth: textColumnWidth - 48,
                                     ),
                                     if (widget.contributor.knownFor.isNotEmpty && 
@@ -434,7 +434,7 @@ class _ContributorCardState extends State<ContributorCard> {
                                         widget.contributor.knownFor,
                                         style: theme.textTheme.bodySmall?.copyWith(
                                           color: theme.colorScheme.onSurfaceVariant,
-                                          fontStyle: FontStyle.italic,
+                                          letterSpacing: 0,
                                         ),
                                         maxWidth: textColumnWidth - 48,
                                       ),

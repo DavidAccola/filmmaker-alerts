@@ -12,6 +12,7 @@
 .swiftpm/
 migrate_working_dir/
 r.bat
+CSSExample/
 
 # IntelliJ related
 *.iml

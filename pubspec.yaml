@@ -33,6 +33,9 @@ dependencies:
   tray_manager: ^0.5.2
   window_manager: ^0.5.1
 
+  # Fonts
+  google_fonts: ^6.2.1
+
   # Utilities
   intl: ^0.20.2
   path_provider: ^2.1.5

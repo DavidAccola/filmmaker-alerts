@@ -5,6 +5,7 @@ import '../../data/models/season_status_entry.dart';
 import '../../data/models/status_record.dart';
 import '../../providers/providers.dart';
 import '../common/snackbar_utils.dart';
+import '../common/status_selector_bar.dart';
 
 class ShowConfigurationScreen extends ConsumerStatefulWidget {
   final int showId;
@@ -23,16 +24,15 @@ class ShowConfigurationScreen extends ConsumerStatefulWidget {
 
 class _ShowConfigurationScreenState
     extends ConsumerState<ShowConfigurationScreen> {
-  bool _isEditMode = false;
-  WatchStatus _selectedMode = WatchStatus.wantToWatch;
-  bool _markAllSeasons = false;
+  // Currently selected status to apply when checking boxes
+  WatchStatus _selectedStatus = WatchStatus.watched;
 
-  // Track local changes: Map<seasonNumber, Map<episodeNumber, WatchStatus?>>
-  // null means unmarked, WatchStatus means marked with that status
-  final Map<int, Map<int, WatchStatus?>> _localChanges = {};
+  // Track pending changes: Map<seasonNumber, Map<episodeNumber, WatchStatus?>>
+  // null means "clear status", WatchStatus means "set to this status"
+  final Map<int, Map<int, WatchStatus?>> _pendingChanges = {};
 
-  // Track which seasons are marked
-  final Set<int> _markedSeasons = {};
+  // Track which seasons are expanded in the UI
+  final Set<int> _expandedSeasons = {};
 
   // Filter state
   Set<WatchStatus> _selectedFilters = {
@@ -43,6 +43,85 @@ class _ShowConfigurationScreenState
   };
 
   bool _isDirty = false;
+
+  // ============================================================
+  // Tri-State Checkbox Helper Functions
+  // ============================================================
+  // These helpers compute checkbox states for hierarchical selection:
+  // - true = all items checked
+  // - false = no items checked  
+  // - null = indeterminate (some items checked)
+  // ============================================================
+
+  /// Gets the effective status for an episode, checking pending changes first,
+  /// then falling back to the existing persisted status.
+  /// 
+  /// Returns null if no status exists (neither pending nor persisted).
+  WatchStatus? _getEffectiveEpisodeStatus(int seasonNumber, int episodeNumber) {
+    // Check pending changes first
+    if (_pendingChanges.containsKey(seasonNumber) &&
+        _pendingChanges[seasonNumber]!.containsKey(episodeNumber)) {
+      return _pendingChanges[seasonNumber]![episodeNumber];
+    }
+    
+    // Fall back to existing persisted status
+    final episodeRepo = ref.read(episodeStatusRepositoryProvider);
+    final episode = episodeRepo.getEpisode(widget.showId, seasonNumber, episodeNumber);
+    if (episode != null && episode.statusRecords.isNotEmpty) {
+      return episode.statusRecords.first.status;
+    }
+    
+    return null;
+  }
+
+  /// Computes the checkbox state for a season based on its episodes.
+  /// 
+  /// Returns:
+  /// - true if ALL episodes in the season have a status
+  /// - false if NO episodes in the season have a status
+  /// - null if SOME episodes have a status (indeterminate)
+  bool? _computeSeasonCheckboxState(int seasonNumber, List<EpisodeStatusEntry> episodes) {
+    if (episodes.isEmpty) return false;
+    
+    int markedCount = 0;
+    for (final episode in episodes) {
+      if (_getEffectiveEpisodeStatus(seasonNumber, episode.episodeNumber) != null) {
+        markedCount++;
+      }
+    }
+    
+    if (markedCount == 0) return false;
+    if (markedCount == episodes.length) return true;
+    return null; // indeterminate - some but not all are marked
+  }
+
+  /// Computes the checkbox state for the entire show based on all episodes.
+  /// 
+  /// Returns:
+  /// - true if ALL episodes across all seasons have a status
+  /// - false if NO episodes have a status
+  /// - null if SOME episodes have a status (indeterminate)
+  bool? _computeShowCheckboxState(Map<int, List<EpisodeStatusEntry>> episodesBySeason) {
+    int totalEpisodes = 0;
+    int markedEpisodes = 0;
+    
+    for (final entry in episodesBySeason.entries) {
+      final seasonNumber = entry.key;
+      final episodes = entry.value;
+      
+      for (final episode in episodes) {
+        totalEpisodes++;
+        if (_getEffectiveEpisodeStatus(seasonNumber, episode.episodeNumber) != null) {
+          markedEpisodes++;
+        }
+      }
+    }
+    
+    if (totalEpisodes == 0) return false;
+    if (markedEpisodes == 0) return false;
+    if (markedEpisodes == totalEpisodes) return true;
+    return null; // indeterminate - some but not all are marked
+  }
 
   @override
   void initState() {
@@ -80,28 +159,19 @@ class _ShowConfigurationScreenState
   void _initializeLocalChanges() {
     // Load existing statuses from repositories
     final episodeRepo = ref.read(episodeStatusRepositoryProvider);
-    final seasonRepo = ref.read(seasonStatusRepositoryProvider);
 
     final episodes = episodeRepo.getEpisodesByShow(widget.showId);
-    final seasons = seasonRepo.getSeasonsByShow(widget.showId);
 
-    // Initialize local changes from existing data
+    // Initialize pending changes from existing data
     for (final episode in episodes) {
-      if (!_localChanges.containsKey(episode.seasonNumber)) {
-        _localChanges[episode.seasonNumber] = {};
+      if (!_pendingChanges.containsKey(episode.seasonNumber)) {
+        _pendingChanges[episode.seasonNumber] = {};
       }
 
       // Get the primary status (first one in the list)
       if (episode.statusRecords.isNotEmpty) {
-        _localChanges[episode.seasonNumber]![episode.episodeNumber] =
+        _pendingChanges[episode.seasonNumber]![episode.episodeNumber] =
             episode.statusRecords.first.status;
-      }
-    }
-
-    // Track marked seasons
-    for (final season in seasons) {
-      if (season.statusRecords.isNotEmpty) {
-        _markedSeasons.add(season.seasonNumber);
       }
     }
   }
@@ -175,6 +245,9 @@ class _ShowConfigurationScreenState
     final sortedSeasons = seasons.toList()
       ..sort((a, b) => a.seasonNumber.compareTo(b.seasonNumber));
 
+    // Compute show-level checkbox state
+    final showCheckboxState = _computeShowCheckboxState(episodesBySeasonMap);
+
     return PopScope(
       canPop: !_isDirty,
       onPopInvokedWithResult: (didPop, result) async {
@@ -213,450 +286,301 @@ class _ShowConfigurationScreenState
             ),
           ],
         ),
-        body: Stack(
+        body: Column(
           children: [
-            // Main content
-            _buildMainContent(sortedSeasons, episodesBySeasonMap),
-
-            // Edit mode snackbar
-            if (_isEditMode)
-              Positioned(
-                bottom: 16,
-                left: 16,
-                right: 16,
-                child: _buildModeSnackbar(),
-              ),
+            // StatusSelectorBar - sticky at top (doesn't scroll)
+            StatusSelectorBar(
+              selectedStatus: _selectedStatus,
+              onStatusChanged: (status) {
+                setState(() {
+                  _selectedStatus = status;
+                });
+              },
+            ),
+            // Show-level "Mark All" checkbox with tri-state support
+            _buildMarkAllCheckbox(showCheckboxState, episodesBySeasonMap),
+            // Expandable list content
+            Expanded(
+              child: _buildExpandableList(sortedSeasons, episodesBySeasonMap),
+            ),
           ],
         ),
-        floatingActionButton: _isEditMode
+        floatingActionButton: _isDirty
             ? FloatingActionButton(
                 onPressed: _handleSave,
                 tooltip: 'Save',
                 child: const Icon(Icons.check),
               )
-            : FloatingActionButton(
-                onPressed: () {
-                  setState(() {
-                    _isEditMode = true;
-                  });
-                },
-                tooltip: 'Edit',
-                child: const Icon(Icons.edit),
-              ),
+            : null,
       ),
     );
   }
 
-  Widget _buildMainContent(
-    List<SeasonStatusEntry> seasons,
-    Map<int, List<EpisodeStatusEntry>> episodesByseason,
+  /// Builds the show-level "Mark All" checkbox with tri-state support.
+  Widget _buildMarkAllCheckbox(
+    bool? showCheckboxState,
+    Map<int, List<EpisodeStatusEntry>> episodesBySeasonMap,
   ) {
-    final screenWidth = MediaQuery.of(context).size.width;
-    final isMobile = screenWidth < 768; // Improved breakpoint
-
-    return SingleChildScrollView(
-      child: Padding(
-        padding: EdgeInsets.all(isMobile ? 12.0 : 16.0),
-        child: isMobile
-            ? _buildMobileLayout(seasons, episodesByseason)
-            : _buildDesktopLayout(seasons, episodesByseason),
-      ),
-    );
-  }
-
-  Widget _buildDesktopLayout(
-    List<SeasonStatusEntry> seasons,
-    Map<int, List<EpisodeStatusEntry>> episodesByseason,
-  ) {
-    return Column(
-      children: [
-        // Bulk controls
-        if (_isEditMode)
-          Container(
-            padding: const EdgeInsets.all(16.0),
-            margin: const EdgeInsets.only(bottom: 16.0),
-            decoration: BoxDecoration(
-              color: Theme.of(context).colorScheme.surfaceContainerHighest,
-              borderRadius: BorderRadius.circular(12),
-              border: Border.all(
-                color: Theme.of(context).colorScheme.outlineVariant,
-              ),
-            ),
-            child: Row(
-              children: [
-                Checkbox(
-                  value: _markAllSeasons,
-                  onChanged: (value) {
-                    setState(() {
-                      _markAllSeasons = value ?? false;
-                      _toggleAllSeasons(_markAllSeasons);
-                    });
-                  },
-                ),
-                const SizedBox(width: 8),
-                Text(
-                  'Mark/Unmark all seasons',
-                  style: Theme.of(context).textTheme.titleMedium,
-                ),
-              ],
-            ),
-          ),
-
-        // Grid layout with improved styling
-        Container(
-          decoration: BoxDecoration(
-            border: Border.all(
-              color: Theme.of(context).colorScheme.outlineVariant,
-            ),
-            borderRadius: BorderRadius.circular(12),
-          ),
-          child: Table(
-            columnWidths: const {
-              0: FlexColumnWidth(1),
-              1: FlexColumnWidth(2.5),
-            },
-            children: [
-              // Header row
-              TableRow(
-                decoration: BoxDecoration(
-                  color: Theme.of(context).colorScheme.surfaceContainerHighest,
-                  borderRadius: const BorderRadius.vertical(top: Radius.circular(12)),
-                ),
-                children: [
-                  Padding(
-                    padding: const EdgeInsets.all(16.0),
-                    child: Text(
-                      'Season',
-                      style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
-                  ),
-                  Padding(
-                    padding: const EdgeInsets.all(16.0),
-                    child: Text(
-                      'Episodes',
-                      style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-              // Season rows
-              for (int i = 0; i < seasons.length; i++)
-                _buildSeasonRow(
-                  seasons[i], 
-                  episodesByseason[seasons[i].seasonNumber] ?? [],
-                  isLast: i == seasons.length - 1,
-                ),
-            ],
-          ),
-        ),
-      ],
-    );
-  }
-
-  Widget _buildMobileLayout(
-    List<SeasonStatusEntry> seasons,
-    Map<int, List<EpisodeStatusEntry>> episodesByseason,
-  ) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        // Bulk controls
-        if (_isEditMode)
-          Padding(
-            padding: const EdgeInsets.only(bottom: 16.0),
-            child: Row(
-              children: [
-                Checkbox(
-                  value: _markAllSeasons,
-                  onChanged: (value) {
-                    setState(() {
-                      _markAllSeasons = value ?? false;
-                      _toggleAllSeasons(_markAllSeasons);
-                    });
-                  },
-                ),
-                const Text('Mark/Unmark all seasons'),
-              ],
-            ),
-          ),
-
-        // Stacked layout
-        for (final season in seasons) ...[
-          _buildSeasonHeading(season),
-          _buildEpisodesList(season, episodesByseason[season.seasonNumber] ?? []),
-          const SizedBox(height: 16),
-        ],
-      ],
-    );
-  }
-
-  TableRow _buildSeasonRow(
-    SeasonStatusEntry season,
-    List<EpisodeStatusEntry> episodes, {
-    bool isLast = false,
-  }) {
-    return TableRow(
+    final theme = Theme.of(context);
+    
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 12.0),
       decoration: BoxDecoration(
-        border: isLast ? null : Border(
+        border: Border(
           bottom: BorderSide(
-            color: Theme.of(context).colorScheme.outlineVariant.withValues(alpha: 0.5),
+            color: theme.colorScheme.outlineVariant.withValues(alpha: 0.5),
           ),
         ),
       ),
-      children: [
-        // Season column
-        Padding(
-          padding: const EdgeInsets.all(16.0),
-          child: _buildSeasonCell(season),
-        ),
-
-        // Episodes column
-        Padding(
-          padding: const EdgeInsets.all(16.0),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              for (final episode in episodes)
-                if (_shouldShowEpisode(episode))
-                  Padding(
-                    padding: const EdgeInsets.symmetric(vertical: 2.0),
-                    child: _buildEpisodeItem(episode),
-                  ),
-            ],
+      child: Row(
+        children: [
+          Checkbox(
+            tristate: true,
+            value: showCheckboxState,
+            onChanged: (value) {
+              _handleShowCheckboxChanged(value, episodesBySeasonMap);
+            },
           ),
-        ),
-      ],
-    );
-  }
-
-  Widget _buildSeasonCell(SeasonStatusEntry season) {
-    final theme = Theme.of(context);
-    final isMarked = _isSeasonMarked(season.seasonNumber);
-    final statusSymbol = _getStatusSymbol(_selectedMode);
-
-    return InkWell(
-      onTap: _isEditMode
-          ? () {
-              setState(() {
-                _toggleSeason(season.seasonNumber);
-              });
-            }
-          : null,
-      child: Container(
-        padding: const EdgeInsets.all(8.0),
-        decoration: BoxDecoration(
-          border: Border.all(
-            color: isMarked
-                ? theme.colorScheme.primary
-                : theme.colorScheme.outlineVariant,
-          ),
-          borderRadius: BorderRadius.circular(4),
-          color: isMarked
-              ? theme.colorScheme.primaryContainer
-              : Colors.transparent,
-        ),
-        child: Row(
-          children: [
-            if (isMarked)
-              Padding(
-                padding: const EdgeInsets.only(right: 8.0),
-                child: Text(statusSymbol),
-              ),
-            Expanded(
-              child: Text(
-                season.displayName,
-                style: theme.textTheme.titleMedium,
-              ),
+          const SizedBox(width: 8),
+          Text(
+            'Mark All Episodes',
+            style: theme.textTheme.titleMedium?.copyWith(
+              fontWeight: FontWeight.w600,
             ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildSeasonHeading(SeasonStatusEntry season) {
-    final theme = Theme.of(context);
-    final isMarked = _isSeasonMarked(season.seasonNumber);
-    final statusSymbol = _getStatusSymbol(_selectedMode);
-
-    return InkWell(
-      onTap: _isEditMode
-          ? () {
-              setState(() {
-                _toggleSeason(season.seasonNumber);
-              });
-            }
-          : null,
-      child: Container(
-        padding: const EdgeInsets.all(8.0),
-        decoration: BoxDecoration(
-          border: Border.all(
-            color: isMarked
-                ? theme.colorScheme.primary
-                : theme.colorScheme.outlineVariant,
           ),
-          borderRadius: BorderRadius.circular(4),
-          color: isMarked
-              ? theme.colorScheme.primaryContainer
-              : Colors.transparent,
-        ),
-        child: Row(
-          children: [
-            if (isMarked)
-              Padding(
-                padding: const EdgeInsets.only(right: 8.0),
-                child: Text(statusSymbol),
-              ),
-            Expanded(
-              child: Text(
-                season.displayName,
-                style: theme.textTheme.titleMedium,
-              ),
-            ),
-          ],
-        ),
+        ],
       ),
     );
   }
 
-  Widget _buildEpisodesList(
+  /// Handles the show-level checkbox change.
+  void _handleShowCheckboxChanged(
+    bool? value,
+    Map<int, List<EpisodeStatusEntry>> episodesBySeasonMap,
+  ) {
+    setState(() {
+      // The 'value' parameter is the NEW value that Flutter wants to set.
+      // For tri-state checkbox: false->true, true->null, null->false
+      // We want to mark all when transitioning TO checked (value == true)
+      // OR when clicking indeterminate (value == false but was null)
+      // We want to clear all when transitioning FROM checked (value == null, was true)
+      // 
+      // Since we can't know the old value here, we use a simpler rule:
+      // - If new value is true OR false (from indeterminate), mark all
+      // - If new value is null (from checked), clear all
+      final shouldMark = value != null;
+      
+      for (final entry in episodesBySeasonMap.entries) {
+        final seasonNumber = entry.key;
+        final episodes = entry.value;
+        
+        if (!_pendingChanges.containsKey(seasonNumber)) {
+          _pendingChanges[seasonNumber] = {};
+        }
+        
+        for (final episode in episodes) {
+          if (shouldMark) {
+            _pendingChanges[seasonNumber]![episode.episodeNumber] = _selectedStatus;
+          } else {
+            _pendingChanges[seasonNumber]![episode.episodeNumber] = null;
+          }
+        }
+      }
+      _isDirty = true;
+    });
+  }
+
+  /// Builds the expandable list of seasons and episodes.
+  Widget _buildExpandableList(
+    List<SeasonStatusEntry> seasons,
+    Map<int, List<EpisodeStatusEntry>> episodesBySeasonMap,
+  ) {
+    return ListView.builder(
+      padding: const EdgeInsets.symmetric(vertical: 8.0),
+      itemCount: seasons.length,
+      itemBuilder: (context, index) {
+        final season = seasons[index];
+        final episodes = episodesBySeasonMap[season.seasonNumber] ?? [];
+        final isExpanded = _expandedSeasons.contains(season.seasonNumber);
+        
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            _buildSeasonItem(season, episodes, isExpanded),
+            if (isExpanded)
+              ...episodes.map((episode) => _buildEpisodeItem(episode)),
+          ],
+        );
+      },
+    );
+  }
+
+  /// Builds a season item row with checkbox, name, episode count, and expand icon.
+  Widget _buildSeasonItem(
     SeasonStatusEntry season,
     List<EpisodeStatusEntry> episodes,
+    bool isExpanded,
   ) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        for (final episode in episodes)
-          if (_shouldShowEpisode(episode))
-            _buildEpisodeItem(episode),
-      ],
-    );
-  }
-
-  Widget _buildEpisodeItem(EpisodeStatusEntry episode) {
     final theme = Theme.of(context);
-    final isMarked = _isEpisodeMarked(episode.seasonNumber, episode.episodeNumber);
-    final statusSymbol = _getStatusSymbol(_selectedMode);
-
-    return InkWell(
-      onTap: _isEditMode
-          ? () {
-              setState(() {
-                _toggleEpisode(episode.seasonNumber, episode.episodeNumber);
-              });
+    final seasonCheckboxState = _computeSeasonCheckboxState(season.seasonNumber, episodes);
+    
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: () {
+          setState(() {
+            if (isExpanded) {
+              _expandedSeasons.remove(season.seasonNumber);
+            } else {
+              _expandedSeasons.add(season.seasonNumber);
             }
-          : null,
-      child: Padding(
-        padding: const EdgeInsets.symmetric(vertical: 4.0),
-        child: Row(
-          children: [
-            if (isMarked)
-              Padding(
-                padding: const EdgeInsets.only(right: 8.0),
-                child: Text(statusSymbol),
-              ),
-            Expanded(
-              child: Text(
-                'E${episode.episodeNumber.toString().padLeft(2, '0')} - ${episode.episodeTitle}',
-                style: theme.textTheme.bodyMedium,
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildModeSnackbar() {
-    final theme = Theme.of(context);
-    final statusText = _getStatusText(_selectedMode);
-    final statusSymbol = _getStatusSymbol(_selectedMode);
-
-    return Container(
-      margin: const EdgeInsets.symmetric(horizontal: 16.0),
-      padding: const EdgeInsets.all(16.0),
-      decoration: BoxDecoration(
-        color: theme.colorScheme.surfaceContainerHighest,
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(
-          color: theme.colorScheme.primary.withValues(alpha: 0.3),
-        ),
-        boxShadow: [
-          BoxShadow(
-            color: theme.colorScheme.shadow.withValues(alpha: 0.1),
-            blurRadius: 8,
-            offset: const Offset(0, 2),
-          ),
-        ],
-      ),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Row(
-            mainAxisAlignment: MainAxisAlignment.center,
+          });
+        },
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
+          child: Row(
             children: [
-              Icon(
-                Icons.edit,
-                size: 16,
-                color: theme.colorScheme.primary,
+              // Tri-state checkbox for season
+              Checkbox(
+                tristate: true,
+                value: seasonCheckboxState,
+                onChanged: (value) {
+                  _handleSeasonCheckboxChanged(season.seasonNumber, episodes, value);
+                },
               ),
               const SizedBox(width: 8),
-              Text(
-                'Marking shows as $statusSymbol $statusText',
-                style: theme.textTheme.bodyMedium?.copyWith(
-                  fontWeight: FontWeight.w500,
-                  color: theme.colorScheme.onSurface,
+              // Season name
+              Expanded(
+                child: Row(
+                  children: [
+                    Text(
+                      season.displayName,
+                      style: theme.textTheme.titleMedium?.copyWith(
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    // Episode count
+                    Text(
+                      '(${episodes.length} episodes)',
+                      style: theme.textTheme.bodySmall?.copyWith(
+                        color: theme.colorScheme.onSurfaceVariant,
+                      ),
+                    ),
+                  ],
                 ),
+              ),
+              // Expand/collapse icon
+              Icon(
+                isExpanded ? Icons.expand_more : Icons.chevron_right,
+                color: theme.colorScheme.onSurfaceVariant,
               ),
             ],
           ),
-          const SizedBox(height: 12),
-          SingleChildScrollView(
-            scrollDirection: Axis.horizontal,
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                _buildModePill(WatchStatus.wantToWatch),
-                const SizedBox(width: 8),
-                _buildModePill(WatchStatus.inProgress),
-                const SizedBox(width: 8),
-                _buildModePill(WatchStatus.watched),
-                const SizedBox(width: 8),
-                _buildModePill(WatchStatus.dnf),
-              ],
-            ),
-          ),
-        ],
+        ),
       ),
     );
   }
 
-  Widget _buildModePill(WatchStatus status) {
-    final isSelected = _selectedMode == status;
-    final theme = Theme.of(context);
-    final statusText = _getStatusText(status);
-    final statusSymbol = _getStatusSymbol(status);
+  /// Handles the season checkbox change.
+  void _handleSeasonCheckboxChanged(
+    int seasonNumber,
+    List<EpisodeStatusEntry> episodes,
+    bool? value,
+  ) {
+    setState(() {
+      // The 'value' parameter is the NEW value that Flutter wants to set.
+      // For tri-state checkbox: false->true, true->null, null->false
+      // We want to mark all when transitioning TO checked (value == true)
+      // OR when clicking indeterminate (value == false but was null)
+      // We want to clear all when transitioning FROM checked (value == null, was true)
+      // 
+      // Since we can't know the old value here, we use a simpler rule:
+      // - If new value is true OR false (from indeterminate), mark all
+      // - If new value is null (from checked), clear all
+      final shouldMark = value != null;
+      
+      if (!_pendingChanges.containsKey(seasonNumber)) {
+        _pendingChanges[seasonNumber] = {};
+      }
+      
+      for (final episode in episodes) {
+        if (shouldMark) {
+          _pendingChanges[seasonNumber]![episode.episodeNumber] = _selectedStatus;
+        } else {
+          _pendingChanges[seasonNumber]![episode.episodeNumber] = null;
+        }
+      }
+      _isDirty = true;
+    });
+  }
 
-    return FilterChip(
-      label: Text('$statusSymbol $statusText'),
-      selected: isSelected,
-      onSelected: (selected) {
-        setState(() {
-          _selectedMode = status;
-        });
-      },
-      backgroundColor: Colors.transparent,
-      selectedColor: theme.colorScheme.primaryContainer,
-      side: BorderSide(
-        color: isSelected
-            ? theme.colorScheme.primary
-            : theme.colorScheme.outlineVariant,
+  /// Builds an episode item row with checkbox, number, title, and status symbol.
+  Widget _buildEpisodeItem(EpisodeStatusEntry episode) {
+    final theme = Theme.of(context);
+    final effectiveStatus = _getEffectiveEpisodeStatus(episode.seasonNumber, episode.episodeNumber);
+    final isChecked = effectiveStatus != null;
+    final statusSymbol = effectiveStatus != null ? _getStatusSymbol(effectiveStatus) : '';
+    
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: () {
+          _handleEpisodeCheckboxChanged(episode.seasonNumber, episode.episodeNumber, !isChecked);
+        },
+        child: Padding(
+          // 24px indent from season headers
+          padding: const EdgeInsets.only(left: 40.0, right: 16.0, top: 4.0, bottom: 4.0),
+          child: Row(
+            children: [
+              // Binary checkbox for episode
+              Checkbox(
+                value: isChecked,
+                onChanged: (value) {
+                  _handleEpisodeCheckboxChanged(episode.seasonNumber, episode.episodeNumber, value ?? false);
+                },
+              ),
+              const SizedBox(width: 8),
+              // Episode number and title
+              Expanded(
+                child: Text(
+                  'E${episode.episodeNumber.toString().padLeft(2, '0')} - ${episode.episodeTitle}',
+                  style: theme.textTheme.bodyMedium,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+              // Status symbol on right
+              if (statusSymbol.isNotEmpty)
+                Padding(
+                  padding: const EdgeInsets.only(left: 8.0),
+                  child: Text(
+                    statusSymbol,
+                    style: theme.textTheme.bodyMedium,
+                  ),
+                ),
+            ],
+          ),
+        ),
       ),
     );
+  }
+
+  /// Handles the episode checkbox change.
+  void _handleEpisodeCheckboxChanged(int seasonNumber, int episodeNumber, bool isChecked) {
+    setState(() {
+      if (!_pendingChanges.containsKey(seasonNumber)) {
+        _pendingChanges[seasonNumber] = {};
+      }
+      
+      if (isChecked) {
+        // Mark episode with selected status
+        _pendingChanges[seasonNumber]![episodeNumber] = _selectedStatus;
+      } else {
+        // Clear episode status (set to null)
+        _pendingChanges[seasonNumber]![episodeNumber] = null;
+      }
+      _isDirty = true;
+    });
   }
 
   void _showFilterDialog() {
@@ -746,100 +670,15 @@ class _ShowConfigurationScreenState
     );
   }
 
-  bool _shouldShowEpisode(EpisodeStatusEntry episode) {
-    // Always show all episodes
-    return true;
-  }
-
-  bool _isSeasonMarked(int seasonNumber) {
-    return _markedSeasons.contains(seasonNumber);
-  }
-
-  bool _isEpisodeMarked(int seasonNumber, int episodeNumber) {
-    return _localChanges[seasonNumber]?[episodeNumber] != null;
-  }
-
-  void _toggleSeason(int seasonNumber) {
-    setState(() {
-      if (_isSeasonMarked(seasonNumber)) {
-        // Unmark season and all its episodes
-        _markedSeasons.remove(seasonNumber);
-        _localChanges[seasonNumber]?.clear();
-      } else {
-        // Mark season and all its episodes
-        _markedSeasons.add(seasonNumber);
-        if (!_localChanges.containsKey(seasonNumber)) {
-          _localChanges[seasonNumber] = {};
-        }
-
-        // Mark all episodes in this season
-        final episodeRepo = ref.read(episodeStatusRepositoryProvider);
-        final episodes = episodeRepo.getEpisodesBySeason(widget.showId, seasonNumber);
-        for (final episode in episodes) {
-          _localChanges[seasonNumber]![episode.episodeNumber] = _selectedMode;
-        }
-      }
-      _isDirty = true;
-    });
-  }
-
-  void _toggleEpisode(int seasonNumber, int episodeNumber) {
-    setState(() {
-      if (!_localChanges.containsKey(seasonNumber)) {
-        _localChanges[seasonNumber] = {};
-      }
-
-      if (_isEpisodeMarked(seasonNumber, episodeNumber)) {
-        // Unmark episode
-        _localChanges[seasonNumber]![episodeNumber] = null;
-      } else {
-        // Mark episode
-        _localChanges[seasonNumber]![episodeNumber] = _selectedMode;
-      }
-      _isDirty = true;
-    });
-  }
-
-  void _toggleAllSeasons(bool mark) {
-    setState(() {
-      final episodeRepo = ref.read(episodeStatusRepositoryProvider);
-      final seasonRepo = ref.read(seasonStatusRepositoryProvider);
-
-      if (mark) {
-        // Mark all seasons and episodes
-        final seasons = seasonRepo.getSeasonsByShow(widget.showId);
-        for (final season in seasons) {
-          _markedSeasons.add(season.seasonNumber);
-          if (!_localChanges.containsKey(season.seasonNumber)) {
-            _localChanges[season.seasonNumber] = {};
-          }
-
-          final episodes =
-              episodeRepo.getEpisodesBySeason(widget.showId, season.seasonNumber);
-          for (final episode in episodes) {
-            _localChanges[season.seasonNumber]![episode.episodeNumber] =
-                _selectedMode;
-          }
-        }
-      } else {
-        // Unmark all seasons and episodes
-        _markedSeasons.clear();
-        _localChanges.clear();
-      }
-      _isDirty = true;
-    });
-  }
-
   Future<void> _handleSave() async {
     final logic = ref.read(watchlistLogicProvider);
     final episodeRepo = ref.read(episodeStatusRepositoryProvider);
-    final seasonRepo = ref.read(seasonStatusRepositoryProvider);
 
     // Check for unreleased content
     bool hasUnreleased = false;
 
-    // Save all marked episodes
-    for (final seasonEntry in _localChanges.entries) {
+    // Save all pending changes
+    for (final seasonEntry in _pendingChanges.entries) {
       final seasonNumber = seasonEntry.key;
       final episodes = seasonEntry.value;
 
@@ -862,21 +701,14 @@ class _ShowConfigurationScreenState
             episodeNumber,
             status,
           );
+        } else {
+          // Clear episode status (null means clear)
+          await logic.removeStatusFromEpisode(
+            widget.showId,
+            seasonNumber,
+            episodeNumber,
+          );
         }
-      }
-
-      // If season is marked, also save season status
-      if (_markedSeasons.contains(seasonNumber)) {
-        final season = seasonRepo.getSeason(widget.showId, seasonNumber);
-        if (season != null && !season.isReleased) {
-          hasUnreleased = true;
-        }
-
-        await logic.addStatusToSeason(
-          widget.showId,
-          seasonNumber,
-          _selectedMode,
-        );
       }
     }
 
@@ -893,10 +725,9 @@ class _ShowConfigurationScreenState
       }
     }
 
-    // Reset dirty flag and exit edit mode
+    // Reset dirty flag
     setState(() {
       _isDirty = false;
-      _isEditMode = false;
     });
 
     // Invalidate providers to refresh data

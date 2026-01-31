@@ -7,7 +7,6 @@ import '../../data/models/watchlist_entry.dart';
 import '../../providers/providers.dart';
 import '../common/department_selection_dialog.dart';
 import '../common/snackbar_utils.dart';
-import '../common/follow_button.dart';
 import 'home_screen.dart';
 
 enum SearchSort { relevance, name }
@@ -316,121 +315,73 @@ class _SearchResultsScreenState extends ConsumerState<SearchResultsScreen> {
           ),
         ],
       ),
-      body: LayoutBuilder(
-        builder: (context, constraints) {
-          final isWide = constraints.maxWidth > 800;
-          final itemWidth = isWide ? (constraints.maxWidth / 2) - 16 : constraints.maxWidth;
-
-          return ListView.builder(
-            controller: _scrollController,
-            padding: const EdgeInsets.symmetric(vertical: 8.0),
-            itemCount: _results.length + 1, // +1 for footer (loader, button, or spacer)
-            itemBuilder: (context, index) {
-              if (index == _results.length) {
-                if (_isLoadingMore) {
-                  return const Center(
-                    child: Padding(
-                      padding: EdgeInsets.all(24.0),
-                      child: CircularProgressIndicator(),
-                    ),
-                  );
-                }
-                
-                if (_currentPage < _totalPages) {
-                  return Center(
-                    child: Padding(
-                      padding: const EdgeInsets.symmetric(vertical: 24.0),
-                      child: OutlinedButton.icon(
-                        onPressed: _loadMore,
-                        icon: const Icon(Icons.refresh),
-                        label: const Text('Load More Results'),
-                      ),
-                    ),
-                  );
-                }
-                
-                return const SizedBox(height: 40);
-              }
-
-              final contributor = _results[index];
-              final isFollowed = followedList.contains(contributor.tmdbId);
-
-              // Responsive Item
+      body: ListView.builder(
+        controller: _scrollController,
+        itemCount: _results.length + 1, // +1 for footer (loader, button, or spacer)
+        itemBuilder: (context, index) {
+          if (index == _results.length) {
+            if (_isLoadingMore) {
+              return const Center(
+                child: Padding(
+                  padding: EdgeInsets.all(24.0),
+                  child: CircularProgressIndicator(),
+                ),
+              );
+            }
+            
+            if (_currentPage < _totalPages) {
               return Center(
-                child: ConstrainedBox(
-                  constraints: BoxConstraints(maxWidth: itemWidth),
-                  child: MouseRegion(
-                    onEnter: (_) => setState(() {
-                      // Track which card is hovered
-                    }),
-                    onExit: (_) => setState(() {
-                      // Clear hover state
-                    }),
-                    child: StatefulBuilder(
-                      builder: (context, setCardState) {
-                        bool isCardHovered = false;
-                        return MouseRegion(
-                          onEnter: (_) => setCardState(() => isCardHovered = true),
-                          onExit: (_) => setCardState(() => isCardHovered = false),
-                          child: Card(
-                            margin: const EdgeInsets.symmetric(horizontal: 12.0, vertical: 6.0),
-                            child: ListTile(
-                              contentPadding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
-                              leading: Container(
-                                width: 50,
-                                height: 75,
-                                decoration: BoxDecoration(
-                                  color: contributor.type == ContributorType.company 
-                                      ? (theme.brightness == Brightness.dark ? Colors.grey[300] : Colors.white)
-                                      : theme.colorScheme.surfaceContainerHighest,
-                                  borderRadius: BorderRadius.circular(4.0),
-                                ),
-                                clipBehavior: Clip.antiAlias,
-                                child: contributor.profilePath != null
-                                    ? Padding(
-                                        padding: contributor.type == ContributorType.company
-                                            ? const EdgeInsets.symmetric(horizontal: 4)
-                                            : EdgeInsets.zero,
-                                        child: CachedNetworkImage(
-                                          imageUrl: 'https://image.tmdb.org/t/p/w200${contributor.profilePath}',
-                                          fit: BoxFit.contain,
-                                          errorWidget: (_, __, ___) => const Icon(Icons.broken_image),
-                                        ),
-                                      )
-                                    : Icon(contributor.type == ContributorType.person ? Icons.person : Icons.business),
-                              ),
-                              title: Row(
-                                children: [
-                                  Expanded(
-                                    child: Text(contributor.name, style: const TextStyle(fontWeight: FontWeight.bold)),
-                                  ),
-                                ],
-                              ),
-                              subtitle: Text(contributor.knownFor, maxLines: 2, overflow: TextOverflow.ellipsis),
-                              trailing: isFollowed
-                                  ? Column(
-                                      mainAxisAlignment: MainAxisAlignment.center,
-                                      children: [
-                                        Icon(Icons.check_circle, color: theme.colorScheme.primary),
-                                        Text('Followed', style: theme.textTheme.labelSmall?.copyWith(color: theme.colorScheme.primary)),
-                                      ],
-                                    )
-                                  : FollowButton(
-                                      onPressed: () => _addContributor(contributor),
-                                      tooltip: 'Add',
-                                      iconSize: 18,
-                                      isCardHovered: isCardHovered,
-                                    ),
-                              onTap: isFollowed ? null : () => _addContributor(contributor),
-                            ),
-                          ),
-                        );
-                      },
-                    ),
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 24.0),
+                  child: OutlinedButton.icon(
+                    onPressed: _loadMore,
+                    icon: const Icon(Icons.refresh),
+                    label: const Text('Load More Results'),
                   ),
                 ),
               );
-            },
+            }
+            
+            return const SizedBox(height: 40);
+          }
+
+          final contributor = _results[index];
+          final isFollowed = followedList.contains(contributor.tmdbId);
+          final isWatchlistItem = contributor.type == ContributorType.movie || 
+                                 contributor.type == ContributorType.tvShow || 
+                                 contributor.type == ContributorType.collection;
+
+          return ListTile(
+            leading: Container(
+              width: 40,
+              height: 60,
+              color: contributor.type == ContributorType.company 
+                  ? (theme.brightness == Brightness.dark ? Colors.grey[300] : Colors.white)
+                  : theme.colorScheme.surfaceContainerHighest,
+              child: contributor.profilePath != null
+                  ? Padding(
+                      padding: contributor.type == ContributorType.company
+                          ? const EdgeInsets.symmetric(horizontal: 4)
+                          : EdgeInsets.zero,
+                      child: CachedNetworkImage(
+                        imageUrl: 'https://image.tmdb.org/t/p/w200${contributor.profilePath}',
+                        fit: BoxFit.contain,
+                        errorWidget: (_, __, ___) => const Icon(Icons.person),
+                      ),
+                    )
+                  : const Icon(Icons.person),
+            ),
+            title: Text(contributor.name),
+            subtitle: Text(contributor.knownFor, maxLines: 2, overflow: TextOverflow.ellipsis),
+            trailing: isFollowed
+                ? Icon(Icons.check_circle, color: theme.colorScheme.primary)
+                : Icon(
+                    Icons.add_circle,
+                    color: isWatchlistItem 
+                        ? theme.colorScheme.primary
+                        : theme.colorScheme.secondary,
+                  ),
+            onTap: isFollowed ? null : () => _addContributor(contributor),
           );
         },
       ),

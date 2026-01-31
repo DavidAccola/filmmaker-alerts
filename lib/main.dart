@@ -6,6 +6,7 @@ import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:hive_flutter/hive_flutter.dart';
 import 'package:workmanager/workmanager.dart';
 import 'package:window_manager/window_manager.dart';
+import 'package:google_fonts/google_fonts.dart';
 import 'core/constants.dart';
 import 'data/models/contributor.dart';
 import 'data/models/contributor_detail.dart';
@@ -299,19 +300,84 @@ class MyApp extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final prefsAsync = ref.watch(preferencesProvider);
     
+    // Kumbh Sans text theme - Regular weight for body, SemiBold for titles
+    final kumbhTextTheme = GoogleFonts.kumbhSansTextTheme();
+    
     return MaterialApp(
       title: 'Filmmaker Alerts',
       theme: ThemeData(
         colorScheme: ColorScheme.fromSeed(seedColor: Colors.deepPurple),
         useMaterial3: true,
+        textTheme: kumbhTextTheme,
         snackBarTheme: const SnackBarThemeData(
           behavior: SnackBarBehavior.floating,
         ),
       ),
       darkTheme: ThemeData(
-        colorScheme: ColorScheme.fromSeed(
-          seedColor: Colors.deepPurple,
+        // Stacher-inspired dark mode with very dark backgrounds and bright text
+        colorScheme: const ColorScheme.dark(
           brightness: Brightness.dark,
+          // Primary accent - keeping purple but softened
+          primary: Color(0xFF9775fa),
+          onPrimary: Color(0xFFFFFFFF),
+          primaryContainer: Color(0xFF3d3d3d),
+          onPrimaryContainer: Color(0xFFF0F0F0),
+          // Secondary - soft blue
+          secondary: Color(0xFF74c0fc),
+          onSecondary: Color(0xFF0d0d0d),
+          secondaryContainer: Color(0xFF212121),
+          onSecondaryContainer: Color(0xFFcccccc),
+          // Tertiary - teal
+          tertiary: Color(0xFF63e6be),
+          onTertiary: Color(0xFF0d0d0d),
+          tertiaryContainer: Color(0xFF212121),
+          onTertiaryContainer: Color(0xFFcccccc),
+          // Error
+          error: Color(0xFFff8787),
+          onError: Color(0xFF0d0d0d),
+          errorContainer: Color(0xFF4d4d4d),
+          onErrorContainer: Color(0xFFffc9c9),
+          // Surfaces - very dark backgrounds (Stacher uses ~9% lightness for main bg)
+          surface: Color(0xFF171717),           // hsl(255 2% 9%) - main background
+          onSurface: Color(0xFFF2F2F2),          // hsl(255 2% 95%) - primary text (bright!)
+          surfaceContainerHighest: Color(0xFF212121), // hsl(255 2% 13%) - cards
+          onSurfaceVariant: Color(0xFFb3b3b3),  // hsl(255 2% 70%) - secondary text
+          outline: Color(0xFF4d4d4d),           // hsl(255 2% 30%) - borders
+          outlineVariant: Color(0xFF404040),    // hsl(255 2% 25%) - subtle borders
+          shadow: Color(0xFF000000),
+          scrim: Color(0xFF000000),
+          inverseSurface: Color(0xFFF2F2F2),
+          onInverseSurface: Color(0xFF171717),
+          inversePrimary: Color(0xFF7950f2),
+          surfaceTint: Color(0xFF9775fa),
+        ),
+        scaffoldBackgroundColor: const Color(0xFF141414), // hsl(255 2% 8%) - slightly darker
+        cardColor: const Color(0xFF212121),     // hsl(255 2% 13%) - card background
+        dividerColor: const Color(0xFF4d4d4d),  // borders
+        // Kumbh Sans with bright text colors for dark mode
+        textTheme: GoogleFonts.kumbhSansTextTheme(
+          const TextTheme(
+            // Display styles - SemiBold
+            displayLarge: TextStyle(color: Color(0xFFF2F2F2), fontWeight: FontWeight.w600),
+            displayMedium: TextStyle(color: Color(0xFFF2F2F2), fontWeight: FontWeight.w600),
+            displaySmall: TextStyle(color: Color(0xFFF2F2F2), fontWeight: FontWeight.w600),
+            // Headline styles - SemiBold
+            headlineLarge: TextStyle(color: Color(0xFFF2F2F2), fontWeight: FontWeight.w600),
+            headlineMedium: TextStyle(color: Color(0xFFF2F2F2), fontWeight: FontWeight.w600),
+            headlineSmall: TextStyle(color: Color(0xFFF2F2F2), fontWeight: FontWeight.w600),
+            // Title styles - Medium
+            titleLarge: TextStyle(color: Color(0xFFF2F2F2), fontWeight: FontWeight.w500),
+            titleMedium: TextStyle(color: Color(0xFFF2F2F2), fontWeight: FontWeight.w500),
+            titleSmall: TextStyle(color: Color(0xFFF2F2F2), fontWeight: FontWeight.w500),
+            // Body styles - Regular
+            bodyLarge: TextStyle(color: Color(0xFFF2F2F2), fontWeight: FontWeight.w400),
+            bodyMedium: TextStyle(color: Color(0xFFF2F2F2), fontWeight: FontWeight.w400),
+            bodySmall: TextStyle(color: Color(0xFFb3b3b3), fontWeight: FontWeight.w400),
+            // Label styles - Regular
+            labelLarge: TextStyle(color: Color(0xFFF2F2F2), fontWeight: FontWeight.w400),
+            labelMedium: TextStyle(color: Color(0xFFb3b3b3), fontWeight: FontWeight.w400),
+            labelSmall: TextStyle(color: Color(0xFFb3b3b3), fontWeight: FontWeight.w400),
+          ),
         ),
         useMaterial3: true,
         snackBarTheme: const SnackBarThemeData(

@@ -51,6 +51,7 @@ class TmdbAttribution extends StatelessWidget {
               'Filmmaker Alerts uses the TMDB API but is not endorsed or certified by TMDB.',
               style: Theme.of(context).textTheme.bodySmall?.copyWith(
                 color: Theme.of(context).colorScheme.onSurfaceVariant,
+                letterSpacing: 0,
               ),
               textAlign: TextAlign.center,
             ),

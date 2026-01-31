@@ -356,9 +356,13 @@ class _HistoryScreenState extends ConsumerState<HistoryScreen> {
           ),
         ),
         
-        // TMDB Attribution
-        const SliverToBoxAdapter(
-          child: TmdbAttribution(),
+        // TMDB Attribution - pushed to bottom
+        const SliverFillRemaining(
+          hasScrollBody: false,
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.end,
+            children: [TmdbAttribution()],
+          ),
         ),
       ],
     );

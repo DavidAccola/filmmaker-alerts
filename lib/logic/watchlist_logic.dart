@@ -227,6 +227,15 @@ class WatchlistLogic {
     );
   }
 
+  /// Remove status from an episode (clear all status records)
+  Future<void> removeStatusFromEpisode(
+    int showId,
+    int seasonNumber,
+    int episodeNumber,
+  ) async {
+    await _episodeRepo.deleteEpisode(showId, seasonNumber, episodeNumber);
+  }
+
   /// Add status to a season
   Future<void> addStatusToSeason(
     int showId,

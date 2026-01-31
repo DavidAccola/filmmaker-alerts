@@ -1,4 +1,5 @@
 import 'dart:ui' as ui;
+import 'package:collection/collection.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:cached_network_image/cached_network_image.dart';
@@ -14,9 +15,11 @@ import '../../logic/tv_show_display_logic.dart';
 import '../../logic/work_filtering_logic.dart';
 import '../common/work_widget.dart';
 import '../common/credit_expansion_section.dart';
+import '../common/department_selection_dialog.dart';
 import '../common/external_navigation_utils.dart';
 import '../common/shelf_with_arrows.dart';
 import '../common/filter_toggle_widget.dart';
+import '../common/snackbar_utils.dart';
 import '../../core/tmdb_mapping.dart';
 import '../../core/crew_constants.dart';
 
@@ -827,6 +830,11 @@ class _ContributorDetailScreenState extends ConsumerState<ContributorDetailScree
   }
 
   Widget _buildFollowedRolesChips() {
+    // Only show for person contributors
+    if (widget.contributor.type != ContributorType.person) {
+      return const SizedBox.shrink();
+    }
+
     final roles = widget.contributor.notifyForDepartments;
     final isTrueAll = widget.contributor.allRolesSelected ?? false;
 
@@ -835,90 +843,183 @@ class _ContributorDetailScreenState extends ConsumerState<ContributorDetailScree
     debugPrint('[ContributorDetail] allRolesSelected: $isTrueAll');
     debugPrint('[ContributorDetail] knownFor: ${widget.contributor.knownFor}');
 
+    // Build the content widget
+    Widget content;
+    
     if (isTrueAll) {
-      return Wrap(
+      content = Wrap(
         spacing: 4,
         children: [
           _buildRoleChip('Following All Roles', Theme.of(context).colorScheme.primary),
         ],
       );
-    }
-
-    if (roles.isEmpty) {
+    } else if (roles.isEmpty) {
       return const SizedBox.shrink();
-    }
-
-    // Organize roles by Stage 1, Stage 2, then others
-    final stage1Roles = <String>[];
-    final stage2Roles = <String>[];
-    final otherRoles = <String>[];
-    
-    for (final role in roles) {
-      // Check if it's a crew role (Stage 1 or Stage 2)
-      bool isStage1 = false;
-      bool isStage2 = false;
+    } else {
+      // Organize roles by Stage 1, Stage 2, then others
+      final stage1Roles = <String>[];
+      final stage2Roles = <String>[];
+      final otherRoles = <String>[];
       
-      // Check all departments for Stage 1/Stage 2
-      for (final dept in ['Directing', 'Writing', 'Production', 'Sound']) {
-        if (CrewConstants.isStage1(dept, role)) {
-          isStage1 = true;
-          break;
+      for (final role in roles) {
+        // Check if it's a crew role (Stage 1 or Stage 2)
+        bool isStage1 = false;
+        bool isStage2 = false;
+        
+        // Check all departments for Stage 1/Stage 2
+        for (final dept in ['Directing', 'Writing', 'Production', 'Sound']) {
+          if (CrewConstants.isStage1(dept, role)) {
+            isStage1 = true;
+            break;
+          }
+          if (CrewConstants.isStage2(dept, role)) {
+            isStage2 = true;
+            break;
+          }
         }
-        if (CrewConstants.isStage2(dept, role)) {
-          isStage2 = true;
-          break;
+        
+        if (isStage1) {
+          stage1Roles.add(role);
+        } else if (isStage2) {
+          stage2Roles.add(role);
+        } else {
+          otherRoles.add(role);
         }
       }
-      
-      if (isStage1) {
-        stage1Roles.add(role);
-      } else if (isStage2) {
-        stage2Roles.add(role);
-      } else {
-        otherRoles.add(role);
-      }
+
+      content = Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Text(
+                'Followed roles:',
+                style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                  fontWeight: FontWeight.bold,
+                  color: Theme.of(context).colorScheme.primary,
+                  letterSpacing: 0.5,
+                ),
+              ),
+              const SizedBox(width: 4),
+              Icon(
+                Icons.edit,
+                size: 12,
+                color: Theme.of(context).colorScheme.primary,
+              ),
+            ],
+          ),
+          const SizedBox(height: 4),
+          // Stage 1 roles
+          if (stage1Roles.isNotEmpty) ...[
+            Wrap(
+              spacing: 6,
+              runSpacing: 6,
+              children: stage1Roles.map((role) => _buildRoleChip(role, Theme.of(context).colorScheme.secondary)).toList(),
+            ),
+            const SizedBox(height: 4),
+          ],
+          // Stage 2 roles
+          if (stage2Roles.isNotEmpty) ...[
+            Wrap(
+              spacing: 6,
+              runSpacing: 6,
+              children: stage2Roles.map((role) => _buildRoleChip(role, Theme.of(context).colorScheme.tertiary)).toList(),
+            ),
+            const SizedBox(height: 4),
+          ],
+          // Other roles (cast, etc.)
+          if (otherRoles.isNotEmpty) ...[
+            Wrap(
+              spacing: 6,
+              runSpacing: 6,
+              children: otherRoles.map((role) => _buildRoleChip(role, Theme.of(context).colorScheme.outline)).toList(),
+            ),
+          ],
+        ],
+      );
     }
 
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(
-          'Followed roles:',
-          style: Theme.of(context).textTheme.labelSmall?.copyWith(
-            fontWeight: FontWeight.bold,
-            color: Theme.of(context).colorScheme.primary,
-            letterSpacing: 0.5,
-          ),
-        ),
-        const SizedBox(height: 4),
-        // Stage 1 roles
-        if (stage1Roles.isNotEmpty) ...[
-          Wrap(
-            spacing: 6,
-            runSpacing: 6,
-            children: stage1Roles.map((role) => _buildRoleChip(role, Theme.of(context).colorScheme.secondary)).toList(),
-          ),
-          const SizedBox(height: 4),
-        ],
-        // Stage 2 roles
-        if (stage2Roles.isNotEmpty) ...[
-          Wrap(
-            spacing: 6,
-            runSpacing: 6,
-            children: stage2Roles.map((role) => _buildRoleChip(role, Theme.of(context).colorScheme.tertiary)).toList(),
-          ),
-          const SizedBox(height: 4),
-        ],
-        // Other roles (cast, etc.)
-        if (otherRoles.isNotEmpty) ...[
-          Wrap(
-            spacing: 6,
-            runSpacing: 6,
-            children: otherRoles.map((role) => _buildRoleChip(role, Theme.of(context).colorScheme.outline)).toList(),
-          ),
-        ],
-      ],
+    // Wrap in InkWell to make it tappable
+    return InkWell(
+      onTap: _onEditRoles,
+      borderRadius: BorderRadius.circular(8),
+      child: Padding(
+        padding: const EdgeInsets.all(4),
+        child: content,
+      ),
     );
+  }
+
+  Future<void> _onEditRoles() async {
+    final repo = ref.read(preferencesRepositoryProvider);
+    final prefs = repo.getPreferences();
+
+    final contributorRepo = ref.read(contributorRepositoryProvider);
+    final storedContributor = contributorRepo.getContributor(widget.contributor.tmdbId);
+    final contributor = storedContributor ?? widget.contributor;
+
+    final result = await showDialog<dynamic>(
+      context: context,
+      builder: (context) => DepartmentSelectionDialog(
+        name: contributor.name,
+        availableDepartments: contributor.availableDepartments,
+        initialSelectedDepartments: contributor.notifyForDepartments,
+        defaultDepartments: prefs.effectiveDefaultDepartments,
+        initialAllRolesSelected: contributor.allRolesSelected ?? false,
+        allowTrueAll: prefs.autoFollowNewRoles ?? true,
+      ),
+    );
+
+    if (result != null && result is Map) {
+      final selectedDepts = result['roles'] as List<String>;
+      final allSelected = result['allRolesSelected'] as bool;
+      
+      // Check if roles actually changed
+      final oldRoles = Set<String>.from(contributor.notifyForDepartments);
+      final newRoles = Set<String>.from(selectedDepts);
+      final oldAllSelected = contributor.allRolesSelected ?? false;
+      
+      const setEquality = SetEquality<String>();
+      final hasRoleChanges = !setEquality.equals(oldRoles, newRoles) || oldAllSelected != allSelected;
+      
+      if (hasRoleChanges) {
+        // Create updated contributor with new flags
+        final updatedContributor = Contributor(
+          tmdbId: contributor.tmdbId,
+          name: contributor.name,
+          type: contributor.type,
+          profilePath: contributor.profilePath,
+          notifyForDepartments: selectedDepts,
+          availableDepartments: contributor.availableDepartments, 
+          knownFor: contributor.knownFor,
+          latestWork: contributor.latestWork,
+          followedAt: contributor.followedAt,
+          allRolesSelected: allSelected,
+          tvNotificationPrefs: contributor.tvNotificationPrefs,
+          showStatus: contributor.showStatus,
+          totalSeasons: contributor.totalSeasons,
+          nextEpisodeDate: contributor.nextEpisodeDate,
+        );
+        
+        final logic = ref.read(contributorLogicProvider);
+        await logic.updateContributorRoles(updatedContributor, selectedDepts);
+        
+        // Refresh the UI
+        ref.invalidate(contributorsProvider);
+        ref.invalidate(contributorDetailProvider(widget.contributor.tmdbId));
+        
+        if (mounted) {
+          setState(() {
+            _lastFollowedRoles = selectedDepts.join(',');
+          });
+          showSimpleSnackBar(context, 'Roles updated.');
+        }
+      } else {
+        if (mounted) {
+          showSimpleSnackBar(context, 'No changes made to roles.');
+        }
+      }
+    }
   }
 
   Widget _buildRoleChip(String label, Color color) {

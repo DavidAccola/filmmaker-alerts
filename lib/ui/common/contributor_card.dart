@@ -64,8 +64,9 @@ class _ContributorCardState extends State<ContributorCard> {
             // Image width is 90, Padding is 12*2 = 24. Total = 114
             final textColumnWidth = (constraints.maxWidth - 114).clamp(0.0, double.infinity);
             
-            // On small screens, put "Latest:" on its own line
-            final isSmallScreen = constraints.maxWidth < 400;
+            // On small screens (list mode, not grid mode), put "Latest:" on its own line
+            final screenWidth = MediaQuery.of(context).size.width;
+            final isSmallScreen = screenWidth < 600;
 
             // Prepare for smart wrapping measurement
             Widget? latestWorkWidget;

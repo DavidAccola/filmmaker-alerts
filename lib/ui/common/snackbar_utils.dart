@@ -555,6 +555,7 @@ void showSnoozedSnackBar(
 }
 
 /// Shows dialog prompt when unmarking "Want to watch"
+/// Returns: 'unmark', 'hide', 'delete', or null if cancelled
 Future<String?> showWantToWatchUnmarkPrompt(
   BuildContext context,
   String title,
@@ -571,7 +572,11 @@ Future<String?> showWantToWatchUnmarkPrompt(
           ),
           TextButton(
             onPressed: () => Navigator.of(context).pop('delete'),
-            child: const Text('DELETE'),
+            child: const Text('REMOVE'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(context).pop('unmark'),
+            child: const Text('UNMARK'),
           ),
         ],
       );

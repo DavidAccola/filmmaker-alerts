@@ -21,8 +21,12 @@ class StreamingService {
     required String regionCode,
   }) async {
     try {
+      debugPrint('[StreamingService] Fetching movie watch providers for $tmdbId, region: $regionCode');
       final data = await _tmdbService.getMovieWatchProviders(tmdbId);
-      return _parseWatchProviders(data, regionCode);
+      debugPrint('[StreamingService] Raw data keys: ${data.keys}');
+      final options = _parseWatchProviders(data, regionCode);
+      debugPrint('[StreamingService] Parsed ${options.length} streaming options for movie $tmdbId');
+      return options;
     } catch (e) {
       debugPrint('[StreamingService] Error fetching movie watch providers: $e');
       return [];
@@ -68,15 +72,18 @@ class StreamingService {
 
     try {
       final results = data['results'] as Map<String, dynamic>? ?? {};
+      debugPrint('[StreamingService] Available regions: ${results.keys.take(10).toList()}...');
       
       // Get data for the requested region, fallback to US if not available
       final regionData = results[regionCode.toUpperCase()] as Map<String, dynamic>? ??
           results['US'] as Map<String, dynamic>?;
       
       if (regionData == null) {
-        debugPrint('[StreamingService] No watch provider data for region: $regionCode');
+        debugPrint('[StreamingService] No watch provider data for region: $regionCode (or US fallback)');
         return options;
       }
+      
+      debugPrint('[StreamingService] Region data keys for $regionCode: ${regionData.keys}');
 
       // Capture the watch link from the response
       watchLink = regionData['link'] as String?;

@@ -288,24 +288,37 @@ final contributorDetailProvider = FutureProvider.autoDispose.family<ContributorD
 
 final movieDetailProvider = FutureProvider.autoDispose.family<MovieDetail?, int>((ref, movieId) async {
   final repo = ref.watch(movieDetailRepositoryProvider);
+  final prefs = ref.watch(preferencesRepositoryProvider).getPreferences();
+  final regionCode = prefs.streamingCountry ?? 'US';
   
   // Check if cached and fresh
   if (repo.isCached(movieId)) {
-    return repo.getMovieDetail(movieId);
+    final cached = repo.getMovieDetail(movieId);
+    // If cached but missing streaming options, re-fetch to get them
+    if (cached != null && cached.streamingOptions.isNotEmpty) {
+      return cached;
+    }
   }
   
   final logic = ref.read(workLogicProvider);
-  return await logic.fetchAndCacheMovieDetail(movieId);
+  return await logic.fetchAndCacheMovieDetail(movieId, regionCode: regionCode);
 });
 
 /// TV show detail provider
 final tvShowDetailProvider = FutureProvider.autoDispose.family<TvShowDetail?, int>((ref, showId) async {
   final repo = ref.watch(tvDetailRepositoryProvider);
+  final prefs = ref.watch(preferencesRepositoryProvider).getPreferences();
+  final regionCode = prefs.streamingCountry ?? 'US';
+  
   if (repo.isShowCached(showId)) {
-    return repo.getTvShowDetail(showId);
+    final cached = repo.getTvShowDetail(showId);
+    // If cached but missing streaming options, re-fetch to get them
+    if (cached != null && cached.streamingOptions.isNotEmpty) {
+      return cached;
+    }
   }
   final logic = ref.read(workLogicProvider);
-  return await logic.fetchAndCacheTvShowDetail(showId);
+  return await logic.fetchAndCacheTvShowDetail(showId, regionCode: regionCode);
 });
 
 typedef EpisodeParams = ({int showId, int seasonNumber, int episodeNumber});

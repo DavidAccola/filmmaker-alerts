@@ -270,8 +270,8 @@ class _TvEpisodeDetailScreenState extends ConsumerState<TvEpisodeDetailScreen> {
                 
                 const SizedBox(width: 24),
                 
-                // Right side: Streaming options
-                if (showDetail != null && showDetail.streamingOptions.isNotEmpty)
+                // Right side: Streaming options (always show, even when empty)
+                if (showDetail != null)
                   SizedBox(
                     width: 350,
                     child: StreamingOptionsWidget(
@@ -280,6 +280,8 @@ class _TvEpisodeDetailScreenState extends ConsumerState<TvEpisodeDetailScreen> {
                       isTV: true,
                       isCompact: true,
                       locale: prefs.streamingCountry,
+                      title: showDetail.name,
+                      releaseDate: showDetail.firstAirDate,
                     ),
                   ),
               ],
@@ -321,8 +323,8 @@ class _TvEpisodeDetailScreenState extends ConsumerState<TvEpisodeDetailScreen> {
                   ],
                 ),
                 
-                // Streaming options below on small screens
-                if (showDetail != null && showDetail.streamingOptions.isNotEmpty) ...[
+                // Streaming options below on small screens (always show, even when empty)
+                if (showDetail != null) ...[
                   const SizedBox(height: 16),
                   StreamingOptionsWidget(
                     streamingOptions: showDetail.streamingOptions,
@@ -330,6 +332,8 @@ class _TvEpisodeDetailScreenState extends ConsumerState<TvEpisodeDetailScreen> {
                     isTV: true,
                     isCompact: true,
                     locale: prefs.streamingCountry,
+                    title: showDetail.name,
+                    releaseDate: showDetail.firstAirDate,
                   ),
                 ],
               ],

@@ -107,6 +107,11 @@ class EpisodeStatusRepository {
   }
 
   /// Clear conflicting statuses based on hierarchy
+  /// Rules:
+  /// - In Progress → unmarks Want to Watch
+  /// - Watched → unmarks Want to Watch and In Progress
+  /// - Want to Watch → only unmarks Did Not Finish
+  /// - Did Not Finish → unmarks everything
   void _clearConflictingStatuses(
       EpisodeStatusEntry entry, WatchStatus newStatus) {
     switch (newStatus) {
@@ -123,12 +128,18 @@ class EpisodeStatusRepository {
             .removeWhere((r) => r.status == WatchStatus.wantToWatch);
         break;
       case WatchStatus.wantToWatch:
-        // Want to watch clears In progress
+        // Want to watch only clears DNF
         entry.statusRecords
-            .removeWhere((r) => r.status == WatchStatus.inProgress);
+            .removeWhere((r) => r.status == WatchStatus.dnf);
         break;
       case WatchStatus.dnf:
-        // DNF doesn't clear anything
+        // DNF clears everything
+        entry.statusRecords
+            .removeWhere((r) => r.status == WatchStatus.wantToWatch);
+        entry.statusRecords
+            .removeWhere((r) => r.status == WatchStatus.inProgress);
+        entry.statusRecords
+            .removeWhere((r) => r.status == WatchStatus.watched);
         break;
     }
   }

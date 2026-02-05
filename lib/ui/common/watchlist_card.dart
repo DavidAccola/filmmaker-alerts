@@ -10,6 +10,7 @@ import 'adaptive_tooltip_text.dart';
 import 'snackbar_utils.dart';
 import 'release_preferences_dialog.dart';
 import 'tv_preferences_dialog.dart';
+import 'expand_poster_button.dart';
 import '../../providers/providers.dart';
 import '../screens/show_configuration_screen.dart';
 import '../screens/collection_configuration_screen.dart';
@@ -38,6 +39,23 @@ class WatchlistCard extends ConsumerStatefulWidget {
 
 class _WatchlistCardState extends ConsumerState<WatchlistCard> {
   bool _isHovered = false;
+
+  /// Gets episode status counts for a TV show
+  Map<WatchStatus, int> _getEpisodeStatusCounts() {
+    if (widget.entry.type != WorkType.tvShow) return {};
+    
+    final episodeRepo = ref.read(episodeStatusRepositoryProvider);
+    final episodes = episodeRepo.getEpisodesByShow(widget.entry.tmdbId);
+    
+    final counts = <WatchStatus, int>{};
+    for (final episode in episodes) {
+      // Count all statuses for each episode (episodes can have multiple statuses)
+      for (final record in episode.statusRecords) {
+        counts[record.status] = (counts[record.status] ?? 0) + 1;
+      }
+    }
+    return counts;
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -289,6 +307,18 @@ class _WatchlistCardState extends ConsumerState<WatchlistCard> {
                       ),
                     ),
                   ),
+
+                  // Expand Poster Button - appears in upper-left of poster
+                  Positioned(
+                    top: 4,
+                    left: 4,
+                    child: ExpandPosterButton(
+                      posterPath: entry.posterPath,
+                      title: entry.title,
+                      isCardHovered: _isHovered,
+                      iconSize: 20,
+                    ),
+                  ),
                 ],
               ),
             ),
@@ -326,45 +356,88 @@ class _WatchlistCardState extends ConsumerState<WatchlistCard> {
                 borderRadius: const BorderRadius.vertical(bottom: Radius.circular(12)),
               ),
               padding: const EdgeInsets.symmetric(horizontal: 4),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                children: [
-                  // Want to watch button
-                  Expanded(
-                    child: _StatusButton(
-                      icon: Icons.bookmark_border,
-                      activeIcon: Icons.bookmark,
-                      isActive: hasWantToWatch,
-                      tooltip: 'Want to watch',
-                      onTap: () => _handleWantToWatchToggle(hasWantToWatch),
-                    ),
-                  ),
+              child: Builder(
+                builder: (context) {
+                  // Get episode counts for TV shows
+                  final episodeCounts = entry.type == WorkType.tvShow 
+                      ? _getEpisodeStatusCounts() 
+                      : <WatchStatus, int>{};
+                  final wantToWatchCount = episodeCounts[WatchStatus.wantToWatch] ?? 0;
+                  final inProgressCount = episodeCounts[WatchStatus.inProgress] ?? 0;
+                  final watchedCount = episodeCounts[WatchStatus.watched] ?? 0;
+                  
+                  // For TV shows, icons are active if ANY episodes have that status
+                  // For movies, use the work-level status
+                  final isTvShow = entry.type == WorkType.tvShow;
+                  final showWantToWatch = isTvShow ? wantToWatchCount > 0 : hasWantToWatch;
+                  final showInProgress = isTvShow ? inProgressCount > 0 : hasInProgress;
+                  final showWatched = isTvShow ? watchedCount > 0 : hasWatched;
+                  
+                  // Format count for display - abbreviate large numbers
+                  String? formatCount(int count) {
+                    if (count == 0) return null;
+                    if (count > 99) return '99+';
+                    return '$count';
+                  }
+                  
+                  return Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                    children: [
+                      // Want to watch button
+                      Expanded(
+                        child: _StatusButton(
+                          icon: Icons.bookmark_border,
+                          activeIcon: Icons.bookmark,
+                          isActive: showWantToWatch,
+                          tooltip: isTvShow && wantToWatchCount > 0 
+                              ? 'Want to watch ($wantToWatchCount episodes)' 
+                              : 'Want to watch',
+                          label: formatCount(wantToWatchCount),
+                          // TV shows: navigate to config screen, movies: toggle want to watch
+                          onTap: isTvShow ? () => _navigateToShowConfig() : () => _handleWantToWatchToggle(hasWantToWatch),
+                        ),
+                      ),
 
-                  // In progress button
-                  Expanded(
-                    child: _StatusButton(
-                      icon: Icons.play_circle_outline,
-                      activeIcon: Icons.play_circle,
-                      isActive: hasInProgress,
-                      tooltip: 'In progress',
-                      onTap: () => widget.onStatusChanged?.call(WatchStatus.inProgress),
-                      onLongPress: () => _showDNFMenu(WatchStatus.inProgress),
-                    ),
-                  ),
+                      // In progress button
+                      Expanded(
+                        child: _StatusButton(
+                          icon: Icons.play_circle_outline,
+                          activeIcon: Icons.play_circle,
+                          isActive: showInProgress,
+                          tooltip: isTvShow && inProgressCount > 0 
+                              ? 'In progress ($inProgressCount episodes)' 
+                              : 'In progress',
+                          label: formatCount(inProgressCount),
+                          // TV shows: navigate to config screen, movies: set in progress
+                          onTap: isTvShow ? () => _navigateToShowConfig() : () => widget.onStatusChanged?.call(WatchStatus.inProgress),
+                          onLongPress: isTvShow ? null : () => _showDNFMenu(WatchStatus.inProgress),
+                        ),
+                      ),
 
-                  // Watched button
-                  Expanded(
-                    child: _StatusButton(
-                      icon: Icons.check_circle_outline,
-                      activeIcon: Icons.check_circle,
-                      isActive: hasWatched,
-                      tooltip: watchCount > 1 ? 'Watched x$watchCount' : 'Watched',
-                      label: watchCount > 1 ? 'x$watchCount' : null,
-                      onTap: () => widget.onStatusChanged?.call(WatchStatus.watched),
-                      onLongPress: () => _showDNFMenu(WatchStatus.watched),
-                    ),
-                  ),
-                ],
+                      // Watched button
+                      Expanded(
+                        child: _StatusButton(
+                          icon: Icons.check_circle_outline,
+                          activeIcon: Icons.check_circle,
+                          isActive: showWatched,
+                          tooltip: isTvShow && watchedCount > 0
+                              ? 'Watched ($watchedCount episodes)'
+                              : watchCount > 1 
+                                  ? 'Watched x$watchCount' 
+                                  : 'Watched',
+                          label: isTvShow 
+                              ? formatCount(watchedCount)
+                              : watchCount > 1 
+                                  ? 'x$watchCount' 
+                                  : null,
+                          // TV shows: navigate to config screen, movies: set watched
+                          onTap: isTvShow ? () => _navigateToShowConfig() : () => widget.onStatusChanged?.call(WatchStatus.watched),
+                          onLongPress: isTvShow ? null : () => _showDNFMenu(WatchStatus.watched),
+                        ),
+                      ),
+                    ],
+                  );
+                },
               ),
             ),
           ],
@@ -374,12 +447,32 @@ class _WatchlistCardState extends ConsumerState<WatchlistCard> {
     );
   }
 
+  void _navigateToShowConfig() {
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (context) => ShowConfigurationScreen(
+          showId: widget.entry.tmdbId,
+          showTitle: widget.entry.title,
+        ),
+      ),
+    );
+  }
+
   Future<void> _handleWantToWatchToggle(bool currentlyMarked) async {
     if (currentlyMarked) {
       // Show prompt for movies or entire shows
       final result = await showWantToWatchUnmarkPrompt(context, widget.entry.title);
-      if (result == 'hide') {
-        // First remove Want to watch status, then hide
+      if (result == 'unmark') {
+        // Just remove Want to watch status
+        final logic = ref.read(watchlistLogicProvider);
+        await logic.removeStatusFromWork(
+          widget.entry.tmdbId,
+          widget.entry.type,
+          WatchStatus.wantToWatch,
+        );
+        ref.invalidate(watchlistEntriesProvider);
+      } else if (result == 'hide') {
+        // Remove Want to watch status, then hide
         final logic = ref.read(watchlistLogicProvider);
         await logic.removeStatusFromWork(
           widget.entry.tmdbId,

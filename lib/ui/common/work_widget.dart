@@ -5,6 +5,7 @@ import '../../data/models/contributor_detail.dart';
 import '../../logic/work_sorting_logic.dart';
 import 'adaptive_tooltip_text.dart';
 import 'watchlist_button.dart';
+import 'expand_poster_button.dart';
 
 enum WatchlistButtonPosition {
   bottomRight,
@@ -244,6 +245,18 @@ class _WorkWidgetState extends State<WorkWidget> {
                         showOnHoverOnly: widget.showWatchlistOnHover,
                         isHovered: _isHovered,
                       ),
+
+                    // Expand Poster Button - appears in upper-left of poster
+                    Positioned(
+                      top: 4,
+                      left: 4,
+                      child: ExpandPosterButton(
+                        posterPath: work.posterPath,
+                        title: work.title,
+                        isCardHovered: _isHovered,
+                        iconSize: 20,
+                      ),
+                    ),
                   ],
                 ),
               ),

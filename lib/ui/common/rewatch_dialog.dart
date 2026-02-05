@@ -58,67 +58,67 @@ class _ReWatchDialogState extends State<ReWatchDialog> {
             
             // List of watch dates
             ..._watchDates.asMap().entries.map((entry) {
-              final index = entry.key;
-              final date = entry.value;
-              
-              return Padding(
-                padding: const EdgeInsets.only(bottom: 12),
-                child: Row(
-                  children: [
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            'Watch ${index + 1}',
-                            style: theme.textTheme.labelSmall,
-                          ),
-                          const SizedBox(height: 4),
-                          Material(
-                            color: Colors.transparent,
-                            child: InkWell(
-                              onTap: () => _selectDate(context, index),
-                              borderRadius: BorderRadius.circular(4),
-                              child: Container(
-                                padding: const EdgeInsets.symmetric(
-                                  horizontal: 12,
-                                  vertical: 8,
-                                ),
-                                decoration: BoxDecoration(
-                                  border: Border.all(
-                                    color: theme.colorScheme.outline,
+                final index = entry.key;
+                final date = entry.value;
+                
+                return Padding(
+                  padding: const EdgeInsets.only(bottom: 12),
+                  child: Row(
+                    children: [
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              'Watch ${index + 1}',
+                              style: theme.textTheme.labelSmall,
+                            ),
+                            const SizedBox(height: 4),
+                            Material(
+                              color: Colors.transparent,
+                              child: InkWell(
+                                onTap: () => _selectDate(context, index),
+                                borderRadius: BorderRadius.circular(4),
+                                child: Container(
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 12,
+                                    vertical: 8,
                                   ),
-                                  borderRadius: BorderRadius.circular(4),
-                                ),
-                                child: Row(
-                                  children: [
-                                    Icon(
-                                      Icons.calendar_today,
-                                      size: 16,
-                                      color: theme.colorScheme.onSurfaceVariant,
+                                  decoration: BoxDecoration(
+                                    border: Border.all(
+                                      color: theme.colorScheme.outline,
                                     ),
-                                    const SizedBox(width: 8),
-                                    Text(
-                                      DateFormat('MMM d, yyyy').format(date),
-                                      style: theme.textTheme.bodyMedium,
-                                    ),
-                                  ],
+                                    borderRadius: BorderRadius.circular(4),
+                                  ),
+                                  child: Row(
+                                    children: [
+                                      Icon(
+                                        Icons.calendar_today,
+                                        size: 16,
+                                        color: theme.colorScheme.onSurfaceVariant,
+                                      ),
+                                      const SizedBox(width: 8),
+                                      Text(
+                                        DateFormat('MMM d, yyyy').format(date),
+                                        style: theme.textTheme.bodyMedium,
+                                      ),
+                                    ],
+                                  ),
                                 ),
                               ),
                             ),
-                          ),
-                        ],
+                          ],
+                        ),
                       ),
-                    ),
-                    IconButton(
-                      icon: const Icon(Icons.delete_outline),
-                      onPressed: () => _removeWatch(index),
-                      tooltip: 'Remove watch',
-                    ),
-                  ],
-                ),
-              );
-            }),
+                      IconButton(
+                        icon: const Icon(Icons.delete_outline),
+                        onPressed: () => _removeWatch(index),
+                        tooltip: 'Remove watch',
+                      ),
+                    ],
+                  ),
+                );
+              }),
 
             // Add button
             const SizedBox(height: 8),
@@ -172,6 +172,11 @@ class _ReWatchDialogState extends State<ReWatchDialog> {
     setState(() {
       _watchDates.removeAt(index);
     });
+    
+    // If no watches left, automatically close and return empty list (unmark as watched)
+    if (_watchDates.isEmpty) {
+      Navigator.of(context).pop(<DateTime>[]);
+    }
   }
 }
 

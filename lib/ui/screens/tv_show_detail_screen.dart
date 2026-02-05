@@ -9,6 +9,7 @@ import '../common/streaming_options_widget.dart';
 import '../common/external_navigation_utils.dart';
 import '../common/snackbar_utils.dart';
 import '../common/watchlist_button.dart';
+import '../common/expand_poster_button.dart';
 import 'contributor_detail_screen.dart';
 import 'tv_season_detail_screen.dart';
 import '../../data/models/contributor.dart';
@@ -190,6 +191,17 @@ class _TvShowDetailScreenState extends ConsumerState<TvShowDetailScreen> {
                                   applyPositioning: false,
                                 ),
                               ),
+                              // Expand poster button
+                              Positioned(
+                                top: 4,
+                                left: 4,
+                                child: ExpandPosterButton(
+                                  posterPath: showDetail.posterPath,
+                                  title: showDetail.name,
+                                  isCardHovered: _isPosterHovered,
+                                  iconSize: 18,
+                                ),
+                              ),
                             ],
                           ),
                         ),
@@ -207,18 +219,19 @@ class _TvShowDetailScreenState extends ConsumerState<TvShowDetailScreen> {
                 
                 const SizedBox(width: 24),
                 
-                // Right side: Streaming options
-                if (showDetail.streamingOptions.isNotEmpty)
-                  SizedBox(
-                    width: 350,
-                    child: StreamingOptionsWidget(
-                      streamingOptions: showDetail.streamingOptions,
-                      tmdbId: showDetail.tmdbId,
-                      isTV: true,
-                      isCompact: true,
-                      locale: prefs.streamingCountry,
-                    ),
+                // Right side: Streaming options (always show, even when empty)
+                SizedBox(
+                  width: 350,
+                  child: StreamingOptionsWidget(
+                    streamingOptions: showDetail.streamingOptions,
+                    tmdbId: showDetail.tmdbId,
+                    isTV: true,
+                    isCompact: true,
+                    locale: prefs.streamingCountry,
+                    title: showDetail.name,
+                    releaseDate: showDetail.firstAirDate,
                   ),
+                ),
               ],
             );
           } else {
@@ -279,6 +292,17 @@ class _TvShowDetailScreenState extends ConsumerState<TvShowDetailScreen> {
                                 applyPositioning: false,
                               ),
                             ),
+                            // Expand poster button
+                            Positioned(
+                              top: 4,
+                              left: 4,
+                              child: ExpandPosterButton(
+                                posterPath: showDetail.posterPath,
+                                title: showDetail.name,
+                                isCardHovered: _isPosterHovered,
+                                iconSize: 18,
+                              ),
+                            ),
                           ],
                         ),
                       ),
@@ -293,17 +317,17 @@ class _TvShowDetailScreenState extends ConsumerState<TvShowDetailScreen> {
                   ],
                 ),
                 
-                // Streaming options below on small screens
-                if (showDetail.streamingOptions.isNotEmpty) ...[
-                  const SizedBox(height: 16),
-                  StreamingOptionsWidget(
-                    streamingOptions: showDetail.streamingOptions,
-                    tmdbId: showDetail.tmdbId,
-                    isTV: true,
-                    isCompact: true,
-                    locale: prefs.streamingCountry,
-                  ),
-                ],
+                // Streaming options below on small screens (always show, even when empty)
+                const SizedBox(height: 16),
+                StreamingOptionsWidget(
+                  streamingOptions: showDetail.streamingOptions,
+                  tmdbId: showDetail.tmdbId,
+                  isTV: true,
+                  isCompact: true,
+                  locale: prefs.streamingCountry,
+                  title: showDetail.name,
+                  releaseDate: showDetail.firstAirDate,
+                ),
               ],
             );
           }

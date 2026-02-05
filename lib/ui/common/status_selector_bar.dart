@@ -46,22 +46,32 @@ class StatusSelectorBar extends StatelessWidget {
     );
   }
 
-  /// Builds the desktop layout using [SegmentedButton] with symbol + label.
+  /// Builds the desktop layout using [SegmentedButton] with icon + label.
   Widget _buildDesktopLayout(BuildContext context) {
+    final theme = Theme.of(context);
+    
     return Row(
       children: [
         Text(
           'Status to apply:',
-          style: Theme.of(context).textTheme.bodyMedium,
+          style: theme.textTheme.bodyMedium,
         ),
         const SizedBox(width: 16),
         Expanded(
           child: SegmentedButton<WatchStatus>(
             showSelectedIcon: false,
             segments: WatchStatus.values.map((status) {
+              final isSelected = selectedStatus == status;
               return ButtonSegment<WatchStatus>(
                 value: status,
-                label: Text('${_getStatusSymbol(status)} ${_getStatusText(status)}'),
+                icon: Icon(
+                  _getStatusIcon(status),
+                  size: 18,
+                  color: isSelected
+                      ? theme.colorScheme.primary
+                      : theme.colorScheme.onSurfaceVariant,
+                ),
+                label: Text(_getStatusText(status)),
               );
             }).toList(),
             selected: {selectedStatus},
@@ -74,7 +84,7 @@ class StatusSelectorBar extends StatelessWidget {
     );
   }
 
-  /// Builds the mobile layout using [FilterChip] row with symbol only.
+  /// Builds the mobile layout using [FilterChip] row with icon only.
   Widget _buildMobileLayout(BuildContext context) {
     final theme = Theme.of(context);
 
@@ -96,7 +106,13 @@ class StatusSelectorBar extends StatelessWidget {
               child: Tooltip(
                 message: _getStatusText(status),
                 child: FilterChip(
-                  label: Text(_getStatusSymbol(status)),
+                  label: Icon(
+                    _getStatusIcon(status),
+                    size: 18,
+                    color: isSelected
+                        ? theme.colorScheme.primary
+                        : theme.colorScheme.onSurfaceVariant,
+                  ),
                   selected: isSelected,
                   onSelected: (_) => onStatusChanged(status),
                   backgroundColor: Colors.transparent,
@@ -115,17 +131,18 @@ class StatusSelectorBar extends StatelessWidget {
     );
   }
 
-  /// Returns the symbol for a given [WatchStatus].
-  String _getStatusSymbol(WatchStatus status) {
+  /// Returns the icon for a given [WatchStatus].
+  /// Uses the same icons as WatchlistCard for consistency.
+  IconData _getStatusIcon(WatchStatus status) {
     switch (status) {
       case WatchStatus.wantToWatch:
-        return '📖';
+        return Icons.bookmark;
       case WatchStatus.inProgress:
-        return '▶';
+        return Icons.play_circle;
       case WatchStatus.watched:
-        return '✓';
+        return Icons.check_circle;
       case WatchStatus.dnf:
-        return '✗';
+        return Icons.cancel;
     }
   }
 

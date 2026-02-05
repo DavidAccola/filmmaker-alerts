@@ -11,6 +11,8 @@ class StreamingOptionsWidget extends StatefulWidget {
   final bool isTV;
   final bool isCompact;
   final String? locale;
+  final String? title;
+  final DateTime? releaseDate;
 
   const StreamingOptionsWidget({
     super.key,
@@ -21,6 +23,8 @@ class StreamingOptionsWidget extends StatefulWidget {
     this.isTV = false,
     this.isCompact = false,
     this.locale,
+    this.title,
+    this.releaseDate,
   });
 
   @override
@@ -57,17 +61,14 @@ class _StreamingOptionsWidgetState extends State<StreamingOptionsWidget>
 
   @override
   Widget build(BuildContext context) {
-    if (widget.streamingOptions.isEmpty) {
-      return _buildNoStreamingAvailable(context);
-    }
-
-    final grouped = _groupByType(widget.streamingOptions);
-    final merged = _mergeProviders(grouped);
+    final hasStreamingOptions = widget.streamingOptions.isNotEmpty;
+    final grouped = hasStreamingOptions ? _groupByType(widget.streamingOptions) : <StreamingType, List<StreamingOption>>{};
+    final merged = hasStreamingOptions ? _mergeProviders(grouped) : <String, List<StreamingOption>>{};
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        _buildHeader(context, merged),
+        _buildHeader(context, merged, hasStreamingOptions),
         ClipRect(
           child: SizeTransition(
             sizeFactor: _heightAnimation,
@@ -76,7 +77,10 @@ class _StreamingOptionsWidgetState extends State<StreamingOptionsWidget>
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  _buildStreamingGrid(context, merged),
+                  if (hasStreamingOptions)
+                    _buildStreamingGrid(context, merged)
+                  else
+                    _buildNoStreamingContent(context),
                   const SizedBox(height: 12),
                   _buildJustWatchAttribution(context),
                 ],
@@ -88,7 +92,32 @@ class _StreamingOptionsWidgetState extends State<StreamingOptionsWidget>
     );
   }
 
-  Widget _buildHeader(BuildContext context, Map<String, List<StreamingOption>> merged) {
+  Widget _buildHeader(BuildContext context, Map<String, List<StreamingOption>> merged, bool hasStreamingOptions) {
+    final theme = Theme.of(context);
+    
+    // Use different colors when no streaming options available
+    final textColor = hasStreamingOptions 
+        ? theme.colorScheme.primary 
+        : theme.colorScheme.onSurfaceVariant;
+    final iconColor = hasStreamingOptions 
+        ? null  // Use default image color
+        : theme.colorScheme.onSurface;
+    final expandIconColor = hasStreamingOptions 
+        ? theme.colorScheme.primary 
+        : theme.colorScheme.onSurfaceVariant;
+    final borderColor = hasStreamingOptions
+        ? theme.colorScheme.primary.withValues(alpha: 0.2)
+        : theme.colorScheme.outline.withValues(alpha: 0.15);
+    final gradientColors = hasStreamingOptions
+        ? [
+            theme.colorScheme.primaryContainer.withValues(alpha: 0.3),
+            theme.colorScheme.secondaryContainer.withValues(alpha: 0.2),
+          ]
+        : [
+            theme.colorScheme.surfaceContainerLow,
+            theme.colorScheme.surfaceContainerLow,
+          ];
+    
     return Material(
       color: Colors.transparent,
       child: InkWell(
@@ -108,16 +137,13 @@ class _StreamingOptionsWidgetState extends State<StreamingOptionsWidget>
           padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 16),
           decoration: BoxDecoration(
             gradient: LinearGradient(
-              colors: [
-                Theme.of(context).colorScheme.primaryContainer.withValues(alpha: 0.3),
-                Theme.of(context).colorScheme.secondaryContainer.withValues(alpha: 0.2),
-              ],
+              colors: gradientColors,
               begin: Alignment.topLeft,
               end: Alignment.bottomRight,
             ),
             borderRadius: BorderRadius.circular(12),
             border: Border.all(
-              color: Theme.of(context).colorScheme.primary.withValues(alpha: 0.2),
+              color: borderColor,
               width: 1.5,
             ),
           ),
@@ -132,22 +158,30 @@ class _StreamingOptionsWidgetState extends State<StreamingOptionsWidget>
                       children: [
                         SizedBox(
                           height: 20,
-                          child: Image.asset(
-                            'assets/images/justwatch_icon.png',
-                            fit: BoxFit.contain,
-                          ),
+                          child: iconColor != null
+                              ? ColorFiltered(
+                                  colorFilter: ColorFilter.mode(iconColor, BlendMode.srcIn),
+                                  child: Image.asset(
+                                    'assets/images/justwatch_icon.png',
+                                    fit: BoxFit.contain,
+                                  ),
+                                )
+                              : Image.asset(
+                                  'assets/images/justwatch_icon.png',
+                                  fit: BoxFit.contain,
+                                ),
                         ),
                         const SizedBox(width: 8),
                         Text(
                           'Where to watch',
-                          style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                          style: theme.textTheme.titleSmall?.copyWith(
                             fontWeight: FontWeight.bold,
-                            color: Theme.of(context).colorScheme.primary,
+                            color: textColor,
                           ),
                         ),
                       ],
                     ),
-                    if (!widget.isCompact && !_isExpanded) ...[
+                    if (!widget.isCompact && !_isExpanded && hasStreamingOptions) ...[
                       const SizedBox(height: 6),
                       _buildCompactSummary(context, merged),
                     ],
@@ -159,7 +193,7 @@ class _StreamingOptionsWidgetState extends State<StreamingOptionsWidget>
                 duration: const Duration(milliseconds: 300),
                 child: Icon(
                   Icons.expand_more,
-                  color: Theme.of(context).colorScheme.primary,
+                  color: expandIconColor,
                 ),
               ),
             ],
@@ -245,6 +279,10 @@ class _StreamingOptionsWidgetState extends State<StreamingOptionsWidget>
     List<StreamingOption> options,
     IconData icon,
   ) {
+    // Sort options alphabetically by provider name
+    final sortedOptions = List<StreamingOption>.from(options)
+      ..sort((a, b) => a.providerName.toLowerCase().compareTo(b.providerName.toLowerCase()));
+    
     // Split label on "or" for wrapped display - wrap AFTER "or", not before
     final labelParts = typeLabel.split(' or ');
     
@@ -300,7 +338,7 @@ class _StreamingOptionsWidgetState extends State<StreamingOptionsWidget>
             alignment: WrapAlignment.start,
             runAlignment: WrapAlignment.start,
             crossAxisAlignment: WrapCrossAlignment.start,
-            children: options.map((option) => _buildProviderIcon(context, option)).toList(),
+            children: sortedOptions.map((option) => _buildProviderIcon(context, option)).toList(),
           ),
         ),
       ],
@@ -400,14 +438,23 @@ class _StreamingOptionsWidgetState extends State<StreamingOptionsWidget>
     return brightness == Brightness.dark ? Colors.amber : Colors.amber.shade700;
   }
 
-  Widget _buildNoStreamingAvailable(BuildContext context) {
+  Widget _buildNoStreamingContent(BuildContext context) {
+    final theme = Theme.of(context);
+    final titleText = widget.title ?? 'This title';
+    
+    // Check if release date is in the future
+    final isUpcoming = widget.releaseDate != null && widget.releaseDate!.isAfter(DateTime.now());
+    final message = isUpcoming
+        ? '$titleText is not yet available for streaming.'
+        : '$titleText is not available for streaming currently.';
+    
     return Container(
       padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 16),
       decoration: BoxDecoration(
-        color: Theme.of(context).colorScheme.surfaceContainerLow.withValues(alpha: 0.5),
+        color: theme.colorScheme.surfaceContainerLow.withValues(alpha: 0.5),
         borderRadius: BorderRadius.circular(12),
         border: Border.all(
-          color: Theme.of(context).colorScheme.outline.withValues(alpha: 0.1),
+          color: theme.colorScheme.outline.withValues(alpha: 0.1),
         ),
       ),
       child: Row(
@@ -415,14 +462,14 @@ class _StreamingOptionsWidgetState extends State<StreamingOptionsWidget>
           Icon(
             Icons.info_outline,
             size: 18,
-            color: Theme.of(context).colorScheme.onSurfaceVariant,
+            color: theme.colorScheme.onSurfaceVariant,
           ),
           const SizedBox(width: 10),
           Expanded(
             child: Text(
-              'Streaming options not available in your region',
-              style: Theme.of(context).textTheme.labelMedium?.copyWith(
-                color: Theme.of(context).colorScheme.onSurfaceVariant,
+              message,
+              style: theme.textTheme.labelMedium?.copyWith(
+                color: theme.colorScheme.onSurfaceVariant,
               ),
             ),
           ),

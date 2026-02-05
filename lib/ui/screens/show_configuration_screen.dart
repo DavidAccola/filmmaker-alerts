@@ -5,7 +5,6 @@ import '../../data/models/season_status_entry.dart';
 import '../../data/models/status_record.dart';
 import '../../providers/providers.dart';
 import '../common/snackbar_utils.dart';
-import '../common/status_selector_bar.dart';
 
 class ShowConfigurationScreen extends ConsumerStatefulWidget {
   final int showId;
@@ -24,12 +23,9 @@ class ShowConfigurationScreen extends ConsumerStatefulWidget {
 
 class _ShowConfigurationScreenState
     extends ConsumerState<ShowConfigurationScreen> {
-  // Currently selected status to apply when checking boxes
-  WatchStatus _selectedStatus = WatchStatus.watched;
-
-  // Track pending changes: Map<seasonNumber, Map<episodeNumber, WatchStatus?>>
-  // null means "clear status", WatchStatus means "set to this status"
-  final Map<int, Map<int, WatchStatus?>> _pendingChanges = {};
+  // Track pending changes: Map<seasonNumber, Map<episodeNumber, Set<WatchStatus>>>
+  // Empty set means "clear all statuses", non-empty set means "these statuses are active"
+  final Map<int, Map<int, Set<WatchStatus>>> _pendingChanges = {};
 
   // Track which seasons are expanded in the UI
   final Set<int> _expandedSeasons = {};
@@ -43,6 +39,69 @@ class _ShowConfigurationScreenState
   };
 
   bool _isDirty = false;
+  
+  // Track if we've already checked for auto-expand (to avoid re-expanding after user collapses)
+  bool _hasCheckedAutoExpand = false;
+
+  // Undo/Redo history stacks
+  final List<Map<int, Map<int, Set<WatchStatus>>>> _undoStack = [];
+  final List<Map<int, Map<int, Set<WatchStatus>>>> _redoStack = [];
+  
+  /// Creates a deep copy of the pending changes map for history tracking.
+  Map<int, Map<int, Set<WatchStatus>>> _copyPendingChanges() {
+    final copy = <int, Map<int, Set<WatchStatus>>>{};
+    for (final entry in _pendingChanges.entries) {
+      copy[entry.key] = <int, Set<WatchStatus>>{};
+      for (final epEntry in entry.value.entries) {
+        copy[entry.key]![epEntry.key] = Set<WatchStatus>.from(epEntry.value);
+      }
+    }
+    return copy;
+  }
+  
+  /// Saves the current state to the undo stack before making changes.
+  void _saveToUndoStack() {
+    _undoStack.add(_copyPendingChanges());
+    _redoStack.clear(); // Clear redo stack when new action is performed
+  }
+  
+  /// Undoes the last change.
+  void _undo() {
+    if (_undoStack.isEmpty) return;
+    
+    setState(() {
+      // Save current state to redo stack
+      _redoStack.add(_copyPendingChanges());
+      
+      // Restore previous state
+      final previousState = _undoStack.removeLast();
+      _pendingChanges.clear();
+      for (final entry in previousState.entries) {
+        _pendingChanges[entry.key] = entry.value;
+      }
+      
+      _isDirty = _undoStack.isNotEmpty;
+    });
+  }
+  
+  /// Redoes the last undone change.
+  void _redo() {
+    if (_redoStack.isEmpty) return;
+    
+    setState(() {
+      // Save current state to undo stack
+      _undoStack.add(_copyPendingChanges());
+      
+      // Restore next state
+      final nextState = _redoStack.removeLast();
+      _pendingChanges.clear();
+      for (final entry in nextState.entries) {
+        _pendingChanges[entry.key] = entry.value;
+      }
+      
+      _isDirty = true;
+    });
+  }
 
   // ============================================================
   // Tri-State Checkbox Helper Functions
@@ -53,46 +112,40 @@ class _ShowConfigurationScreenState
   // - null = indeterminate (some items checked)
   // ============================================================
 
-  /// Gets the effective status for an episode, checking pending changes first,
-  /// then falling back to the existing persisted status.
+  /// Gets the effective statuses for an episode, checking pending changes first,
+  /// then falling back to the existing persisted statuses.
   /// 
-  /// Returns null if no status exists (neither pending nor persisted).
-  WatchStatus? _getEffectiveEpisodeStatus(int seasonNumber, int episodeNumber) {
+  /// Returns empty set if no statuses exist (neither pending nor persisted).
+  Set<WatchStatus> _getEffectiveEpisodeStatuses(int seasonNumber, int episodeNumber) {
     // Check pending changes first
     if (_pendingChanges.containsKey(seasonNumber) &&
         _pendingChanges[seasonNumber]!.containsKey(episodeNumber)) {
-      return _pendingChanges[seasonNumber]![episodeNumber];
+      return _pendingChanges[seasonNumber]![episodeNumber]!;
     }
     
-    // Fall back to existing persisted status
+    // Fall back to existing persisted statuses
     final episodeRepo = ref.read(episodeStatusRepositoryProvider);
     final episode = episodeRepo.getEpisode(widget.showId, seasonNumber, episodeNumber);
     if (episode != null && episode.statusRecords.isNotEmpty) {
-      return episode.statusRecords.first.status;
+      return episode.statusRecords.map((r) => r.status).toSet();
     }
     
-    return null;
+    return {};
   }
 
-  /// Computes the checkbox state for a season based on its episodes.
-  /// 
-  /// Returns:
-  /// - true if ALL episodes in the season have a status
-  /// - false if NO episodes in the season have a status
-  /// - null if SOME episodes have a status (indeterminate)
-  bool? _computeSeasonCheckboxState(int seasonNumber, List<EpisodeStatusEntry> episodes) {
-    if (episodes.isEmpty) return false;
+  /// Gets the count of each status type for episodes in a season.
+  /// Returns a map of WatchStatus to count, only including statuses with count > 0.
+  Map<WatchStatus, int> _getSeasonStatusCounts(int seasonNumber, List<EpisodeStatusEntry> episodes) {
+    final counts = <WatchStatus, int>{};
     
-    int markedCount = 0;
     for (final episode in episodes) {
-      if (_getEffectiveEpisodeStatus(seasonNumber, episode.episodeNumber) != null) {
-        markedCount++;
+      final statuses = _getEffectiveEpisodeStatuses(seasonNumber, episode.episodeNumber);
+      for (final status in statuses) {
+        counts[status] = (counts[status] ?? 0) + 1;
       }
     }
     
-    if (markedCount == 0) return false;
-    if (markedCount == episodes.length) return true;
-    return null; // indeterminate - some but not all are marked
+    return counts;
   }
 
   /// Computes the checkbox state for the entire show based on all episodes.
@@ -104,14 +157,13 @@ class _ShowConfigurationScreenState
   bool? _computeShowCheckboxState(Map<int, List<EpisodeStatusEntry>> episodesBySeason) {
     int totalEpisodes = 0;
     int markedEpisodes = 0;
-    
     for (final entry in episodesBySeason.entries) {
       final seasonNumber = entry.key;
       final episodes = entry.value;
       
       for (final episode in episodes) {
         totalEpisodes++;
-        if (_getEffectiveEpisodeStatus(seasonNumber, episode.episodeNumber) != null) {
+        if (_getEffectiveEpisodeStatuses(seasonNumber, episode.episodeNumber).isNotEmpty) {
           markedEpisodes++;
         }
       }
@@ -168,12 +220,46 @@ class _ShowConfigurationScreenState
         _pendingChanges[episode.seasonNumber] = {};
       }
 
-      // Get the primary status (first one in the list)
+      // Get all statuses from the episode
       if (episode.statusRecords.isNotEmpty) {
         _pendingChanges[episode.seasonNumber]![episode.episodeNumber] =
-            episode.statusRecords.first.status;
+            episode.statusRecords.map((r) => r.status).toSet();
       }
     }
+  }
+
+  /// Auto-expands seasons based on marked episodes:
+  /// - If no episodes are marked anywhere, expand Season 1
+  /// - If only one season has marked episodes, expand that season
+  /// Only runs once on initial load to avoid overriding user's collapse action.
+  void _autoExpandSeason1IfEmpty(Map<int, List<EpisodeStatusEntry>> episodesBySeasonMap) {
+    if (_hasCheckedAutoExpand) return;
+    _hasCheckedAutoExpand = true;
+    
+    // Find which seasons have any marked episodes
+    final seasonsWithMarks = <int>{};
+    for (final entry in episodesBySeasonMap.entries) {
+      final seasonNumber = entry.key;
+      final episodes = entry.value;
+      
+      for (final episode in episodes) {
+        if (_getEffectiveEpisodeStatuses(seasonNumber, episode.episodeNumber).isNotEmpty) {
+          seasonsWithMarks.add(seasonNumber);
+          break; // Found a mark in this season, move to next
+        }
+      }
+    }
+    
+    if (seasonsWithMarks.isEmpty) {
+      // Nothing is marked - expand Season 1 if it exists
+      if (episodesBySeasonMap.containsKey(1)) {
+        _expandedSeasons.add(1);
+      }
+    } else if (seasonsWithMarks.length == 1) {
+      // Only one season has marks - expand that season
+      _expandedSeasons.add(seasonsWithMarks.first);
+    }
+    // If multiple seasons have marks, don't auto-expand any
   }
 
   @override
@@ -241,9 +327,17 @@ class _ShowConfigurationScreenState
       }
     }
 
-    // Sort seasons
+    // Sort seasons: numbered seasons first (1, 2, 3...), then Specials (season 0) at the end
     final sortedSeasons = seasons.toList()
-      ..sort((a, b) => a.seasonNumber.compareTo(b.seasonNumber));
+      ..sort((a, b) {
+        // Season 0 (Specials) goes to the end
+        if (a.seasonNumber == 0 && b.seasonNumber != 0) return 1;
+        if (b.seasonNumber == 0 && a.seasonNumber != 0) return -1;
+        return a.seasonNumber.compareTo(b.seasonNumber);
+      });
+    
+    // Auto-expand Season 1 if nothing is marked in any season
+    _autoExpandSeason1IfEmpty(episodesBySeasonMap);
 
     // Compute show-level checkbox state
     final showCheckboxState = _computeShowCheckboxState(episodesBySeasonMap);
@@ -260,6 +354,18 @@ class _ShowConfigurationScreenState
         appBar: AppBar(
           title: Text(widget.showTitle),
           actions: [
+            // Undo button
+            IconButton(
+              icon: const Icon(Icons.undo),
+              onPressed: _undoStack.isNotEmpty ? _undo : null,
+              tooltip: 'Undo',
+            ),
+            // Redo button
+            IconButton(
+              icon: const Icon(Icons.redo),
+              onPressed: _redoStack.isNotEmpty ? _redo : null,
+              tooltip: 'Redo',
+            ),
             if (_selectedFilters.length < 4)
               Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 8.0),
@@ -288,17 +394,8 @@ class _ShowConfigurationScreenState
         ),
         body: Column(
           children: [
-            // StatusSelectorBar - sticky at top (doesn't scroll)
-            StatusSelectorBar(
-              selectedStatus: _selectedStatus,
-              onStatusChanged: (status) {
-                setState(() {
-                  _selectedStatus = status;
-                });
-              },
-            ),
-            // Show-level "Mark All" checkbox with tri-state support
-            _buildMarkAllCheckbox(showCheckboxState, episodesBySeasonMap),
+            // Show-level "Mark All" row
+            _buildMarkAllRow(showCheckboxState, episodesBySeasonMap),
             // Expandable list content
             Expanded(
               child: _buildExpandableList(sortedSeasons, episodesBySeasonMap),
@@ -316,60 +413,134 @@ class _ShowConfigurationScreenState
     );
   }
 
-  /// Builds the show-level "Mark All" checkbox with tri-state support.
-  Widget _buildMarkAllCheckbox(
+  /// Builds the show-level "Mark All" row with status buttons.
+  Widget _buildMarkAllRow(
     bool? showCheckboxState,
     Map<int, List<EpisodeStatusEntry>> episodesBySeasonMap,
   ) {
     final theme = Theme.of(context);
     
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 12.0),
-      decoration: BoxDecoration(
-        border: Border(
-          bottom: BorderSide(
-            color: theme.colorScheme.outlineVariant.withValues(alpha: 0.5),
+    return _HoverableRow(
+      child: (isHovered) => Container(
+        padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 12.0),
+        decoration: BoxDecoration(
+          color: isHovered 
+              ? theme.colorScheme.onSurface.withValues(alpha: 0.05)
+              : Colors.transparent,
+          border: Border(
+            bottom: BorderSide(
+              color: theme.colorScheme.outlineVariant.withValues(alpha: 0.5),
+            ),
           ),
         ),
-      ),
-      child: Row(
-        children: [
-          Checkbox(
-            tristate: true,
-            value: showCheckboxState,
-            onChanged: (value) {
-              _handleShowCheckboxChanged(value, episodesBySeasonMap);
-            },
-          ),
-          const SizedBox(width: 8),
-          Text(
-            'Mark All Episodes',
-            style: theme.textTheme.titleMedium?.copyWith(
-              fontWeight: FontWeight.w600,
+        child: Row(
+          children: [
+            // Status buttons for marking all episodes
+            _buildMarkAllStatusButtons(episodesBySeasonMap, isHovered),
+            const SizedBox(width: 12),
+            Text(
+              'Mark All Episodes',
+              style: theme.textTheme.titleMedium?.copyWith(
+                fontWeight: FontWeight.w600,
+              ),
             ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  /// Builds status buttons for the "Mark All" row.
+  Widget _buildMarkAllStatusButtons(Map<int, List<EpisodeStatusEntry>> episodesBySeasonMap, bool isRowHovered) {
+    // Count how many episodes have each status (episodes can have multiple statuses)
+    final statusCounts = <WatchStatus, int>{};
+    int totalEpisodes = 0;
+    
+    for (final entry in episodesBySeasonMap.entries) {
+      for (final episode in entry.value) {
+        totalEpisodes++;
+        final statuses = _getEffectiveEpisodeStatuses(entry.key, episode.episodeNumber);
+        for (final status in statuses) {
+          statusCounts[status] = (statusCounts[status] ?? 0) + 1;
+        }
+      }
+    }
+    
+    // Use fixedWidth: 28 to align with episode buttons (20px icon + 8px padding = 28px per button)
+    return SizedBox(
+      width: 112, // 4 buttons * 28px = 112px (same as episode row)
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          _EpisodeStatusButton(
+            icon: Icons.bookmark_border,
+            activeIcon: Icons.bookmark,
+            isActive: statusCounts[WatchStatus.wantToWatch] == totalEpisodes,
+            isRowHovered: isRowHovered,
+            tooltip: 'Mark all as Want to watch',
+            size: 26,
+            fixedWidth: 28,
+            onTap: () => _handleMarkAllStatus(WatchStatus.wantToWatch, episodesBySeasonMap),
+          ),
+          _EpisodeStatusButton(
+            icon: Icons.play_circle_outline,
+            activeIcon: Icons.play_circle,
+            isActive: statusCounts[WatchStatus.inProgress] == totalEpisodes,
+            isRowHovered: isRowHovered,
+            tooltip: 'Mark all as In progress',
+            size: 26,
+            fixedWidth: 28,
+            onTap: () => _handleMarkAllStatus(WatchStatus.inProgress, episodesBySeasonMap),
+          ),
+          _EpisodeStatusButton(
+            icon: Icons.check_circle_outline,
+            activeIcon: Icons.check_circle,
+            isActive: statusCounts[WatchStatus.watched] == totalEpisodes,
+            isRowHovered: isRowHovered,
+            tooltip: 'Mark all as Watched',
+            size: 26,
+            fixedWidth: 28,
+            onTap: () => _handleMarkAllStatus(WatchStatus.watched, episodesBySeasonMap),
+          ),
+          _EpisodeStatusButton(
+            icon: Icons.cancel_outlined,
+            activeIcon: Icons.cancel,
+            isActive: statusCounts[WatchStatus.dnf] == totalEpisodes,
+            isRowHovered: isRowHovered,
+            tooltip: 'Mark all as Did not finish',
+            size: 26,
+            fixedWidth: 28,
+            onTap: () => _handleMarkAllStatus(WatchStatus.dnf, episodesBySeasonMap),
           ),
         ],
       ),
     );
   }
 
-  /// Handles the show-level checkbox change.
-  void _handleShowCheckboxChanged(
-    bool? value,
-    Map<int, List<EpisodeStatusEntry>> episodesBySeasonMap,
-  ) {
+  /// Handles marking all episodes with a specific status.
+  /// Applies status transition rules:
+  /// - In Progress → unmarks Want to Watch
+  /// - Watched → unmarks Want to Watch and In Progress
+  /// - Want to Watch → only unmarks DNF
+  /// - DNF → unmarks everything
+  void _handleMarkAllStatus(WatchStatus status, Map<int, List<EpisodeStatusEntry>> episodesBySeasonMap) {
+    _saveToUndoStack();
+    
     setState(() {
-      // The 'value' parameter is the NEW value that Flutter wants to set.
-      // For tri-state checkbox: false->true, true->null, null->false
-      // We want to mark all when transitioning TO checked (value == true)
-      // OR when clicking indeterminate (value == false but was null)
-      // We want to clear all when transitioning FROM checked (value == null, was true)
-      // 
-      // Since we can't know the old value here, we use a simpler rule:
-      // - If new value is true OR false (from indeterminate), mark all
-      // - If new value is null (from checked), clear all
-      final shouldMark = value != null;
+      // Check if all episodes already have this status
+      bool allHaveStatus = true;
+      for (final entry in episodesBySeasonMap.entries) {
+        for (final episode in entry.value) {
+          final statuses = _getEffectiveEpisodeStatuses(entry.key, episode.episodeNumber);
+          if (!statuses.contains(status)) {
+            allHaveStatus = false;
+            break;
+          }
+        }
+        if (!allHaveStatus) break;
+      }
       
+      // If all have this status, remove it. Otherwise, add it (with conflict clearing).
       for (final entry in episodesBySeasonMap.entries) {
         final seasonNumber = entry.key;
         final episodes = entry.value;
@@ -379,18 +550,54 @@ class _ShowConfigurationScreenState
         }
         
         for (final episode in episodes) {
-          if (shouldMark) {
-            _pendingChanges[seasonNumber]![episode.episodeNumber] = _selectedStatus;
+          // Get current statuses or initialize from persisted
+          var currentStatuses = _pendingChanges[seasonNumber]![episode.episodeNumber];
+          if (currentStatuses == null) {
+            currentStatuses = Set<WatchStatus>.from(
+              _getEffectiveEpisodeStatuses(seasonNumber, episode.episodeNumber)
+            );
           } else {
-            _pendingChanges[seasonNumber]![episode.episodeNumber] = null;
+            currentStatuses = Set<WatchStatus>.from(currentStatuses);
           }
+          
+          if (allHaveStatus) {
+            // Remove this status
+            currentStatuses.remove(status);
+          } else {
+            // Add this status with conflict clearing
+            _applyStatusTransitionRules(currentStatuses, status);
+            currentStatuses.add(status);
+          }
+          
+          _pendingChanges[seasonNumber]![episode.episodeNumber] = currentStatuses;
         }
       }
       _isDirty = true;
     });
   }
 
-  /// Builds the expandable list of seasons and episodes.
+  /// Applies status transition rules to a set of statuses when adding a new status.
+  void _applyStatusTransitionRules(Set<WatchStatus> statuses, WatchStatus newStatus) {
+    switch (newStatus) {
+      case WatchStatus.watched:
+        // Watched clears In progress & Want to watch
+        statuses.remove(WatchStatus.inProgress);
+        statuses.remove(WatchStatus.wantToWatch);
+        break;
+      case WatchStatus.inProgress:
+        // In progress clears Want to watch
+        statuses.remove(WatchStatus.wantToWatch);
+        break;
+      case WatchStatus.wantToWatch:
+        // Want to watch only clears DNF
+        statuses.remove(WatchStatus.dnf);
+        break;
+      case WatchStatus.dnf:
+        // DNF clears everything
+        statuses.clear();
+        break;
+    }
+  }  /// Builds the expandable list of seasons and episodes.
   Widget _buildExpandableList(
     List<SeasonStatusEntry> seasons,
     Map<int, List<EpisodeStatusEntry>> episodesBySeasonMap,
@@ -415,170 +622,245 @@ class _ShowConfigurationScreenState
     );
   }
 
-  /// Builds a season item row with checkbox, name, episode count, and expand icon.
+  /// Builds a season item row with status buttons, name, episode count, summary, and expand icon.
   Widget _buildSeasonItem(
     SeasonStatusEntry season,
     List<EpisodeStatusEntry> episodes,
     bool isExpanded,
   ) {
     final theme = Theme.of(context);
-    final seasonCheckboxState = _computeSeasonCheckboxState(season.seasonNumber, episodes);
+    final statusCounts = _getSeasonStatusCounts(season.seasonNumber, episodes);
     
-    return Material(
-      color: Colors.transparent,
-      child: InkWell(
-        onTap: () {
-          setState(() {
-            if (isExpanded) {
-              _expandedSeasons.remove(season.seasonNumber);
-            } else {
-              _expandedSeasons.add(season.seasonNumber);
-            }
-          });
-        },
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
-          child: Row(
-            children: [
-              // Tri-state checkbox for season
-              Checkbox(
-                tristate: true,
-                value: seasonCheckboxState,
-                onChanged: (value) {
-                  _handleSeasonCheckboxChanged(season.seasonNumber, episodes, value);
-                },
-              ),
-              const SizedBox(width: 8),
-              // Season name
-              Expanded(
-                child: Row(
-                  children: [
-                    Text(
-                      season.displayName,
-                      style: theme.textTheme.titleMedium?.copyWith(
-                        fontWeight: FontWeight.w600,
-                      ),
+    // Build status summary only if:
+    // - Some episodes are marked (statusCounts not empty)
+    // - AND not all episodes have the same single status
+    final totalMarked = statusCounts.values.fold(0, (a, b) => a + b);
+    final shouldShowSummary = statusCounts.isNotEmpty && 
+        !(totalMarked == episodes.length && statusCounts.length == 1);
+    
+    return _HoverableRow(
+      child: (isHovered) => Container(
+        margin: const EdgeInsets.only(top: 2.0),
+        decoration: BoxDecoration(
+          color: isHovered 
+              ? theme.colorScheme.onSurface.withValues(alpha: 0.05)
+              : Colors.transparent,
+          border: Border(
+            left: BorderSide(
+              color: theme.colorScheme.primary.withValues(alpha: 0.4),
+              width: 3,
+            ),
+          ),
+        ),
+        child: Material(
+          color: Colors.transparent,
+          child: InkWell(
+            onTap: () {
+              setState(() {
+                if (isExpanded) {
+                  _expandedSeasons.remove(season.seasonNumber);
+                } else {
+                  _expandedSeasons.add(season.seasonNumber);
+                }
+              });
+            },
+            child: Padding(
+              // Left padding is 13px (16 - 3px border) to align with Mark All and episode rows
+              padding: const EdgeInsets.only(left: 13.0, right: 16.0, top: 6.0, bottom: 6.0),
+              child: Row(
+                children: [
+                  // Status buttons for season
+                  _buildSeasonStatusButtons(season.seasonNumber, episodes, isHovered),
+                  const SizedBox(width: 8),
+                  // Season name, episode count, and status summary - wraps if needed
+                  Expanded(
+                    child: Wrap(
+                      spacing: 8,
+                      runSpacing: 4,
+                      crossAxisAlignment: WrapCrossAlignment.center,
+                      children: [
+                        Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Text(
+                              season.displayName,
+                              style: theme.textTheme.titleMedium?.copyWith(
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                            const SizedBox(width: 8),
+                            Text(
+                              '(${episodes.length} episodes)',
+                              style: theme.textTheme.bodySmall?.copyWith(
+                                color: theme.colorScheme.onSurfaceVariant,
+                              ),
+                            ),
+                          ],
+                        ),
+                        // Status summary (icons with counts) - wraps to next line if needed
+                        if (shouldShowSummary)
+                          _buildStatusSummary(statusCounts),
+                      ],
                     ),
-                    const SizedBox(width: 8),
-                    // Episode count
-                    Text(
-                      '(${episodes.length} episodes)',
-                      style: theme.textTheme.bodySmall?.copyWith(
-                        color: theme.colorScheme.onSurfaceVariant,
-                      ),
-                    ),
-                  ],
-                ),
+                  ),
+                  // Expand/collapse icon
+                  Icon(
+                    isExpanded ? Icons.expand_more : Icons.chevron_right,
+                    color: theme.colorScheme.onSurfaceVariant,
+                  ),
+                ],
               ),
-              // Expand/collapse icon
-              Icon(
-                isExpanded ? Icons.expand_more : Icons.chevron_right,
-                color: theme.colorScheme.onSurfaceVariant,
-              ),
-            ],
+            ),
           ),
         ),
       ),
     );
   }
 
-  /// Handles the season checkbox change.
-  void _handleSeasonCheckboxChanged(
-    int seasonNumber,
-    List<EpisodeStatusEntry> episodes,
-    bool? value,
-  ) {
+  /// Builds status buttons for a season row.
+  Widget _buildSeasonStatusButtons(int seasonNumber, List<EpisodeStatusEntry> episodes, bool isRowHovered) {
+    // Count how many episodes have each status
+    final statusCounts = _getSeasonStatusCounts(seasonNumber, episodes);
+    final totalEpisodes = episodes.length;
+    
+    // Use fixedWidth: 28 to align with episode buttons (20px icon + 8px padding = 28px per button)
+    return SizedBox(
+      width: 112, // 4 buttons * 28px = 112px (same as episode row)
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          _EpisodeStatusButton(
+            icon: Icons.bookmark_border,
+            activeIcon: Icons.bookmark,
+            isActive: statusCounts[WatchStatus.wantToWatch] == totalEpisodes,
+            isRowHovered: isRowHovered,
+            tooltip: 'Mark season as Want to watch',
+            size: 26,
+            fixedWidth: 28,
+            onTap: () => _handleSeasonStatusTap(seasonNumber, episodes, WatchStatus.wantToWatch),
+          ),
+          _EpisodeStatusButton(
+            icon: Icons.play_circle_outline,
+            activeIcon: Icons.play_circle,
+            isActive: statusCounts[WatchStatus.inProgress] == totalEpisodes,
+            isRowHovered: isRowHovered,
+            tooltip: 'Mark season as In progress',
+            size: 26,
+            fixedWidth: 28,
+            onTap: () => _handleSeasonStatusTap(seasonNumber, episodes, WatchStatus.inProgress),
+          ),
+          _EpisodeStatusButton(
+            icon: Icons.check_circle_outline,
+            activeIcon: Icons.check_circle,
+            isActive: statusCounts[WatchStatus.watched] == totalEpisodes,
+            isRowHovered: isRowHovered,
+            tooltip: 'Mark season as Watched',
+            size: 26,
+            fixedWidth: 28,
+            onTap: () => _handleSeasonStatusTap(seasonNumber, episodes, WatchStatus.watched),
+          ),
+          _EpisodeStatusButton(
+            icon: Icons.cancel_outlined,
+            activeIcon: Icons.cancel,
+            isActive: statusCounts[WatchStatus.dnf] == totalEpisodes,
+            isRowHovered: isRowHovered,
+            tooltip: 'Mark season as Did not finish',
+            size: 26,
+            fixedWidth: 28,
+            onTap: () => _handleSeasonStatusTap(seasonNumber, episodes, WatchStatus.dnf),
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// Handles tapping a status button for a season.
+  void _handleSeasonStatusTap(int seasonNumber, List<EpisodeStatusEntry> episodes, WatchStatus status) {
+    _saveToUndoStack();
+    
     setState(() {
-      // The 'value' parameter is the NEW value that Flutter wants to set.
-      // For tri-state checkbox: false->true, true->null, null->false
-      // We want to mark all when transitioning TO checked (value == true)
-      // OR when clicking indeterminate (value == false but was null)
-      // We want to clear all when transitioning FROM checked (value == null, was true)
-      // 
-      // Since we can't know the old value here, we use a simpler rule:
-      // - If new value is true OR false (from indeterminate), mark all
-      // - If new value is null (from checked), clear all
-      final shouldMark = value != null;
+      // Check if all episodes already have this status
+      bool allHaveStatus = true;
+      for (final episode in episodes) {
+        final statuses = _getEffectiveEpisodeStatuses(seasonNumber, episode.episodeNumber);
+        if (!statuses.contains(status)) {
+          allHaveStatus = false;
+          break;
+        }
+      }
       
       if (!_pendingChanges.containsKey(seasonNumber)) {
         _pendingChanges[seasonNumber] = {};
       }
       
+      // If all have this status, remove it. Otherwise, add it (with conflict clearing).
       for (final episode in episodes) {
-        if (shouldMark) {
-          _pendingChanges[seasonNumber]![episode.episodeNumber] = _selectedStatus;
+        // Get current statuses or initialize from persisted
+        var currentStatuses = _pendingChanges[seasonNumber]![episode.episodeNumber];
+        if (currentStatuses == null) {
+          currentStatuses = Set<WatchStatus>.from(
+            _getEffectiveEpisodeStatuses(seasonNumber, episode.episodeNumber)
+          );
         } else {
-          _pendingChanges[seasonNumber]![episode.episodeNumber] = null;
+          currentStatuses = Set<WatchStatus>.from(currentStatuses);
         }
+        
+        if (allHaveStatus) {
+          // Remove this status
+          currentStatuses.remove(status);
+        } else {
+          // Add this status with conflict clearing
+          _applyStatusTransitionRules(currentStatuses, status);
+          currentStatuses.add(status);
+        }
+        
+        _pendingChanges[seasonNumber]![episode.episodeNumber] = currentStatuses;
       }
       _isDirty = true;
     });
   }
 
-  /// Builds an episode item row with checkbox, number, title, and status symbol.
+  /// Builds an episode item row with status buttons (shown on hover) and title.
   Widget _buildEpisodeItem(EpisodeStatusEntry episode) {
-    final theme = Theme.of(context);
-    final effectiveStatus = _getEffectiveEpisodeStatus(episode.seasonNumber, episode.episodeNumber);
-    final isChecked = effectiveStatus != null;
-    final statusSymbol = effectiveStatus != null ? _getStatusSymbol(effectiveStatus) : '';
+    final effectiveStatuses = _getEffectiveEpisodeStatuses(episode.seasonNumber, episode.episodeNumber);
     
-    return Material(
-      color: Colors.transparent,
-      child: InkWell(
-        onTap: () {
-          _handleEpisodeCheckboxChanged(episode.seasonNumber, episode.episodeNumber, !isChecked);
-        },
-        child: Padding(
-          // 24px indent from season headers
-          padding: const EdgeInsets.only(left: 40.0, right: 16.0, top: 4.0, bottom: 4.0),
-          child: Row(
-            children: [
-              // Binary checkbox for episode
-              Checkbox(
-                value: isChecked,
-                onChanged: (value) {
-                  _handleEpisodeCheckboxChanged(episode.seasonNumber, episode.episodeNumber, value ?? false);
-                },
-              ),
-              const SizedBox(width: 8),
-              // Episode number and title
-              Expanded(
-                child: Text(
-                  'E${episode.episodeNumber.toString().padLeft(2, '0')} - ${episode.episodeTitle}',
-                  style: theme.textTheme.bodyMedium,
-                  overflow: TextOverflow.ellipsis,
-                ),
-              ),
-              // Status symbol on right
-              if (statusSymbol.isNotEmpty)
-                Padding(
-                  padding: const EdgeInsets.only(left: 8.0),
-                  child: Text(
-                    statusSymbol,
-                    style: theme.textTheme.bodyMedium,
-                  ),
-                ),
-            ],
-          ),
-        ),
-      ),
+    return _EpisodeRow(
+      episode: episode,
+      effectiveStatuses: effectiveStatuses,
+      onStatusTap: _handleStatusButtonTap,
     );
   }
 
-  /// Handles the episode checkbox change.
-  void _handleEpisodeCheckboxChanged(int seasonNumber, int episodeNumber, bool isChecked) {
+  /// Handles tapping a status button for an episode.
+  /// If the episode already has this status, remove it. Otherwise, add it (with conflict clearing).
+  void _handleStatusButtonTap(int seasonNumber, int episodeNumber, WatchStatus status) {
+    _saveToUndoStack();
+    
     setState(() {
       if (!_pendingChanges.containsKey(seasonNumber)) {
         _pendingChanges[seasonNumber] = {};
       }
       
-      if (isChecked) {
-        // Mark episode with selected status
-        _pendingChanges[seasonNumber]![episodeNumber] = _selectedStatus;
+      // Get current statuses or initialize from persisted
+      var currentStatuses = _pendingChanges[seasonNumber]![episodeNumber];
+      if (currentStatuses == null) {
+        currentStatuses = Set<WatchStatus>.from(
+          _getEffectiveEpisodeStatuses(seasonNumber, episodeNumber)
+        );
       } else {
-        // Clear episode status (set to null)
-        _pendingChanges[seasonNumber]![episodeNumber] = null;
+        currentStatuses = Set<WatchStatus>.from(currentStatuses);
       }
+      
+      if (currentStatuses.contains(status)) {
+        // Already has this status - remove it
+        currentStatuses.remove(status);
+      } else {
+        // Doesn't have this status - add it with conflict clearing
+        _applyStatusTransitionRules(currentStatuses, status);
+        currentStatuses.add(status);
+      }
+      
+      _pendingChanges[seasonNumber]![episodeNumber] = currentStatuses;
       _isDirty = true;
     });
   }
@@ -684,29 +966,29 @@ class _ShowConfigurationScreenState
 
       for (final episodeEntry in episodes.entries) {
         final episodeNumber = episodeEntry.key;
-        final status = episodeEntry.value;
+        final statuses = episodeEntry.value;
 
-        if (status != null) {
-          // Check if unreleased
-          final episode =
-              episodeRepo.getEpisode(widget.showId, seasonNumber, episodeNumber);
-          if (episode != null && !episode.isReleased) {
-            hasUnreleased = true;
-          }
+        // Check if unreleased
+        final episode =
+            episodeRepo.getEpisode(widget.showId, seasonNumber, episodeNumber);
+        if (episode != null && !episode.isReleased && statuses.isNotEmpty) {
+          hasUnreleased = true;
+        }
 
-          // Save episode status
+        // First, clear all existing statuses for this episode
+        await logic.removeStatusFromEpisode(
+          widget.showId,
+          seasonNumber,
+          episodeNumber,
+        );
+
+        // Then add each status in the set
+        for (final status in statuses) {
           await logic.addStatusToEpisode(
             widget.showId,
             seasonNumber,
             episodeNumber,
             status,
-          );
-        } else {
-          // Clear episode status (null means clear)
-          await logic.removeStatusFromEpisode(
-            widget.showId,
-            seasonNumber,
-            episodeNumber,
           );
         }
       }
@@ -735,59 +1017,334 @@ class _ShowConfigurationScreenState
     ref.invalidate(seasonStatusRepositoryProvider);
   }
 
-  String _getStatusSymbol(WatchStatus status) {
+  /// Returns the icon for a given [WatchStatus].
+  /// Uses the same icons as WatchlistCard for consistency.
+  IconData _getStatusIcon(WatchStatus status) {
     switch (status) {
       case WatchStatus.wantToWatch:
-        return '📖';
+        return Icons.bookmark;
       case WatchStatus.inProgress:
-        return '▶';
+        return Icons.play_circle;
       case WatchStatus.watched:
-        return '✓';
+        return Icons.check_circle;
       case WatchStatus.dnf:
-        return '✗';
+        return Icons.cancel;
     }
   }
 
-  String _getStatusText(WatchStatus status) {
-    switch (status) {
-      case WatchStatus.wantToWatch:
-        return 'Want to watch';
-      case WatchStatus.inProgress:
-        return 'In progress';
-      case WatchStatus.watched:
-        return 'Watched';
-      case WatchStatus.dnf:
-        return 'Did not finish';
+  /// Builds a compact status summary showing icons with counts.
+  /// Example: "✓3 ▶2" for 3 watched and 2 in progress.
+  Widget _buildStatusSummary(Map<WatchStatus, int> statusCounts) {
+    final theme = Theme.of(context);
+    
+    // Sort by a consistent order: wantToWatch, inProgress, watched, dnf
+    final orderedStatuses = [
+      WatchStatus.wantToWatch,
+      WatchStatus.inProgress,
+      WatchStatus.watched,
+      WatchStatus.dnf,
+    ];
+    
+    final widgets = <Widget>[];
+    for (final status in orderedStatuses) {
+      final count = statusCounts[status];
+      if (count != null && count > 0) {
+        widgets.add(
+          Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(
+                _getStatusIcon(status),
+                size: 14,
+                color: theme.colorScheme.primary,
+              ),
+              const SizedBox(width: 2),
+              Text(
+                '$count',
+                style: theme.textTheme.bodySmall?.copyWith(
+                  color: theme.colorScheme.primary,
+                  fontWeight: FontWeight.w500,
+                ),
+              ),
+            ],
+          ),
+        );
+      }
     }
+    
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        for (int i = 0; i < widgets.length; i++) ...[
+          if (i > 0) const SizedBox(width: 8),
+          widgets[i],
+        ],
+      ],
+    );
   }
 
   Future<void> _showUnsavedChangesDialog() async {
     if (!mounted) return;
     
-    final shouldPop = await showDialog<bool>(
+    final result = await showDialog<String>(
       context: context,
       builder: (context) => AlertDialog(
         title: const Text('Unsaved Changes'),
         content: const Text(
-          'You have unsaved changes. Do you want to leave without saving?',
+          'You have unsaved changes. What would you like to do?',
         ),
         actions: [
           TextButton(
-            onPressed: () => Navigator.of(context).pop(false),
+            onPressed: () => Navigator.of(context).pop('cancel'),
             child: const Text('CANCEL'),
           ),
           TextButton(
-            onPressed: () => Navigator.of(context).pop(true),
-            child: const Text('LEAVE'),
+            onPressed: () => Navigator.of(context).pop('leave'),
+            child: const Text('LEAVE WITHOUT SAVING'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(context).pop('save'),
+            child: const Text('SAVE AND LEAVE'),
           ),
         ],
       ),
     );
     
-    if (shouldPop ?? false) {
+    if (result == 'save') {
+      await _handleSave();
+      if (mounted) {
+        Navigator.of(context).pop();
+      }
+    } else if (result == 'leave') {
       if (mounted) {
         Navigator.of(context).pop();
       }
     }
+    // 'cancel' or null - do nothing, stay on screen
+  }
+}
+
+/// Episode row widget that shows status buttons (always visible, subtly faded when not active).
+/// Has a hover highlight to make it easier to see which row you're on.
+class _EpisodeRow extends StatefulWidget {
+  final EpisodeStatusEntry episode;
+  final Set<WatchStatus> effectiveStatuses;
+  final void Function(int seasonNumber, int episodeNumber, WatchStatus status) onStatusTap;
+
+  const _EpisodeRow({
+    required this.episode,
+    required this.effectiveStatuses,
+    required this.onStatusTap,
+  });
+
+  @override
+  State<_EpisodeRow> createState() => _EpisodeRowState();
+}
+
+class _EpisodeRowState extends State<_EpisodeRow> {
+  bool _isHovered = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final episode = widget.episode;
+    final effectiveStatuses = widget.effectiveStatuses;
+    
+    // Calculate the width of the status buttons area for consistent spacing
+    // 4 buttons * (20px icon + 8px padding) = 112px
+    const statusButtonsWidth = 112.0;
+    // Fixed height to prevent layout shift on hover
+    const rowHeight = 28.0;
+    
+    return MouseRegion(
+      onEnter: (_) => setState(() => _isHovered = true),
+      onExit: (_) => setState(() => _isHovered = false),
+      child: Container(
+        color: _isHovered 
+            ? theme.colorScheme.onSurface.withValues(alpha: 0.05)
+            : Colors.transparent,
+        padding: const EdgeInsets.only(left: 16.0, right: 16.0, top: 2.0, bottom: 2.0),
+        child: Row(
+          children: [
+            // Status buttons row - always visible (subtly when not hovered)
+            SizedBox(
+              width: statusButtonsWidth,
+              height: rowHeight,
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  _EpisodeStatusButton(
+                    icon: Icons.bookmark_border,
+                    activeIcon: Icons.bookmark,
+                    isActive: effectiveStatuses.contains(WatchStatus.wantToWatch),
+                    isRowHovered: _isHovered,
+                    tooltip: 'Want to watch',
+                    onTap: () => widget.onStatusTap(episode.seasonNumber, episode.episodeNumber, WatchStatus.wantToWatch),
+                  ),
+                  _EpisodeStatusButton(
+                    icon: Icons.play_circle_outline,
+                    activeIcon: Icons.play_circle,
+                    isActive: effectiveStatuses.contains(WatchStatus.inProgress),
+                    isRowHovered: _isHovered,
+                    tooltip: 'In progress',
+                    onTap: () => widget.onStatusTap(episode.seasonNumber, episode.episodeNumber, WatchStatus.inProgress),
+                  ),
+                  _EpisodeStatusButton(
+                    icon: Icons.check_circle_outline,
+                    activeIcon: Icons.check_circle,
+                    isActive: effectiveStatuses.contains(WatchStatus.watched),
+                    isRowHovered: _isHovered,
+                    tooltip: 'Watched',
+                    onTap: () => widget.onStatusTap(episode.seasonNumber, episode.episodeNumber, WatchStatus.watched),
+                  ),
+                  _EpisodeStatusButton(
+                    icon: Icons.cancel_outlined,
+                    activeIcon: Icons.cancel,
+                    isActive: effectiveStatuses.contains(WatchStatus.dnf),
+                    isRowHovered: _isHovered,
+                    tooltip: 'Did not finish',
+                    onTap: () => widget.onStatusTap(episode.seasonNumber, episode.episodeNumber, WatchStatus.dnf),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(width: 12),
+            // Episode number and title
+            Expanded(
+              child: Text(
+                'E${episode.episodeNumber.toString().padLeft(2, '0')} - ${episode.episodeTitle}',
+                style: theme.textTheme.bodyMedium,
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// A compact status button for episode rows.
+/// Shows unfocused/unselected until hovered, then highlights.
+class _EpisodeStatusButton extends StatefulWidget {
+  final IconData icon;
+  final IconData activeIcon;
+  final bool isActive;
+  final bool isRowHovered;
+  final String tooltip;
+  final VoidCallback? onTap;
+  final double size;
+  final double? fixedWidth; // If set, button will be centered in this fixed width
+
+  const _EpisodeStatusButton({
+    required this.icon,
+    required this.activeIcon,
+    required this.isActive,
+    required this.tooltip,
+    this.isRowHovered = false,
+    this.onTap,
+    this.size = 20,
+    this.fixedWidth,
+  });
+
+  @override
+  State<_EpisodeStatusButton> createState() => _EpisodeStatusButtonState();
+}
+
+class _EpisodeStatusButtonState extends State<_EpisodeStatusButton> {
+  bool _isHovered = false;
+
+  // Base size for calculating consistent spacing
+  static const double _baseSize = 20;
+  static const double _basePadding = 4;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    
+    // Determine icon and color based on state:
+    // - Active: filled icon, full primary color
+    // - Hovered (not active): filled icon, lighter primary color
+    // - Row hovered (not icon hovered, not active): outline icon, visible but not highlighted
+    // - Default: outline icon, subtle/faded color
+    final IconData icon;
+    final Color color;
+    
+    if (widget.isActive) {
+      // Active - filled icon, full primary color
+      icon = widget.activeIcon;
+      color = theme.colorScheme.primary;
+    } else if (_isHovered) {
+      // Hovered - filled icon, lighter primary color
+      icon = widget.activeIcon;
+      color = theme.colorScheme.primary.withValues(alpha: 0.6);
+    } else if (widget.isRowHovered) {
+      // Row is hovered but not this specific icon - show outline but not faded
+      icon = widget.icon;
+      color = theme.colorScheme.onSurfaceVariant.withValues(alpha: 0.6);
+    } else {
+      // Default - outline icon, very subtle/faded
+      icon = widget.icon;
+      color = theme.colorScheme.onSurfaceVariant.withValues(alpha: 0.15);
+    }
+    
+    // Build the icon with appropriate padding
+    Widget iconWidget = GestureDetector(
+      onTap: widget.onTap,
+      child: Icon(
+        icon,
+        size: widget.size,
+        color: color,
+      ),
+    );
+    
+    // If fixedWidth is set, center the icon in that width
+    if (widget.fixedWidth != null) {
+      iconWidget = SizedBox(
+        width: widget.fixedWidth,
+        child: Center(child: iconWidget),
+      );
+    } else {
+      // Use padding-based sizing for episode buttons (default behavior)
+      final sizeDiff = widget.size - _baseSize;
+      final adjustedPadding = _basePadding - (sizeDiff / 2);
+      iconWidget = Padding(
+        padding: EdgeInsets.all(adjustedPadding.clamp(0, _basePadding)),
+        child: iconWidget,
+      );
+    }
+    
+    return MouseRegion(
+      onEnter: (_) => setState(() => _isHovered = true),
+      onExit: (_) => setState(() => _isHovered = false),
+      child: Tooltip(
+        message: widget.tooltip,
+        preferBelow: false,
+        child: iconWidget,
+      ),
+    );
+  }
+}
+
+/// A simple wrapper widget that tracks hover state and passes it to a builder.
+class _HoverableRow extends StatefulWidget {
+  final Widget Function(bool isHovered) child;
+
+  const _HoverableRow({required this.child});
+
+  @override
+  State<_HoverableRow> createState() => _HoverableRowState();
+}
+
+class _HoverableRowState extends State<_HoverableRow> {
+  bool _isHovered = false;
+
+  @override
+  Widget build(BuildContext context) {
+    return MouseRegion(
+      onEnter: (_) => setState(() => _isHovered = true),
+      onExit: (_) => setState(() => _isHovered = false),
+      child: widget.child(_isHovered),
+    );
   }
 }

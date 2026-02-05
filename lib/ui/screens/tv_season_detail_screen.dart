@@ -14,8 +14,9 @@ import '../common/runtime_display.dart';
 import '../common/tv_breadcrumb.dart';
 import '../common/streaming_options_widget.dart';
 import '../common/external_navigation_utils.dart';
+import '../common/expand_poster_button.dart';
 
-class TvSeasonDetailScreen extends ConsumerWidget {
+class TvSeasonDetailScreen extends ConsumerStatefulWidget {
   final int showId;
   final int seasonNumber;
   final String showName;
@@ -28,9 +29,16 @@ class TvSeasonDetailScreen extends ConsumerWidget {
   });
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final seasonAsync = ref.watch(tvSeasonDetailProvider((showId: showId, seasonNumber: seasonNumber)));
-    final showAsync = ref.watch(tvShowDetailProvider(showId));
+  ConsumerState<TvSeasonDetailScreen> createState() => _TvSeasonDetailScreenState();
+}
+
+class _TvSeasonDetailScreenState extends ConsumerState<TvSeasonDetailScreen> {
+  bool _isPosterHovered = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final seasonAsync = ref.watch(tvSeasonDetailProvider((showId: widget.showId, seasonNumber: widget.seasonNumber)));
+    final showAsync = ref.watch(tvShowDetailProvider(widget.showId));
     final prefsAsync = ref.watch(preferencesProvider);
 
     return Scaffold(
@@ -40,22 +48,22 @@ class TvSeasonDetailScreen extends ConsumerWidget {
             return TvBreadcrumb(
               items: [
                 BreadcrumbItem(
-                  label: showName,
+                  label: widget.showName,
                   isClickable: true,
                   onTap: () {
                     Navigator.push(
                       context,
                       MaterialPageRoute(
                         builder: (context) => TvShowDetailScreen(
-                          showId: showId,
-                          showTitle: showName,
+                          showId: widget.showId,
+                          showTitle: widget.showName,
                         ),
                       ),
                     );
                   },
                 ),
                 BreadcrumbItem(
-                  label: 'Season $seasonNumber',
+                  label: 'Season ${widget.seasonNumber}',
                   isClickable: false,
                 ),
               ],
@@ -90,7 +98,7 @@ class TvSeasonDetailScreen extends ConsumerWidget {
         // Header with emphasis color background
         SliverToBoxAdapter(
           child: Container(
-            color: theme.colorScheme.primaryContainer,
+            color: theme.colorScheme.surfaceContainerHighest,
             padding: const EdgeInsets.all(16.0),
             child: LayoutBuilder(
               builder: (context, constraints) {
@@ -107,21 +115,44 @@ class TvSeasonDetailScreen extends ConsumerWidget {
                         child: Row(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            ClipRRect(
-                              borderRadius: BorderRadius.circular(12),
-                              child: season.posterPath != null
-                                  ? CachedNetworkImage(
-                                      imageUrl: 'https://image.tmdb.org/t/p/w300${season.posterPath}',
-                                      width: 120,
-                                      height: 180,
-                                      fit: BoxFit.cover,
-                                    )
-                                  : Container(
-                                      width: 120,
-                                      height: 180,
-                                      color: theme.colorScheme.surfaceContainerHighest,
-                                      child: const Icon(Icons.tv, size: 40),
+                            MouseRegion(
+                              onEnter: (_) => setState(() => _isPosterHovered = true),
+                              onExit: (_) => setState(() => _isPosterHovered = false),
+                              child: SizedBox(
+                                width: 120,
+                                height: 180,
+                                child: Stack(
+                                  children: [
+                                    ClipRRect(
+                                      borderRadius: BorderRadius.circular(12),
+                                      child: season.posterPath != null
+                                          ? CachedNetworkImage(
+                                              imageUrl: 'https://image.tmdb.org/t/p/w300${season.posterPath}',
+                                              width: 120,
+                                              height: 180,
+                                              fit: BoxFit.cover,
+                                            )
+                                          : Container(
+                                              width: 120,
+                                              height: 180,
+                                              color: theme.colorScheme.surfaceContainerHighest,
+                                              child: const Icon(Icons.tv, size: 40),
+                                            ),
                                     ),
+                                    // Expand poster button
+                                    Positioned(
+                                      top: 4,
+                                      left: 4,
+                                      child: ExpandPosterButton(
+                                        posterPath: season.posterPath,
+                                        title: season.name,
+                                        isCardHovered: _isPosterHovered,
+                                        iconSize: 18,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
                             ),
                             const SizedBox(width: 16),
                             Expanded(
@@ -162,8 +193,8 @@ class TvSeasonDetailScreen extends ConsumerWidget {
                       
                       const SizedBox(width: 24),
                       
-                      // Right side: Streaming options
-                      if (show != null && show.streamingOptions.isNotEmpty)
+                      // Right side: Streaming options (always show, even when empty)
+                      if (show != null)
                         SizedBox(
                           width: 350,
                           child: StreamingOptionsWidget(
@@ -172,6 +203,8 @@ class TvSeasonDetailScreen extends ConsumerWidget {
                             isTV: true,
                             isCompact: true,
                             locale: prefs?.streamingCountry,
+                            title: show.name,
+                            releaseDate: show.firstAirDate,
                           ),
                         ),
                     ],
@@ -184,21 +217,44 @@ class TvSeasonDetailScreen extends ConsumerWidget {
                       Row(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          ClipRRect(
-                            borderRadius: BorderRadius.circular(12),
-                            child: season.posterPath != null
-                                ? CachedNetworkImage(
-                                    imageUrl: 'https://image.tmdb.org/t/p/w300${season.posterPath}',
-                                    width: 120,
-                                    height: 180,
-                                    fit: BoxFit.cover,
-                                  )
-                                : Container(
-                                    width: 120,
-                                    height: 180,
-                                    color: theme.colorScheme.surfaceContainerHighest,
-                                    child: const Icon(Icons.tv, size: 40),
+                          MouseRegion(
+                            onEnter: (_) => setState(() => _isPosterHovered = true),
+                            onExit: (_) => setState(() => _isPosterHovered = false),
+                            child: SizedBox(
+                              width: 120,
+                              height: 180,
+                              child: Stack(
+                                children: [
+                                  ClipRRect(
+                                    borderRadius: BorderRadius.circular(12),
+                                    child: season.posterPath != null
+                                        ? CachedNetworkImage(
+                                            imageUrl: 'https://image.tmdb.org/t/p/w300${season.posterPath}',
+                                            width: 120,
+                                            height: 180,
+                                            fit: BoxFit.cover,
+                                          )
+                                        : Container(
+                                            width: 120,
+                                            height: 180,
+                                            color: theme.colorScheme.surfaceContainerHighest,
+                                            child: const Icon(Icons.tv, size: 40),
+                                          ),
                                   ),
+                                  // Expand poster button
+                                  Positioned(
+                                    top: 4,
+                                    left: 4,
+                                    child: ExpandPosterButton(
+                                      posterPath: season.posterPath,
+                                      title: season.name,
+                                      isCardHovered: _isPosterHovered,
+                                      iconSize: 18,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
                           ),
                           const SizedBox(width: 16),
                           Expanded(
@@ -236,8 +292,8 @@ class TvSeasonDetailScreen extends ConsumerWidget {
                         ],
                       ),
                       
-                      // Streaming options below on small screens
-                      if (show != null && show.streamingOptions.isNotEmpty) ...[
+                      // Streaming options below on small screens (always show, even when empty)
+                      if (show != null) ...[
                         const SizedBox(height: 16),
                         StreamingOptionsWidget(
                           streamingOptions: show.streamingOptions,
@@ -245,6 +301,8 @@ class TvSeasonDetailScreen extends ConsumerWidget {
                           isTV: true,
                           isCompact: true,
                           locale: prefs?.streamingCountry,
+                          title: show.name,
+                          releaseDate: show.firstAirDate,
                         ),
                       ],
                     ],
@@ -298,10 +356,10 @@ class TvSeasonDetailScreen extends ConsumerWidget {
             context,
             MaterialPageRoute(
               builder: (context) => TvEpisodeDetailScreen(
-                showId: showId,
-                seasonNumber: seasonNumber,
+                showId: widget.showId,
+                seasonNumber: widget.seasonNumber,
                 episodeNumber: episode.episodeNumber,
-                showName: showName,
+                showName: widget.showName,
               ),
             ),
           );
@@ -477,7 +535,7 @@ class TvSeasonDetailScreen extends ConsumerWidget {
             bool hasImdbId = false;
             if (showImdb) {
               final tvCacheRepo = ref.read(tvCacheRepositoryProvider);
-              final tvShow = tvCacheRepo.getShow(showId);
+              final tvShow = tvCacheRepo.getShow(widget.showId);
               imdbId = tvShow?.imdbId;
               hasImdbId = imdbId != null && imdbId.isNotEmpty;
             }
@@ -502,14 +560,14 @@ class TvSeasonDetailScreen extends ConsumerWidget {
                     children: [
                       if (showTmdb) ...[
                         Tooltip(
-                          message: 'View $showName on TMDB',
+                          message: 'View ${widget.showName} on TMDB',
                           child: Material(
                             color: Colors.transparent,
                             child: InkWell(
                               onTap: () => ExternalNavigationUtils.launchTmdbSeason(
                                 context,
-                                showId: showId,
-                                seasonNumber: seasonNumber,
+                                showId: widget.showId,
+                                seasonNumber: widget.seasonNumber,
                               ),
                               borderRadius: BorderRadius.circular(8),
                               child: Container(
@@ -540,7 +598,7 @@ class TvSeasonDetailScreen extends ConsumerWidget {
                       ],
                       if (showImdb && hasImdbId) ...[
                         Tooltip(
-                          message: 'View $showName on IMDb',
+                          message: 'View ${widget.showName} on IMDb',
                           child: Material(
                             color: Colors.transparent,
                             child: InkWell(

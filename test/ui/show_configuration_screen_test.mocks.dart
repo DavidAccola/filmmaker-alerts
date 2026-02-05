@@ -738,6 +738,7 @@ class MockWatchlistLogic extends _i1.Mock implements _i11.WatchlistLogic {
     int? episodeNumber,
     _i7.WatchStatus? status, {
     List<DateTime>? watchDates,
+    String? episodeTitle,
   }) =>
       (super.noSuchMethod(
         Invocation.method(
@@ -748,7 +749,10 @@ class MockWatchlistLogic extends _i1.Mock implements _i11.WatchlistLogic {
             episodeNumber,
             status,
           ],
-          {#watchDates: watchDates},
+          {
+            #watchDates: watchDates,
+            #episodeTitle: episodeTitle,
+          },
         ),
         returnValue: _i6.Future<void>.value(),
         returnValueForMissingStub: _i6.Future<void>.value(),
@@ -811,6 +815,25 @@ class MockWatchlistLogic extends _i1.Mock implements _i11.WatchlistLogic {
         ),
         returnValue: <dynamic>[],
       ) as List<dynamic>);
+
+  @override
+  _i6.Future<void> markMultipleEpisodes(
+    int? showId,
+    List<Map<String, dynamic>>? episodes,
+    _i7.WatchStatus? status,
+  ) =>
+      (super.noSuchMethod(
+        Invocation.method(
+          #markMultipleEpisodes,
+          [
+            showId,
+            episodes,
+            status,
+          ],
+        ),
+        returnValue: _i6.Future<void>.value(),
+        returnValueForMissingStub: _i6.Future<void>.value(),
+      ) as _i6.Future<void>);
 }
 
 /// A class which mocks [WorkLogic].

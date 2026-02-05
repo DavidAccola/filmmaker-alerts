@@ -10,6 +10,7 @@ import '../common/streaming_options_widget.dart';
 import '../common/external_navigation_utils.dart';
 import '../common/snackbar_utils.dart';
 import '../common/watchlist_button.dart';
+import '../common/expand_poster_button.dart';
 import 'contributor_detail_screen.dart';
 import '../../data/models/contributor.dart';
 import '../../logic/work_sorting_logic.dart';
@@ -79,6 +80,11 @@ class _MovieDetailScreenState extends ConsumerState<MovieDetailScreen> {
   }
 
   Widget _buildContent(Preferences prefs, MovieDetail movieDetail) {
+    debugPrint('[MovieDetailScreen] Building content for ${movieDetail.title}');
+    debugPrint('[MovieDetailScreen] Streaming options count: ${movieDetail.streamingOptions.length}');
+    if (movieDetail.streamingOptions.isNotEmpty) {
+      debugPrint('[MovieDetailScreen] First streaming option: ${movieDetail.streamingOptions.first.providerName}');
+    }
 
     return SingleChildScrollView(
       child: Column(
@@ -192,6 +198,17 @@ class _MovieDetailScreenState extends ConsumerState<MovieDetailScreen> {
                                   applyPositioning: false,
                                 ),
                               ),
+                              // Expand poster button
+                              Positioned(
+                                top: 4,
+                                left: 4,
+                                child: ExpandPosterButton(
+                                  posterPath: movieDetail.posterPath,
+                                  title: movieDetail.title,
+                                  isCardHovered: _isPosterHovered,
+                                  iconSize: 18,
+                                ),
+                              ),
                             ],
                           ),
                         ),
@@ -209,18 +226,19 @@ class _MovieDetailScreenState extends ConsumerState<MovieDetailScreen> {
                 
                 const SizedBox(width: 24),
                 
-                // Right side: Streaming options
-                if (movieDetail.streamingOptions.isNotEmpty)
-                  SizedBox(
-                    width: 350,
-                    child: StreamingOptionsWidget(
-                      streamingOptions: movieDetail.streamingOptions,
-                      tmdbId: movieDetail.tmdbId,
-                      isTV: false,
-                      isCompact: true,
-                      locale: prefs.streamingCountry,
-                    ),
+                // Right side: Streaming options (always show, even when empty)
+                SizedBox(
+                  width: 350,
+                  child: StreamingOptionsWidget(
+                    streamingOptions: movieDetail.streamingOptions,
+                    tmdbId: movieDetail.tmdbId,
+                    isTV: false,
+                    isCompact: true,
+                    locale: prefs.streamingCountry,
+                    title: movieDetail.title,
+                    releaseDate: movieDetail.releaseDate,
                   ),
+                ),
               ],
             );
           } else {
@@ -280,6 +298,17 @@ class _MovieDetailScreenState extends ConsumerState<MovieDetailScreen> {
                                 applyPositioning: false,
                               ),
                             ),
+                            // Expand poster button
+                            Positioned(
+                              top: 4,
+                              left: 4,
+                              child: ExpandPosterButton(
+                                posterPath: movieDetail.posterPath,
+                                title: movieDetail.title,
+                                isCardHovered: _isPosterHovered,
+                                iconSize: 18,
+                              ),
+                            ),
                           ],
                         ),
                       ),
@@ -294,17 +323,17 @@ class _MovieDetailScreenState extends ConsumerState<MovieDetailScreen> {
                   ],
                 ),
                 
-                // Streaming options below on small screens
-                if (movieDetail.streamingOptions.isNotEmpty) ...[
-                  const SizedBox(height: 16),
-                  StreamingOptionsWidget(
-                    streamingOptions: movieDetail.streamingOptions,
-                    tmdbId: movieDetail.tmdbId,
-                    isTV: false,
-                    isCompact: true,
-                    locale: prefs.streamingCountry,
-                  ),
-                ],
+                // Streaming options below on small screens (always show, even when empty)
+                const SizedBox(height: 16),
+                StreamingOptionsWidget(
+                  streamingOptions: movieDetail.streamingOptions,
+                  tmdbId: movieDetail.tmdbId,
+                  isTV: false,
+                  isCompact: true,
+                  locale: prefs.streamingCountry,
+                  title: movieDetail.title,
+                  releaseDate: movieDetail.releaseDate,
+                ),
               ],
             );
           }

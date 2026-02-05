@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../data/models/contributor_detail.dart';
 import '../../data/models/contributor.dart'; // For TvNotificationPreferences
 import '../../data/models/watchlist_entry.dart';
+import '../../data/models/status_record.dart';
 import '../../providers/providers.dart';
 import 'snackbar_utils.dart';
 import '../screens/home_screen.dart';
@@ -221,6 +222,49 @@ class _WatchlistButtonState extends ConsumerState<WatchlistButton> {
               // Handle TV show with episode preferences
               final tvPrefs = entry.tvNotificationPrefs;
               final selectedTypes = tvPrefs?.selectedTypes ?? [];
+              
+              // Fetch show details and mark all episodes as "Want to Watch"
+              try {
+                final workLogic = ref.read(workLogicProvider);
+                
+                // Fetch show details (this will cache them)
+                final showDetail = await workLogic.fetchAndCacheTvShowDetail(widget.tmdbId);
+                
+                if (showDetail != null) {
+                  final allEpisodes = <Map<String, dynamic>>[];
+                  
+                  // Fetch all seasons and collect episodes
+                  for (final season in showDetail.seasons) {
+                    final seasonDetail = await workLogic.fetchAndCacheTvSeasonDetail(
+                      showId: widget.tmdbId,
+                      seasonNumber: season.seasonNumber,
+                    );
+                    
+                    if (seasonDetail != null) {
+                      for (final episode in seasonDetail.episodes) {
+                        allEpisodes.add({
+                          'seasonNumber': season.seasonNumber,
+                          'episodeNumber': episode.episodeNumber,
+                          'episodeTitle': episode.name,
+                        });
+                      }
+                    }
+                  }
+                  
+                  // Mark all episodes as "Want to Watch"
+                  if (allEpisodes.isNotEmpty) {
+                    await watchlistLogic.markMultipleEpisodes(
+                      widget.tmdbId,
+                      allEpisodes,
+                      WatchStatus.wantToWatch,
+                    );
+                    ref.invalidate(episodeStatusRepositoryProvider);
+                  }
+                }
+              } catch (e) {
+                debugPrint('[WatchlistButton] Error marking episodes: $e');
+                // Continue even if episode marking fails - the show is still added
+              }
               
               showTvWatchlistSnackBar(
                 context,

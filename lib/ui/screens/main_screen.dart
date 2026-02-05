@@ -180,8 +180,8 @@ class _MainScreenState extends ConsumerState<MainScreen> with WindowListener {
             message: 'Find More to Follow',
             waitDuration: const Duration(milliseconds: 250),
             child: FloatingActionButton(
-              backgroundColor: const Color(0xFF2196F3),
-              foregroundColor: Colors.white,
+              backgroundColor: Theme.of(context).colorScheme.primary,
+              foregroundColor: Theme.of(context).colorScheme.onPrimary,
               onPressed: () async {
                 final result = await Navigator.push(
                   context,

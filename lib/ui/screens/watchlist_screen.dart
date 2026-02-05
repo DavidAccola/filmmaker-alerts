@@ -8,6 +8,7 @@ import '../../providers/providers.dart';
 import '../common/watchlist_card.dart';
 import '../common/snackbar_utils.dart';
 import '../common/rewatch_dialog.dart';
+import '../common/tmdb_attribution.dart';
 import 'add_contributor_screen.dart';
 import 'movie_detail_screen.dart';
 
@@ -644,8 +645,9 @@ class _WatchlistScreenState extends ConsumerState<WatchlistScreen>
                                             ),
                                           ),
                                           
-                                          // Hidden section header (if showing hidden items)
+                                          // Hidden section (if showing hidden items)
                                           if (sortedHiddenEntries.isNotEmpty) ...[
+                                            // Hidden section header
                                             SliverToBoxAdapter(
                                               child: Padding(
                                                 padding: const EdgeInsets.fromLTRB(16, 24, 16, 8),
@@ -711,6 +713,15 @@ class _WatchlistScreenState extends ConsumerState<WatchlistScreen>
                                               ),
                                             ),
                                           ],
+                                          
+                                          // TMDB Attribution - pushed to bottom
+                                          const SliverFillRemaining(
+                                            hasScrollBody: false,
+                                            child: Column(
+                                              mainAxisAlignment: MainAxisAlignment.end,
+                                              children: [TmdbAttribution()],
+                                            ),
+                                          ),
                                         ],
                                       );
                                     },

@@ -206,13 +206,23 @@ class WatchlistLogic {
   }
 
   /// Add status to an episode
+  /// If the episode entry doesn't exist, it will be created first.
   Future<void> addStatusToEpisode(
     int showId,
     int seasonNumber,
     int episodeNumber,
     WatchStatus status, {
     List<DateTime>? watchDates,
+    String? episodeTitle,
   }) async {
+    // Ensure the episode entry exists
+    await _episodeRepo.getOrCreateEpisode(
+      showId: showId,
+      seasonNumber: seasonNumber,
+      episodeNumber: episodeNumber,
+      episodeTitle: episodeTitle ?? 'Episode $episodeNumber',
+    );
+    
     final record = StatusRecord(
       status: status,
       setAt: DateTime.now(),
@@ -260,5 +270,29 @@ class WatchlistLogic {
   /// Get seasons for a show
   List<dynamic> getSeasonsForShow(int showId) {
     return _seasonRepo.getSeasonsByShow(showId);
+  }
+
+  /// Mark multiple episodes with a status
+  /// Used when adding a TV show to watchlist to mark all episodes as "Want to Watch"
+  /// 
+  /// [episodes] should be a list of maps with keys: seasonNumber, episodeNumber, episodeTitle (optional)
+  Future<void> markMultipleEpisodes(
+    int showId,
+    List<Map<String, dynamic>> episodes,
+    WatchStatus status,
+  ) async {
+    for (final episode in episodes) {
+      final seasonNumber = episode['seasonNumber'] as int;
+      final episodeNumber = episode['episodeNumber'] as int;
+      final episodeTitle = episode['episodeTitle'] as String? ?? 'Episode $episodeNumber';
+      
+      await addStatusToEpisode(
+        showId,
+        seasonNumber,
+        episodeNumber,
+        status,
+        episodeTitle: episodeTitle,
+      );
+    }
   }
 }

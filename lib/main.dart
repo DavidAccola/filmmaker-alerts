@@ -306,7 +306,11 @@ class MyApp extends ConsumerWidget {
     return MaterialApp(
       title: 'Filmmaker Alerts',
       theme: ThemeData(
-        colorScheme: ColorScheme.fromSeed(seedColor: Colors.deepPurple),
+        // Light mode - blue palette
+        colorScheme: ColorScheme.fromSeed(
+          seedColor: const Color(0xFF007acc), // Classic blue
+          brightness: Brightness.light,
+        ),
         useMaterial3: true,
         textTheme: kumbhTextTheme,
         snackBarTheme: const SnackBarThemeData(
@@ -314,42 +318,42 @@ class MyApp extends ConsumerWidget {
         ),
       ),
       darkTheme: ThemeData(
-        // Stacher-inspired dark mode with very dark backgrounds and bright text
+        // Dark mode - universally appealing blue palette
         colorScheme: const ColorScheme.dark(
           brightness: Brightness.dark,
-          // Primary accent - keeping purple but softened
-          primary: Color(0xFF9775fa),
-          onPrimary: Color(0xFFFFFFFF),
-          primaryContainer: Color(0xFF3d3d3d),
-          onPrimaryContainer: Color(0xFFF0F0F0),
-          // Secondary - soft blue
-          secondary: Color(0xFF74c0fc),
-          onSecondary: Color(0xFF0d0d0d),
-          secondaryContainer: Color(0xFF212121),
-          onSecondaryContainer: Color(0xFFcccccc),
-          // Tertiary - teal
-          tertiary: Color(0xFF63e6be),
-          onTertiary: Color(0xFF0d0d0d),
-          tertiaryContainer: Color(0xFF212121),
-          onTertiaryContainer: Color(0xFFcccccc),
+          // Primary - soft blue (easy on eyes, universally liked)
+          primary: Color(0xFF4dabf7),           // Soft blue
+          onPrimary: Color(0xFF0a0a0a),
+          primaryContainer: Color(0xFF1a3a5c),  // Deep blue
+          onPrimaryContainer: Color(0xFFa5d8ff),
+          // Secondary - lighter blue accent
+          secondary: Color(0xFF74c0fc),         // Light blue
+          onSecondary: Color(0xFF0a0a0a),
+          secondaryContainer: Color(0xFF1c3d5a),
+          onSecondaryContainer: Color(0xFFd0ebff),
+          // Tertiary - cyan/teal for variety
+          tertiary: Color(0xFF38d9a9),          // Soft teal
+          onTertiary: Color(0xFF0a0a0a),
+          tertiaryContainer: Color(0xFF1a3d35),
+          onTertiaryContainer: Color(0xFF96f2d7),
           // Error
           error: Color(0xFFff8787),
-          onError: Color(0xFF0d0d0d),
-          errorContainer: Color(0xFF4d4d4d),
+          onError: Color(0xFF0a0a0a),
+          errorContainer: Color(0xFF4d3030),
           onErrorContainer: Color(0xFFffc9c9),
-          // Surfaces - very dark backgrounds (Stacher uses ~9% lightness for main bg)
-          surface: Color(0xFF171717),           // hsl(255 2% 9%) - main background
-          onSurface: Color(0xFFF2F2F2),          // hsl(255 2% 95%) - primary text (bright!)
-          surfaceContainerHighest: Color(0xFF212121), // hsl(255 2% 13%) - cards
-          onSurfaceVariant: Color(0xFFb3b3b3),  // hsl(255 2% 70%) - secondary text
-          outline: Color(0xFF4d4d4d),           // hsl(255 2% 30%) - borders
-          outlineVariant: Color(0xFF404040),    // hsl(255 2% 25%) - subtle borders
+          // Surfaces - very dark backgrounds
+          surface: Color(0xFF171717),
+          onSurface: Color(0xFFF2F2F2),
+          surfaceContainerHighest: Color(0xFF212121),
+          onSurfaceVariant: Color(0xFFb3b3b3),
+          outline: Color(0xFF4d4d4d),
+          outlineVariant: Color(0xFF404040),
           shadow: Color(0xFF000000),
           scrim: Color(0xFF000000),
           inverseSurface: Color(0xFFF2F2F2),
           onInverseSurface: Color(0xFF171717),
-          inversePrimary: Color(0xFF7950f2),
-          surfaceTint: Color(0xFF9775fa),
+          inversePrimary: Color(0xFF1971c2),
+          surfaceTint: Color(0xFF4dabf7),
         ),
         scaffoldBackgroundColor: const Color(0xFF141414), // hsl(255 2% 8%) - slightly darker
         cardColor: const Color(0xFF212121),     // hsl(255 2% 13%) - card background

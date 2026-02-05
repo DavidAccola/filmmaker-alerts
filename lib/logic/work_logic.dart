@@ -25,6 +25,8 @@ class WorkLogic {
 
   Future<MovieDetail?> fetchAndCacheMovieDetail(int tmdbId, {String regionCode = 'US'}) async {
     try {
+      debugPrint('[WorkLogic] Fetching movie detail for $tmdbId with region $regionCode');
+      
       // Fetch movie details, credits, and streaming options in parallel
       final results = await Future.wait([
         _tmdbService.getMovieDetails(tmdbId),
@@ -35,6 +37,8 @@ class WorkLogic {
       final movieData = results[0] as Map<String, dynamic>;
       final creditsData = results[1] as Map<String, dynamic>;
       final streamingOptions = results[2] as List<StreamingOption>;
+      
+      debugPrint('[WorkLogic] Movie $tmdbId: Got ${streamingOptions.length} streaming options');
 
       // Parse cast
       final cast = (creditsData['cast'] as List? ?? []).take(20).map((c) {

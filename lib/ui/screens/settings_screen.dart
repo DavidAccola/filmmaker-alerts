@@ -7,6 +7,7 @@ import '../../providers/providers.dart';
 
 import '../common/multi_select_chip_group.dart';
 import '../common/snackbar_utils.dart';
+import '../common/tmdb_attribution.dart';
 
 class SettingsScreen extends ConsumerStatefulWidget {
   const SettingsScreen({super.key});
@@ -61,37 +62,50 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
         loading: () => const Center(child: CircularProgressIndicator()),
         error: (err, stack) => Center(child: Text('Error: $err')),
         data: (prefs) {
-          return SingleChildScrollView(
-            padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 24.0),
-            child: Align(
-              alignment: Alignment.topCenter,
-              child: ConstrainedBox(
-                constraints: const BoxConstraints(maxWidth: 5000),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    _buildAppearanceSection(context, ref, prefs),
-                    const SizedBox(height: 24),
-                    _buildReleaseSection(context, ref, prefs),
-                    const SizedBox(height: 24),
-                    _buildRoleSection(context, ref, prefs),
-                    const SizedBox(height: 24),
-                    _buildTvSection(context, ref, prefs),
-                    const SizedBox(height: 24),
-                    _buildSearchSection(context, ref, prefs),
-                    const SizedBox(height: 24),
-                    _buildStreamingSection(context, ref, prefs),
-                    const SizedBox(height: 24),
-                    _buildMaintenanceSection(context, ref, prefs),
-                    if (_showDebug) ...[
-                      const SizedBox(height: 24),
-                      _buildDebugSection(context, ref, prefs),
-                    ],
-                    const SizedBox(height: 40), // Bottom padding for breathing room
-                  ],
+          return CustomScrollView(
+            slivers: [
+              SliverPadding(
+                padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 24.0),
+                sliver: SliverToBoxAdapter(
+                  child: Align(
+                    alignment: Alignment.topCenter,
+                    child: ConstrainedBox(
+                      constraints: const BoxConstraints(maxWidth: 5000),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          _buildAppearanceSection(context, ref, prefs),
+                          const SizedBox(height: 24),
+                          _buildReleaseSection(context, ref, prefs),
+                          const SizedBox(height: 24),
+                          _buildRoleSection(context, ref, prefs),
+                          const SizedBox(height: 24),
+                          _buildTvSection(context, ref, prefs),
+                          const SizedBox(height: 24),
+                          _buildSearchSection(context, ref, prefs),
+                          const SizedBox(height: 24),
+                          _buildStreamingSection(context, ref, prefs),
+                          const SizedBox(height: 24),
+                          _buildMaintenanceSection(context, ref, prefs),
+                          if (_showDebug) ...[
+                            const SizedBox(height: 24),
+                            _buildDebugSection(context, ref, prefs),
+                          ],
+                        ],
+                      ),
+                    ),
+                  ),
                 ),
               ),
-            ),
+              // TMDB Attribution - pushed to bottom
+              const SliverFillRemaining(
+                hasScrollBody: false,
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.end,
+                  children: [TmdbAttribution()],
+                ),
+              ),
+            ],
           );
         },
       ),

@@ -1,9 +1,14 @@
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 import '../../data/models/contributor_detail.dart';
+import '../../data/models/status_record.dart';
+import '../../providers/providers.dart';
 import '../../logic/tv_show_display_logic.dart';
-import 'watchlist_button.dart';
+import 'hover_action_button.dart';
+import 'snackbar_utils.dart';
+import 'tv_preferences_dialog.dart'; // For TvNotificationPreferencesExtension
 
 class CreditExpansionSection extends StatefulWidget {
   final String title;
@@ -484,13 +489,26 @@ class _CreditExpansionSectionState extends State<CreditExpansionSection> {
         if (episodes.length == 1) {
             final ep = episodes.first;
             final combinedTitle = "$key (S${ep.seasonNumber.toString().padLeft(2, '0')}E${ep.episodeNumber.toString().padLeft(2, '0')} - ${_extractEpisodeTitle(ep.title)})";
+            
+            // Create a show Work for watchlist targeting
+            final showIdForWatchlist = ep.showId ?? ep.tmdbId;
+            final watchlistShowWork = Work(
+              tmdbId: showIdForWatchlist,
+              title: key,
+              type: WorkType.tvShow,
+              posterPath: work.posterPath,
+              releaseDate: work.releaseDate,
+            );
+            
             return _buildWorkItem(
               ep.copyWith(
                 title: combinedTitle,
                 posterPath: work.posterPath, // Use show poster instead of episode still
               ),
               isEpisode: false, // Don't extract title again, show full combined title with poster
-              children: null
+              children: null,
+              watchlistTargetWork: watchlistShowWork,
+              episodeToMark: ep,
             );
         }
 
@@ -569,14 +587,27 @@ class _CreditExpansionSectionState extends State<CreditExpansionSection> {
           debugPrint('[CreditExpansionSection] workToRender.title: "${workToRender.title}"');
           debugPrint('[CreditExpansionSection] workToRender.showId: ${workToRender.showId}');
           debugPrint('[CreditExpansionSection] workToRender.showName: "${workToRender.showName}"');
-          debugPrint('[CreditExpansionSection] Calling _buildWorkItem with isEpisode: true');
+          debugPrint('[CreditExpansionSection] Calling _buildWorkItem with isEpisode: false (single episode with combined title)');
+          
+          // Create a show Work for watchlist targeting
+          // Use showId if available, otherwise use the episode's tmdbId as fallback
+          final showIdForWatchlist = ep.showId ?? ep.tmdbId;
+          final watchlistShowWork = Work(
+            tmdbId: showIdForWatchlist,
+            title: showTitle,
+            type: WorkType.tvShow,
+            posterPath: showWork.posterPath,
+            releaseDate: showWork.releaseDate,
+          );
           
           renderedGroups.add(
             _buildWorkItem(
               workToRender,
-              isEpisode: true,
+              isEpisode: false, // Use false so title isn't extracted again
               children: null, // No details row
               currentDepartmentFilter: filterDept,
+              watchlistTargetWork: watchlistShowWork,
+              episodeToMark: ep,
             )
           );
       } else {
@@ -603,7 +634,7 @@ class _CreditExpansionSectionState extends State<CreditExpansionSection> {
 
 
 
-  Widget _buildWorkItem(Work work, {bool isEpisode = false, String? currentDepartmentFilter, List<Widget>? children}) {
+  Widget _buildWorkItem(Work work, {bool isEpisode = false, String? currentDepartmentFilter, List<Widget>? children, Work? watchlistTargetWork, Work? episodeToMark}) {
     return _CreditWorkItem(
       work: work,
       isEpisode: isEpisode,
@@ -612,6 +643,8 @@ class _CreditExpansionSectionState extends State<CreditExpansionSection> {
       onWorkTap: widget.onWorkTap,
       onAddToWatchlist: widget.onAddToWatchlist,
       children: children,
+      watchlistTargetWork: watchlistTargetWork,
+      episodeToMark: episodeToMark,
     );
   }
 
@@ -631,6 +664,10 @@ class _CreditWorkItem extends StatefulWidget {
   final bool hideRatings;
   final Function(Work)? onWorkTap;
   final Function(Work)? onAddToWatchlist;
+  /// For single episodes displayed as shows, this contains the show info for watchlist
+  final Work? watchlistTargetWork;
+  /// For single episodes, the episode to mark after adding show to watchlist
+  final Work? episodeToMark;
 
   const _CreditWorkItem({
     required this.work,
@@ -640,6 +677,8 @@ class _CreditWorkItem extends StatefulWidget {
     required this.hideRatings,
     this.onWorkTap,
     this.onAddToWatchlist,
+    this.watchlistTargetWork,
+    this.episodeToMark,
   });
 
   @override
@@ -781,16 +820,10 @@ class _CreditWorkItemState extends State<_CreditWorkItem> {
                           
                           // Hover Mask + Center Watchlist Button using WatchlistButton component
                           if (widget.onAddToWatchlist != null)
-                            WatchlistButton(
-                              tmdbId: work.tmdbId,
-                              workType: work.type,
-                              workTitle: work.title,
-                              posterPath: work.posterPath,
-                              releaseDate: work.releaseDate,
-                              releaseType: work.releaseType ?? ReleaseType.streaming,
-                              position: WatchlistButtonStyle.center,
-                              showOnHoverOnly: true,
-                              iconSize: 20,
+                            _SingleEpisodeWatchlistButton(
+                              work: work,
+                              watchlistTargetWork: widget.watchlistTargetWork,
+                              episodeToMark: widget.episodeToMark,
                               isHovered: _isHovered,
                             ),
                         ],
@@ -881,5 +914,165 @@ class _CreditWorkItemState extends State<_CreditWorkItem> {
       }
     }
     return startYear;
+  }
+}
+
+/// Custom watchlist button that handles single episode cases
+/// When watchlistTargetWork is provided, it adds the show to watchlist
+/// and marks the specific episode as "Want to Watch"
+class _SingleEpisodeWatchlistButton extends ConsumerStatefulWidget {
+  final Work work;
+  final Work? watchlistTargetWork;
+  final Work? episodeToMark;
+  final bool isHovered;
+
+  const _SingleEpisodeWatchlistButton({
+    required this.work,
+    this.watchlistTargetWork,
+    this.episodeToMark,
+    required this.isHovered,
+  });
+
+  @override
+  ConsumerState<_SingleEpisodeWatchlistButton> createState() => _SingleEpisodeWatchlistButtonState();
+}
+
+class _SingleEpisodeWatchlistButtonState extends ConsumerState<_SingleEpisodeWatchlistButton> {
+  bool _isLoading = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final watchlistAsync = ref.watch(watchlistEntriesProvider);
+
+    return watchlistAsync.when(
+      data: (entries) {
+        // Check if the target (show or work) is in watchlist
+        final targetWork = widget.watchlistTargetWork ?? widget.work;
+        final isInWatchlist = entries.any((e) =>
+            e.tmdbId == targetWork.tmdbId && e.type == targetWork.type);
+
+        return HoverActionButton(
+          onPressed: _isLoading ? () {} : () => _handleWatchlistToggle(isInWatchlist),
+          icon: isInWatchlist ? Icons.check_circle : Icons.add_circle,
+          tooltip: isInWatchlist ? 'Remove from Watchlist' : 'Add to Watchlist',
+          iconSize: 20,
+          isCardHovered: widget.isHovered,
+        );
+      },
+      loading: () => const SizedBox(
+        width: 20,
+        height: 20,
+        child: CircularProgressIndicator(strokeWidth: 2),
+      ),
+      error: (_, __) => const SizedBox.shrink(),
+    );
+  }
+
+  Future<void> _handleWatchlistToggle(bool isInWatchlist) async {
+    setState(() => _isLoading = true);
+
+    try {
+      final watchlistLogic = ref.read(watchlistLogicProvider);
+      final targetWork = widget.watchlistTargetWork ?? widget.work;
+
+      if (isInWatchlist) {
+        // Remove from watchlist
+        await watchlistLogic.removeWorkFromWatchlist(
+          targetWork.tmdbId,
+          targetWork.type,
+        );
+
+        if (mounted) {
+          showSimpleSnackBar(
+            context,
+            '${targetWork.title} removed from watchlist',
+            duration: const Duration(seconds: 3),
+          );
+        }
+      } else {
+        // Add to watchlist
+        final entry = await watchlistLogic.addWorkToWatchlist(
+          tmdbId: targetWork.tmdbId,
+          type: targetWork.type,
+          title: targetWork.title,
+          posterPath: targetWork.posterPath,
+          releaseDate: targetWork.releaseDate,
+          releaseType: targetWork.releaseType ?? ReleaseType.streaming,
+        );
+
+        // If this is a single episode case, mark the episode as "Want to Watch"
+        if (widget.episodeToMark != null && widget.watchlistTargetWork != null) {
+          final episode = widget.episodeToMark!;
+          final seasonNum = episode.seasonNumber ?? 1;
+          final episodeNum = episode.episodeNumber ?? 1;
+          
+          // Extract episode title from the full title (format: "Show - S01E01 - Episode Title")
+          String episodeTitle = 'Episode $episodeNum';
+          final parts = episode.title.split(' - ');
+          if (parts.length >= 3) {
+            episodeTitle = parts.sublist(2).join(' - ');
+          } else if (parts.length == 2) {
+            episodeTitle = parts[1];
+          }
+          
+          // Mark the specific episode as "Want to Watch"
+          await watchlistLogic.addStatusToEpisode(
+            targetWork.tmdbId,
+            seasonNum,
+            episodeNum,
+            WatchStatus.wantToWatch,
+            episodeTitle: episodeTitle,
+          );
+          
+          if (mounted) {
+            showSimpleSnackBar(
+              context,
+              '${targetWork.title} added to watchlist with S${seasonNum.toString().padLeft(2, '0')}E${episodeNum.toString().padLeft(2, '0')} marked as Want to Watch',
+              duration: const Duration(seconds: 4),
+            );
+          }
+        } else if (mounted) {
+          // Regular add - show TV preferences snackbar
+          if (targetWork.type == WorkType.tvShow) {
+            final tvPrefs = entry.tvNotificationPrefs;
+            final selectedTypes = tvPrefs?.selectedTypes ?? [];
+            
+            showTvWatchlistSnackBar(
+              context,
+              workTitle: targetWork.title,
+              selectedEpisodeTypes: selectedTypes,
+              onUndo: () async {
+                await watchlistLogic.removeWorkFromWatchlist(
+                  targetWork.tmdbId,
+                  targetWork.type,
+                );
+                ref.invalidate(watchlistEntriesProvider);
+              },
+              onEditPreferences: () {}, // Could add preferences dialog here
+            );
+          } else {
+            showSimpleSnackBar(
+              context,
+              '${targetWork.title} added to watchlist',
+              duration: const Duration(seconds: 3),
+            );
+          }
+        }
+      }
+
+      ref.invalidate(watchlistEntriesProvider);
+    } catch (e) {
+      if (mounted) {
+        showSimpleSnackBar(
+          context,
+          'Failed to update watchlist: $e',
+          duration: const Duration(seconds: 3),
+        );
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _isLoading = false);
+      }
+    }
   }
 }

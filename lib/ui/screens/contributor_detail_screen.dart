@@ -249,8 +249,16 @@ class _ContributorDetailScreenState extends ConsumerState<ContributorDetailScree
   }
 
   Widget _buildTvCreditsSection(Preferences prefs, ContributorDetail? detail) {
-    if (detail == null) return const SizedBox.shrink();
-    final allWorks = detail.allWorks ?? [];
+    // Show loading state if detail is null or allWorks hasn't been populated yet
+    if (detail == null || detail.allWorks == null) {
+      return _buildSection(
+        title: 'Television Credits',
+        icon: Icons.tv,
+        child: _buildLoadingContent(),
+      );
+    }
+    
+    final allWorks = detail.allWorks!;
     if (allWorks.isEmpty) return const SizedBox.shrink();
 
     final tvWorks = allWorks.where((w) => w.type == WorkType.tvShow || w.type == WorkType.tvEpisode).toList();
@@ -268,8 +276,16 @@ class _ContributorDetailScreenState extends ConsumerState<ContributorDetailScree
   }
 
   Widget _buildMovieCreditsSection(Preferences prefs, ContributorDetail? detail) {
-    if (detail == null) return const SizedBox.shrink();
-    final allWorks = detail.allWorks ?? [];
+    // Show loading state if detail is null or allWorks hasn't been populated yet
+    if (detail == null || detail.allWorks == null) {
+      return _buildSection(
+        title: 'Movie Credits',
+        icon: Icons.movie,
+        child: _buildLoadingContent(),
+      );
+    }
+    
+    final allWorks = detail.allWorks!;
     debugPrint('[ContributorDetailScreen] Building Movie Credits. allWorks count: ${allWorks.length}');
     if (allWorks.isEmpty) return const SizedBox.shrink();
 
@@ -700,6 +716,40 @@ class _ContributorDetailScreenState extends ConsumerState<ContributorDetailScree
     );
   }
 
+  Widget _buildLoadingContent() {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(24.0),
+      decoration: BoxDecoration(
+        color: Theme.of(context).colorScheme.surfaceContainerLow,
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(
+          color: Theme.of(context).colorScheme.outline.withValues(alpha: 0.2),
+        ),
+      ),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          SizedBox(
+            width: 16,
+            height: 16,
+            child: CircularProgressIndicator(
+              strokeWidth: 2,
+              color: Theme.of(context).colorScheme.onSurfaceVariant,
+            ),
+          ),
+          const SizedBox(width: 12),
+          Text(
+            'Loading...',
+            style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+              color: Theme.of(context).colorScheme.onSurfaceVariant,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   Widget _buildExternalLinks() {
     return Consumer(
       builder: (context, ref, child) {
@@ -856,7 +906,7 @@ class _ContributorDetailScreenState extends ConsumerState<ContributorDetailScree
     } else if (roles.isEmpty) {
       return const SizedBox.shrink();
     } else {
-      // Organize roles by Stage 1, Stage 2, then others
+      // Organize roles by Stage 1, Stage 2, then others (for color coding)
       final stage1Roles = <String>[];
       final stage2Roles = <String>[];
       final otherRoles = <String>[];
@@ -887,6 +937,18 @@ class _ContributorDetailScreenState extends ConsumerState<ContributorDetailScree
         }
       }
 
+      // Build all chips in order: Stage 1, Stage 2, Other - all in one Wrap
+      final allChips = <Widget>[];
+      for (final role in stage1Roles) {
+        allChips.add(_buildRoleChip(role, Theme.of(context).colorScheme.secondary));
+      }
+      for (final role in stage2Roles) {
+        allChips.add(_buildRoleChip(role, Theme.of(context).colorScheme.tertiary));
+      }
+      for (final role in otherRoles) {
+        allChips.add(_buildRoleChip(role, Theme.of(context).colorScheme.outline));
+      }
+
       content = Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -909,32 +971,12 @@ class _ContributorDetailScreenState extends ConsumerState<ContributorDetailScree
             ],
           ),
           const SizedBox(height: 4),
-          // Stage 1 roles
-          if (stage1Roles.isNotEmpty) ...[
-            Wrap(
-              spacing: 6,
-              runSpacing: 6,
-              children: stage1Roles.map((role) => _buildRoleChip(role, Theme.of(context).colorScheme.secondary)).toList(),
-            ),
-            const SizedBox(height: 4),
-          ],
-          // Stage 2 roles
-          if (stage2Roles.isNotEmpty) ...[
-            Wrap(
-              spacing: 6,
-              runSpacing: 6,
-              children: stage2Roles.map((role) => _buildRoleChip(role, Theme.of(context).colorScheme.tertiary)).toList(),
-            ),
-            const SizedBox(height: 4),
-          ],
-          // Other roles (cast, etc.)
-          if (otherRoles.isNotEmpty) ...[
-            Wrap(
-              spacing: 6,
-              runSpacing: 6,
-              children: otherRoles.map((role) => _buildRoleChip(role, Theme.of(context).colorScheme.outline)).toList(),
-            ),
-          ],
+          // All roles in a single Wrap - will flow to multiple lines only when needed
+          Wrap(
+            spacing: 6,
+            runSpacing: 6,
+            children: allChips,
+          ),
         ],
       );
     }

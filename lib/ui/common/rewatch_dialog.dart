@@ -74,32 +74,36 @@ class _ReWatchDialogState extends State<ReWatchDialog> {
                             style: theme.textTheme.labelSmall,
                           ),
                           const SizedBox(height: 4),
-                          InkWell(
-                            onTap: () => _selectDate(context, index),
-                            child: Container(
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 12,
-                                vertical: 8,
-                              ),
-                              decoration: BoxDecoration(
-                                border: Border.all(
-                                  color: theme.colorScheme.outline,
+                          Material(
+                            color: Colors.transparent,
+                            child: InkWell(
+                              onTap: () => _selectDate(context, index),
+                              borderRadius: BorderRadius.circular(4),
+                              child: Container(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 12,
+                                  vertical: 8,
                                 ),
-                                borderRadius: BorderRadius.circular(4),
-                              ),
-                              child: Row(
-                                children: [
-                                  Icon(
-                                    Icons.calendar_today,
-                                    size: 16,
-                                    color: theme.colorScheme.onSurfaceVariant,
+                                decoration: BoxDecoration(
+                                  border: Border.all(
+                                    color: theme.colorScheme.outline,
                                   ),
-                                  const SizedBox(width: 8),
-                                  Text(
-                                    DateFormat('MMM d, yyyy').format(date),
-                                    style: theme.textTheme.bodyMedium,
-                                  ),
-                                ],
+                                  borderRadius: BorderRadius.circular(4),
+                                ),
+                                child: Row(
+                                  children: [
+                                    Icon(
+                                      Icons.calendar_today,
+                                      size: 16,
+                                      color: theme.colorScheme.onSurfaceVariant,
+                                    ),
+                                    const SizedBox(width: 8),
+                                    Text(
+                                      DateFormat('MMM d, yyyy').format(date),
+                                      style: theme.textTheme.bodyMedium,
+                                    ),
+                                  ],
+                                ),
                               ),
                             ),
                           ),
@@ -165,12 +169,6 @@ class _ReWatchDialogState extends State<ReWatchDialog> {
   }
 
   void _removeWatch(int index) {
-    if (_watchDates.length == 1) {
-      // If removing the only watch, return empty list to signal "unmark as watched"
-      Navigator.of(context).pop([]);
-      return;
-    }
-    
     setState(() {
       _watchDates.removeAt(index);
     });

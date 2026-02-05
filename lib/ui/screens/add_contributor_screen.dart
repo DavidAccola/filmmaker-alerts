@@ -380,7 +380,7 @@ class _AddContributorScreenState extends ConsumerState<AddContributorScreen> {
                             child: CachedNetworkImage(
                               imageUrl: 'https://image.tmdb.org/t/p/w200${contributor.profilePath}',
                               fit: BoxFit.contain,
-                              errorWidget: (_, __, ___) => const Icon(Icons.person),
+                              errorWidget: (ctx, url, err) => const Icon(Icons.person),
                             ),
                           )
                         : const Icon(Icons.person),

@@ -46,7 +46,6 @@ class MultiSelectChipGroup<T> extends StatelessWidget {
 
   /// Compact checkbox list for small screens
   Widget _buildCheckboxList(BuildContext context) {
-    final theme = Theme.of(context);
     final allItemsSelected = options.isNotEmpty && 
         options.every((element) => selectedValues.contains(element));
     

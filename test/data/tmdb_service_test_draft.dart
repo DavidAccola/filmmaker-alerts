@@ -11,7 +11,7 @@ void main() {
 
   setUp(() async {
     // Mock dotenv
-    dotenv.loadFromString('TMDB_API_KEY=testkey');
+    dotenv.env['TMDB_API_KEY'] = 'testkey';
 
     dio = Dio(BaseOptions(baseUrl: 'https://api.themoviedb.org/3'));
     dioAdapter = DioAdapter(dio: dio);

@@ -371,11 +371,11 @@ class _StreamingOptionsWidgetState extends State<StreamingOptionsWidget>
                     child: CachedNetworkImage(
                       imageUrl: option.logoPath!,
                       fit: BoxFit.cover,
-                      placeholder: (_, __) => Container(
+                      placeholder: (ctx, url) => Container(
                         color: Theme.of(context).colorScheme.surfaceContainerHighest,
                         child: const Icon(Icons.play_circle_outline, size: 18),
                       ),
-                      errorWidget: (_, __, ___) => Container(
+                      errorWidget: (ctx, url, err) => Container(
                         color: Theme.of(context).colorScheme.surfaceContainerHighest,
                         child: const Icon(Icons.play_circle_outline, size: 18),
                       ),

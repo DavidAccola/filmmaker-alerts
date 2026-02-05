@@ -97,7 +97,7 @@ class _ContributorDetailScreenState extends ConsumerState<ContributorDetailScree
               ],
             ),
             loading: () => const SizedBox.shrink(),
-            error: (_, __) => const SizedBox.shrink(),
+            error: (e, s) => const SizedBox.shrink(),
           ),
         ],
       ),
@@ -215,7 +215,7 @@ class _ContributorDetailScreenState extends ConsumerState<ContributorDetailScree
                             fit: widget.contributor.type == ContributorType.company
                                 ? BoxFit.contain
                                 : BoxFit.cover,
-                            errorWidget: (_, __, ___) => const Icon(Icons.person, size: 40),
+                            errorWidget: (ctx, url, err) => const Icon(Icons.person, size: 40),
                           ),
                         ),
                       )
@@ -873,7 +873,7 @@ class _ContributorDetailScreenState extends ConsumerState<ContributorDetailScree
             );
           },
           loading: () => const SizedBox.shrink(),
-          error: (_, __) => const SizedBox.shrink(),
+          error: (e, s) => const SizedBox.shrink(),
         );
       },
     );

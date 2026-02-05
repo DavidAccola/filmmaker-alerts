@@ -88,7 +88,7 @@ class _WatchlistButtonState extends ConsumerState<WatchlistButton> {
         height: widget.iconSize,
         child: const CircularProgressIndicator(strokeWidth: 2),
       ),
-      error: (_, __) => const SizedBox.shrink(),
+      error: (e, s) => const SizedBox.shrink(),
     );
   }
 
@@ -281,6 +281,7 @@ class _WatchlistButtonState extends ConsumerState<WatchlistButton> {
                 // Continue even if episode marking fails - the show is still added
               }
               
+              if (!mounted) return;
               showTvWatchlistSnackBar(
                 context,
                 workTitle: widget.workTitle,

@@ -265,25 +265,27 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
         title: const Text('Select Streaming Country'),
         content: SizedBox(
           width: double.maxFinite,
-          child: ListView.builder(
-            itemCount: countries.length,
-            itemBuilder: (context, index) {
-              final entry = countries.entries.elementAt(index);
-              final code = entry.key;
-              final name = entry.value;
-
-              return RadioListTile<String>(
-                title: Text(name),
-                value: code,
-                groupValue: currentCountry,
-                onChanged: (value) {
-                  Navigator.of(context).pop();
-                  if (value != null) {
-                    _updatePrefs(ref, prefs, streamingCountry: value);
-                  }
-                },
-              );
+          child: RadioGroup<String>(
+            groupValue: currentCountry,
+            onChanged: (value) {
+              Navigator.of(context).pop();
+              if (value != null) {
+                _updatePrefs(ref, prefs, streamingCountry: value);
+              }
             },
+            child: ListView.builder(
+              itemCount: countries.length,
+              itemBuilder: (context, index) {
+                final entry = countries.entries.elementAt(index);
+                final code = entry.key;
+                final name = entry.value;
+
+                return RadioListTile<String>(
+                  title: Text(name),
+                  value: code,
+                );
+              },
+            ),
           ),
         ),
         actions: [
@@ -692,42 +694,34 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
       context: context,
       builder: (context) => AlertDialog(
         title: const Text('Movie Details Preference'),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const Text('Choose which movie detail buttons to show:'),
-            const SizedBox(height: 16),
-            RadioListTile<String>(
-              title: const Text('TMDB only'),
-              subtitle: const Text('Show only TMDB buttons'),
-              value: 'tmdb',
-              groupValue: prefs.movieDetailsPreference ?? 'both',
-              onChanged: (value) {
-                Navigator.of(context).pop();
-                _updatePrefs(ref, prefs, movieDetailsPreference: value);
-              },
-            ),
-            RadioListTile<String>(
-              title: const Text('IMDb only'),
-              subtitle: const Text('Show IMDb buttons with TMDB fallback'),
-              value: 'imdb',
-              groupValue: prefs.movieDetailsPreference ?? 'both',
-              onChanged: (value) {
-                Navigator.of(context).pop();
-                _updatePrefs(ref, prefs, movieDetailsPreference: value);
-              },
-            ),
-            RadioListTile<String>(
-              title: const Text('Both TMDB and IMDb'),
-              subtitle: const Text('Show both buttons when available'),
-              value: 'both',
-              groupValue: prefs.movieDetailsPreference ?? 'both',
-              onChanged: (value) {
-                Navigator.of(context).pop();
-                _updatePrefs(ref, prefs, movieDetailsPreference: value);
-              },
-            ),
-          ],
+        content: RadioGroup<String>(
+          groupValue: prefs.movieDetailsPreference ?? 'both',
+          onChanged: (value) {
+            Navigator.of(context).pop();
+            _updatePrefs(ref, prefs, movieDetailsPreference: value);
+          },
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Text('Choose which movie detail buttons to show:'),
+              const SizedBox(height: 16),
+              RadioListTile<String>(
+                title: const Text('TMDB only'),
+                subtitle: const Text('Show only TMDB buttons'),
+                value: 'tmdb',
+              ),
+              RadioListTile<String>(
+                title: const Text('IMDb only'),
+                subtitle: const Text('Show IMDb buttons with TMDB fallback'),
+                value: 'imdb',
+              ),
+              RadioListTile<String>(
+                title: const Text('Both TMDB and IMDb'),
+                subtitle: const Text('Show both buttons when available'),
+                value: 'both',
+              ),
+            ],
+          ),
         ),
         actions: [
           TextButton(

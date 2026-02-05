@@ -178,7 +178,7 @@ class _MovieDetailScreenState extends ConsumerState<MovieDetailScreen> {
                                         child: CachedNetworkImage(
                                           imageUrl: 'https://image.tmdb.org/t/p/w300${movieDetail.posterPath}',
                                           fit: BoxFit.cover,
-                                          errorWidget: (_, __, ___) => const Icon(Icons.movie, size: 40),
+                                          errorWidget: (ctx, url, err) => const Icon(Icons.movie, size: 40),
                                         ),
                                       )
                                     : const Icon(Icons.movie, size: 40),
@@ -278,7 +278,7 @@ class _MovieDetailScreenState extends ConsumerState<MovieDetailScreen> {
                                       child: CachedNetworkImage(
                                         imageUrl: 'https://image.tmdb.org/t/p/w300${movieDetail.posterPath}',
                                         fit: BoxFit.cover,
-                                        errorWidget: (_, __, ___) => const Icon(Icons.movie, size: 40),
+                                        errorWidget: (ctx, url, err) => const Icon(Icons.movie, size: 40),
                                       ),
                                     )
                                   : const Icon(Icons.movie, size: 40),
@@ -699,7 +699,7 @@ class _MovieDetailScreenState extends ConsumerState<MovieDetailScreen> {
             );
           },
           loading: () => const SizedBox.shrink(),
-          error: (_, __) => const SizedBox.shrink(),
+          error: (e, s) => const SizedBox.shrink(),
         );
       },
     );

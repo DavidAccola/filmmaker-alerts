@@ -634,7 +634,7 @@ class _CreditExpansionSectionState extends State<CreditExpansionSection> {
 
 
 
-  Widget _buildWorkItem(Work work, {bool isEpisode = false, String? currentDepartmentFilter, List<Widget>? children, Work? watchlistTargetWork, Work? episodeToMark}) {
+  Widget _buildWorkItem(Work work, {bool isEpisode = false, String? currentDepartmentFilter, Work? watchlistTargetWork, Work? episodeToMark, List<Widget>? children}) {
     return _CreditWorkItem(
       work: work,
       isEpisode: isEpisode,
@@ -642,9 +642,9 @@ class _CreditExpansionSectionState extends State<CreditExpansionSection> {
       hideRatings: widget.hideRatings,
       onWorkTap: widget.onWorkTap,
       onAddToWatchlist: widget.onAddToWatchlist,
-      children: children,
       watchlistTargetWork: watchlistTargetWork,
       episodeToMark: episodeToMark,
+      children: children,
     );
   }
 
@@ -964,7 +964,7 @@ class _SingleEpisodeWatchlistButtonState extends ConsumerState<_SingleEpisodeWat
         height: 20,
         child: CircularProgressIndicator(strokeWidth: 2),
       ),
-      error: (_, __) => const SizedBox.shrink(),
+      error: (e, s) => const SizedBox.shrink(),
     );
   }
 

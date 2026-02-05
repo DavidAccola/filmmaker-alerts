@@ -113,7 +113,7 @@ class _ContributorHoverCardState extends ConsumerState<ContributorHoverCard> {
                               child: CachedNetworkImage(
                                 imageUrl: 'https://image.tmdb.org/t/p/w200${widget.profilePath}',
                                 fit: BoxFit.cover,
-                                errorWidget: (_, __, ___) => const Icon(Icons.person, size: 40),
+                              errorWidget: (ctx, url, err) => const Icon(Icons.person, size: 40),
                               ),
                             )
                           : const Center(child: Icon(Icons.person, size: 40)),

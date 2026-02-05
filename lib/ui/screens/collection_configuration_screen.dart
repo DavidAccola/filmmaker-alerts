@@ -525,7 +525,7 @@ class _CollectionConfigurationScreenState extends ConsumerState<CollectionConfig
                                             child: Image.network(
                                               'https://image.tmdb.org/t/p/w500$posterPath',
                                               fit: BoxFit.cover,
-                                              errorBuilder: (_, __, ___) => const Icon(Icons.movie),
+                                              errorBuilder: (ctx, err, stack) => const Icon(Icons.movie),
                                             ),
                                           )
                                         : const Icon(Icons.movie, size: 48),

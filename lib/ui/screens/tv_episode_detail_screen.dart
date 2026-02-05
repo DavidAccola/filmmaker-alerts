@@ -113,7 +113,7 @@ class _TvEpisodeDetailScreenState extends ConsumerState<TvEpisodeDetailScreen> {
                 );
               },
               loading: () => const Text('Episode Details'),
-              error: (_, __) => const Text('Episode Details'),
+              error: (e, s) => const Text('Episode Details'),
             );
           },
         ),
@@ -124,7 +124,7 @@ class _TvEpisodeDetailScreenState extends ConsumerState<TvEpisodeDetailScreen> {
               ? showDetailAsync.when(
                   data: (showDetail) => _buildContent(prefs, episodeDetail, showDetail),
                   loading: () => _buildContent(prefs, episodeDetail, null),
-                  error: (_, __) => _buildContent(prefs, episodeDetail, null),
+                  error: (e, s) => _buildContent(prefs, episodeDetail, null),
                 )
               : _buildErrorState('Episode details not available'),
           loading: () => const Center(child: CircularProgressIndicator()),
@@ -668,7 +668,7 @@ class _TvEpisodeDetailScreenState extends ConsumerState<TvEpisodeDetailScreen> {
             );
           },
           loading: () => const SizedBox.shrink(),
-          error: (_, __) => const SizedBox.shrink(),
+          error: (e, s) => const SizedBox.shrink(),
         );
       },
     );

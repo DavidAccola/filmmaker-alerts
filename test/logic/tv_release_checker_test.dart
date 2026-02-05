@@ -1,6 +1,5 @@
 import 'package:filmmaker_alerts/logic/release_checker.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:mockito/mockito.dart';
 import '../helpers/test_helpers.mocks.dart';
 
 // Helper method to test the person TV work notification logic
@@ -100,16 +99,16 @@ void main() {
         
         if (seasonNumber == 1 && episodeNumber == 1) {
           expect(result, equals('series_premiere'), 
-            reason: 'S${seasonNumber}E${episodeNumber} should be series_premiere');
+            reason: 'S${seasonNumber}E$episodeNumber should be series_premiere');
         } else if (episodeNumber == 1) {
           expect(result, equals('season_premiere'),
-            reason: 'S${seasonNumber}E${episodeNumber} should be season_premiere');
+            reason: 'S${seasonNumber}E$episodeNumber should be season_premiere');
         } else if (episodeNumber == totalEpisodes) {
           expect(result, equals('season_finale'),
-            reason: 'S${seasonNumber}E${episodeNumber} should be season_finale');
+            reason: 'S${seasonNumber}E$episodeNumber should be season_finale');
         } else {
           expect(result, equals('episode'),
-            reason: 'S${seasonNumber}E${episodeNumber} should be regular episode');
+            reason: 'S${seasonNumber}E$episodeNumber should be regular episode');
         }
       }
       
@@ -117,7 +116,7 @@ void main() {
       for (int episodeNum = 1; episodeNum <= 5; episodeNum++) {
         final result = releaseChecker._classifyEpisode(0, episodeNum, 5, {});
         expect(result, equals('special'),
-          reason: 'S0E${episodeNum} should be special');
+          reason: 'S0E$episodeNum should be special');
       }
     });
   });
@@ -338,7 +337,7 @@ void main() {
       // generated if and only if (global notifyPersonTvEpisodes is true AND per-person override 
       // is not false) OR (per-person override is explicitly true)
       
-      final testCases = [
+      final testCases = <List<Object?>>[
         // [globalEnabled, personOverride, expectedResult]
         [true, null, true],     // Global enabled, no override -> notify
         [false, null, false],   // Global disabled, no override -> don't notify

@@ -1806,7 +1806,7 @@ class ReleaseChecker {
       lastUpdated: now,
     );
 
-    await _contributorDetailRepository!.cacheContributorDetail(detail);
+    await _contributorDetailRepository.cacheContributorDetail(detail);
     debugPrint('[ReleaseChecker] Successfully cached contributor detail for ${contributor.name}');
   }
 

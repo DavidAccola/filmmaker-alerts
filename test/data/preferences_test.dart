@@ -140,14 +140,9 @@ void main() {
     });
 
     test('Property 7: Other preferences are preserved when creating new preferences with display preferences', () {
-      // Arrange
-      final originalPrefs = Preferences(
-        hidePopularityInDetails: false,
-        hideRatingsInDetails: false,
-        notifyTheatre: true,
-        notifyStreaming: false,
-        scheduleTime: '10:00',
-      );
+      // Arrange - original preferences for reference
+      // hidePopularityInDetails: false, hideRatingsInDetails: false,
+      // notifyTheatre: true, notifyStreaming: false, scheduleTime: '10:00'
 
       // Act
       final updatedPrefs = Preferences(

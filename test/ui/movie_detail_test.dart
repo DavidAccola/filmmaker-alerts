@@ -1,5 +1,4 @@
 import 'package:filmmaker_alerts/data/models/movie_detail.dart';
-import 'package:filmmaker_alerts/data/models/preferences.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {

@@ -30,7 +30,7 @@ class ContributorLogic {
   /// Clears all cached contributor details.
   Future<void> clearAllContributorDetails() async {
     if (_contributorDetailRepository != null) {
-      await _contributorDetailRepository!.clearAllCache();
+      await _contributorDetailRepository.clearAllCache();
       debugPrint('[ContributorLogic] All contributor details cleared from cache.');
     }
   }
@@ -963,7 +963,7 @@ class ContributorLogic {
       lastUpdated: now,
     );
 
-    await _contributorDetailRepository!.cacheContributorDetail(detail);
+    await _contributorDetailRepository.cacheContributorDetail(detail);
     debugPrint('[ContributorLogic] Successfully cached contributor detail for ${contributor.name}');
   }
 

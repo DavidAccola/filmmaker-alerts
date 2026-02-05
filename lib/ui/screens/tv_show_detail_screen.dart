@@ -811,7 +811,7 @@ class _TvShowDetailScreenState extends ConsumerState<TvShowDetailScreen> {
             );
           },
           loading: () => const SizedBox.shrink(),
-          error: (_, __) => const SizedBox.shrink(),
+          error: (e, s) => const SizedBox.shrink(),
         );
       },
     );

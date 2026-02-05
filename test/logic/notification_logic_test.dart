@@ -415,7 +415,6 @@ void main() {
         final seasonNum = testCase['seasonNum'] as int;
         final episodeNum = testCase['episodeNum'] as int;
         final episodeTitle = testCase['episodeTitle'] as String;
-        final hasAirDate = testCase['hasAirDate'] as bool;
         
         // Create a TV notification history entry
         final entry = NotificationHistoryEntry(
@@ -471,7 +470,7 @@ void main() {
           reason: 'TV entry must have at least one notification event');
         
         final hasDate = entry.notificationEvents.any((e) => 
-          e.releaseDate != null && e.releaseDate!.isNotEmpty
+          e.releaseDate.isNotEmpty
         );
         expect(hasDate, isTrue,
           reason: 'TV entry must have at least one date (air date or streaming date)');

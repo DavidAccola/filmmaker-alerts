@@ -363,17 +363,15 @@ void main() {
         ],
       );
 
-      // Track callback invocation
-      Contributor? tappedContributor;
-
-      // Build the widget
+      // Build the widget with callback (callback not invoked in this test, just verifying setup)
       final widget = MaterialApp(
         home: Scaffold(
           body: PointsOfInterestWidget(
             work: work,
             followedContributors: followedContributors,
             onContributorTapped: (contributor) {
-              tappedContributor = contributor;
+              // Callback would be invoked when contributor is tapped
+              expect(contributor, isNotNull);
             },
           ),
         ),

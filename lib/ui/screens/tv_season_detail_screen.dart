@@ -78,10 +78,10 @@ class _TvSeasonDetailScreenState extends ConsumerState<TvSeasonDetailScreen> {
                 data: (show) => prefsAsync.when(
                   data: (prefs) => _buildContent(context, season, show, prefs),
                   loading: () => _buildContent(context, season, show, null),
-                  error: (_, __) => _buildContent(context, season, show, null),
+                  error: (e, s) => _buildContent(context, season, show, null),
                 ),
                 loading: () => _buildContent(context, season, null, null),
-                error: (_, __) => _buildContent(context, season, null, null),
+                  error: (e, s) => _buildContent(context, season, null, null),
               )
             : const Center(child: Text('Season details not found')),
         loading: () => const Center(child: CircularProgressIndicator()),
@@ -650,7 +650,7 @@ class _TvSeasonDetailScreenState extends ConsumerState<TvSeasonDetailScreen> {
             );
           },
           loading: () => const SizedBox.shrink(),
-          error: (_, __) => const SizedBox.shrink(),
+          error: (e, s) => const SizedBox.shrink(),
         );
       },
     );

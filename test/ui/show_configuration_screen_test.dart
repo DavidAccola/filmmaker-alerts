@@ -66,10 +66,10 @@ void main() {
       name: testShowTitle,
       synopsis: 'Test synopsis',
       seasons: seasonNumbers
-          .map((num) => TvSeason(
-                tmdbId: num * 100,
-                name: 'Season $num',
-                seasonNumber: num,
+          .map((seasonNum) => TvSeason(
+                tmdbId: seasonNum * 100,
+                name: 'Season $seasonNum',
+                seasonNumber: seasonNum,
                 episodeCount: episodesPerSeason,
               ))
           .toList(),
@@ -671,7 +671,6 @@ void main() {
       // Verify episode is marked with "In Progress" symbol (▶)
       // The status selector also shows ▶, so we check for 2 occurrences
       // One in the selector segment, one in the episode row
-      final inProgressSymbols = find.text('▶');
       // The segment shows "▶ In Progress" so we need to check differently
       // The episode row shows just "▶"
       expect(find.text('▶').evaluate().isNotEmpty, true,

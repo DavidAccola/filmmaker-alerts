@@ -1,6 +1,5 @@
 import 'package:filmmaker_alerts/data/models/contributor.dart';
 import 'package:filmmaker_alerts/data/models/movie_cache_entry.dart';
-import 'package:filmmaker_alerts/data/models/notification_history.dart';
 import 'package:filmmaker_alerts/data/models/preferences.dart';
 import 'package:filmmaker_alerts/logic/background_service.dart';
 import 'package:flutter_test/flutter_test.dart';

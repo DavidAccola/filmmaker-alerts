@@ -2,16 +2,12 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:collection/collection.dart';
 import '../../data/models/contributor.dart';
-import '../../data/models/contributor_detail.dart';
 import '../../data/models/preferences.dart';
-import '../../data/models/watchlist_entry.dart';
 import '../../providers/providers.dart';
 import '../common/contributor_card.dart';
 import '../common/department_selection_dialog.dart';
-import '../common/release_preferences_dialog.dart';
 import '../common/snackbar_utils.dart';
 import '../common/tmdb_attribution.dart';
-import 'add_contributor_screen.dart';
 import 'contributor_detail_screen.dart';
 import 'movie_detail_screen.dart';
 import 'tv_show_detail_screen.dart';
@@ -103,8 +99,8 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with TickerProviderStat
     final prefsAsync = ref.watch(preferencesProvider);
     final homeTab = ref.watch(homeTabProvider);
     final scrollTarget = ref.watch(watchlistScrollTargetProvider);
-    final fabRaised = ref.watch(fabRaisedProvider);
-    final fabBottomPadding = fabRaised ? 70.0 : 0.0;
+    // Watch fabRaised to trigger rebuilds when snackbar visibility changes
+    ref.watch(fabRaisedProvider);
 
     // Initialize TabController with current provider value (only once)
     _initTabController(homeTab);
@@ -197,134 +193,6 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with TickerProviderStat
     );
   }
 
-  void _scrollToNewContributor(Contributor newContributor) {
-    // Wait for the UI to rebuild with the new contributor
-    WidgetsBinding.instance.addPostFrameCallback((_) async {
-      if (!_scrollController.hasClients) return;
-      
-      // Give a bit more time for the UI to fully render
-      await Future.delayed(const Duration(milliseconds: 100));
-      
-      // Try to find the widget with the new contributor's key and scroll to it
-      final context = _newContributorKey.currentContext;
-      if (context != null) {
-        try {
-          await Scrollable.ensureVisible(
-            context,
-            duration: const Duration(milliseconds: 800),
-            curve: Curves.easeInOut,
-            alignment: 0.1, // Show the item near the top of the screen
-          );
-        } catch (e) {
-          // Fallback to approximate scrolling if ensureVisible fails
-          _fallbackScrollToContributor(newContributor);
-        }
-      } else {
-        // Fallback if we can't find the context
-        _fallbackScrollToContributor(newContributor);
-      }
-    });
-  }
-
-  void _fallbackScrollToContributor(Contributor newContributor) {
-    // Fallback method using improved calculations
-    WidgetsBinding.instance.addPostFrameCallback((_) async {
-      if (!_scrollController.hasClients) return;
-      
-      final contributorsAsync = ref.read(contributorsProvider);
-      final prefsAsync = ref.read(preferencesProvider);
-      
-      await contributorsAsync.when(
-        data: (contributors) async {
-          final prefs = prefsAsync.value ?? Preferences();
-          final sortedList = _sortContributors(contributors, prefs.homeSortOrder ?? 'dateAdded');
-          final isGrouped = prefs.groupByType ?? true;
-          
-          if (isGrouped) {
-            // Find which group the new contributor belongs to
-            final groups = <ContributorType, List<Contributor>>{};
-            for (var c in sortedList) {
-              groups.putIfAbsent(c.type, () => []).add(c);
-            }
-            
-            final displayTypes = [
-              ContributorType.person,
-              ContributorType.movie,
-              ContributorType.collection,
-              ContributorType.tvShow,
-              ContributorType.company,
-            ].where((t) => groups.containsKey(t)).toList();
-            
-            // Find the group index
-            final groupIndex = displayTypes.indexOf(newContributor.type);
-            if (groupIndex >= 0) {
-              // Calculate approximate scroll offset to the group
-              double scrollOffset = 0;
-              
-              // Add offset for previous groups (more conservative estimates)
-              for (int i = 0; i < groupIndex; i++) {
-                final prevType = displayTypes[i];
-                final prevGroupSize = groups[prevType]?.length ?? 0;
-                
-                // Group header: approximately 60px
-                scrollOffset += 60;
-                
-                // Items in the group: use more conservative height estimates
-                final useGrid = MediaQuery.of(context).size.width >= 600 && (prefs.useGridView ?? true);
-                
-                if (useGrid) {
-                  // Grid: estimate 2 items per row, ~160px per row
-                  final rows = (prevGroupSize / 2).ceil();
-                  scrollOffset += rows * 170; // 160px + 10px spacing
-                } else {
-                  // List: estimate 140px per item (more conservative)
-                  scrollOffset += prevGroupSize * 140;
-                }
-              }
-              
-              // Ensure we don't scroll past the end and add some buffer
-              final maxScroll = _scrollController.position.maxScrollExtent;
-              scrollOffset = (scrollOffset - 100).clamp(0.0, maxScroll); // 100px buffer to show above
-              
-              await _scrollController.animateTo(
-                scrollOffset,
-                duration: const Duration(milliseconds: 800),
-                curve: Curves.easeInOut,
-              );
-            }
-          } else {
-            // Find the position of the new contributor in the flat list
-            final index = sortedList.indexWhere((c) => c.tmdbId == newContributor.tmdbId);
-            if (index >= 0) {
-              final useGrid = MediaQuery.of(context).size.width >= 600 && (prefs.useGridView ?? true);
-              double scrollOffset;
-              
-              if (useGrid) {
-                // Grid: estimate 2 items per row, ~160px per row
-                final row = (index / 2).floor();
-                scrollOffset = row * 170; // 160px + 10px spacing
-              } else {
-                // List: estimate 140px per item
-                scrollOffset = index * 140;
-              }
-              
-              // Ensure we don't scroll past the end and add buffer
-              final maxScroll = _scrollController.position.maxScrollExtent;
-              scrollOffset = (scrollOffset - 100).clamp(0.0, maxScroll); // 100px buffer
-              
-              await _scrollController.animateTo(
-                scrollOffset,
-                duration: const Duration(milliseconds: 800),
-                curve: Curves.easeInOut,
-              );
-            }
-          }
-        },
-        loading: () {},
-        error: (_, __) {},
-      );
-    });
-  }
   
   Widget _buildContributorsList(List<Contributor> contributors, Preferences prefs, AsyncValue<Preferences> prefsAsync) {
     if (contributors.isEmpty) {
@@ -415,7 +283,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with TickerProviderStat
                 },
               ),
               loading: () => const SizedBox.shrink(),
-              error: (_, __) => const SizedBox.shrink(),
+              error: (e, s) => const SizedBox.shrink(),
             ),
           ),
         ),

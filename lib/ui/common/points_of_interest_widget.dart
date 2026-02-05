@@ -137,7 +137,7 @@ class PointsOfInterestWidget extends StatelessWidget {
                         child: Image.network(
                           'https://image.tmdb.org/t/p/w200${contributor.profilePath}',
                           fit: BoxFit.cover,
-                          errorBuilder: (_, __, ___) =>
+                          errorBuilder: (ctx, err, stack) =>
                               const Icon(Icons.person, size: 20),
                         ),
                       )

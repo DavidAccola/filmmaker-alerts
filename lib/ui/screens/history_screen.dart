@@ -253,11 +253,11 @@ class _HistoryScreenState extends ConsumerState<HistoryScreen> {
                                               imageUrl: 'https://image.tmdb.org/t/p/w200${item.posterPath}',
                                               fit: BoxFit.fitWidth,
                                               width: 60,
-                                              placeholder: (_, __) => const SizedBox(
+                                              placeholder: (ctx, url) => const SizedBox(
                                                 width: 60,
                                                 height: 90,
                                               ),
-                                              errorWidget: (_, __, ___) => const SizedBox(
+                                              errorWidget: (ctx, url, err) => const SizedBox(
                                                 width: 60,
                                                 height: 90,
                                                 child: Icon(Icons.movie, color: Colors.grey),

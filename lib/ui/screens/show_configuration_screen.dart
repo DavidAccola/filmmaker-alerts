@@ -1,10 +1,16 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:cached_network_image/cached_network_image.dart';
 import '../../data/models/episode_status_entry.dart';
 import '../../data/models/season_status_entry.dart';
 import '../../data/models/status_record.dart';
+import '../../data/models/tv_detail.dart';
 import '../../providers/providers.dart';
 import '../common/snackbar_utils.dart';
+import '../common/streaming_options_widget.dart';
+import '../common/expand_poster_button.dart';
+import '../common/adaptive_tooltip_text.dart';
+import 'tv_show_detail_screen.dart';
 
 class ShowConfigurationScreen extends ConsumerStatefulWidget {
   final int showId;
@@ -39,6 +45,7 @@ class _ShowConfigurationScreenState
   };
 
   bool _isDirty = false;
+  bool _isPosterHovered = false;
   
   // Track if we've already checked for auto-expand (to avoid re-expanding after user collapses)
   bool _hasCheckedAutoExpand = false;
@@ -394,6 +401,8 @@ class _ShowConfigurationScreenState
         ),
         body: Column(
           children: [
+            // Show metadata header (like TV detail screen)
+            _buildMetadataHeader(showDetail),
             // Show-level "Mark All" row
             _buildMarkAllRow(showCheckboxState, episodesBySeasonMap),
             // Expandable list content
@@ -411,6 +420,268 @@ class _ShowConfigurationScreenState
             : null,
       ),
     );
+  }
+
+  /// Builds the metadata header with poster, title, year, status, and streaming options.
+  Widget _buildMetadataHeader(TvShowDetail showDetail) {
+    final theme = Theme.of(context);
+    final prefsAsync = ref.watch(preferencesProvider);
+    final prefs = prefsAsync.whenOrNull(data: (p) => p);
+    
+    return Container(
+      padding: const EdgeInsets.all(16.0),
+      decoration: BoxDecoration(
+        color: theme.colorScheme.surfaceContainerHighest,
+        border: Border(
+          bottom: BorderSide(
+            color: theme.colorScheme.outline.withValues(alpha: 0.2),
+          ),
+        ),
+      ),
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          final isWideScreen = constraints.maxWidth > 600;
+          
+          if (isWideScreen) {
+            // Wide screen: poster + info on left, streaming on right
+            return Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                // Left side: Poster and basic info
+                Expanded(
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      _buildPoster(showDetail),
+                      const SizedBox(width: 16),
+                      Expanded(child: _buildShowInfo(showDetail)),
+                    ],
+                  ),
+                ),
+                const SizedBox(width: 24),
+                // Right side: Streaming options
+                SizedBox(
+                  width: 300,
+                  child: StreamingOptionsWidget(
+                    streamingOptions: showDetail.streamingOptions,
+                    tmdbId: showDetail.tmdbId,
+                    isTV: true,
+                    isCompact: true,
+                    locale: prefs?.streamingCountry ?? 'US',
+                    title: showDetail.name,
+                    releaseDate: showDetail.firstAirDate,
+                  ),
+                ),
+              ],
+            );
+          } else {
+            // Narrow screen: stacked layout with streaming below
+            return Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    _buildPoster(showDetail),
+                    const SizedBox(width: 16),
+                    Expanded(child: _buildShowInfo(showDetail)),
+                  ],
+                ),
+                const SizedBox(height: 12),
+                // Streaming options below on narrow screens
+                StreamingOptionsWidget(
+                  streamingOptions: showDetail.streamingOptions,
+                  tmdbId: showDetail.tmdbId,
+                  isTV: true,
+                  isCompact: true,
+                  locale: prefs?.streamingCountry ?? 'US',
+                  title: showDetail.name,
+                  releaseDate: showDetail.firstAirDate,
+                ),
+              ],
+            );
+          }
+        },
+      ),
+    );
+  }
+
+  void _navigateToShowDetails(TvShowDetail showDetail) {
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (context) => TvShowDetailScreen(
+          showId: showDetail.tmdbId,
+          showTitle: showDetail.name,
+        ),
+      ),
+    );
+  }
+
+  Widget _buildPoster(TvShowDetail showDetail) {
+    final theme = Theme.of(context);
+    
+    return MouseRegion(
+      cursor: SystemMouseCursors.click,
+      onEnter: (_) => setState(() => _isPosterHovered = true),
+      onExit: (_) => setState(() => _isPosterHovered = false),
+      child: GestureDetector(
+        onTap: () => _navigateToShowDetails(showDetail),
+        child: SizedBox(
+          width: 100,
+          height: 150,
+          child: Stack(
+            children: [
+              Container(
+                width: 100,
+                height: 150,
+                decoration: BoxDecoration(
+                  color: theme.colorScheme.surfaceContainerHighest,
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: ClipRRect(
+                  borderRadius: BorderRadius.circular(8),
+                  child: showDetail.posterPath != null
+                      ? CachedNetworkImage(
+                          imageUrl: 'https://image.tmdb.org/t/p/w300${showDetail.posterPath}',
+                          fit: BoxFit.cover,
+                          placeholder: (context, url) => const Icon(Icons.tv, size: 40),
+                          errorWidget: (context, url, error) => const Icon(Icons.tv, size: 40),
+                        )
+                      : const Icon(Icons.tv, size: 40),
+                ),
+              ),
+              // Expand poster button
+              Positioned(
+                top: 4,
+                left: 4,
+                child: ExpandPosterButton(
+                  posterPath: showDetail.posterPath,
+                  title: showDetail.name,
+                  isCardHovered: _isPosterHovered,
+                  iconSize: 18,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildShowInfo(TvShowDetail showDetail) {
+    final theme = Theme.of(context);
+    final prefsAsync = ref.watch(preferencesProvider);
+    final prefs = prefsAsync.whenOrNull(data: (p) => p);
+    
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        // Title - clickable to navigate to show details
+        GestureDetector(
+          onTap: () => _navigateToShowDetails(showDetail),
+          child: MouseRegion(
+            cursor: SystemMouseCursors.click,
+            child: AdaptiveTooltipText(
+              showDetail.name,
+              style: theme.textTheme.headlineSmall?.copyWith(
+                fontWeight: FontWeight.bold,
+              ),
+              maxLines: 2,
+            ),
+          ),
+        ),
+        const SizedBox(height: 8),
+        
+        // Years and Status
+        Row(
+          children: [
+            Text(
+              _formatYearRange(showDetail),
+              style: theme.textTheme.bodySmall?.copyWith(
+                color: theme.colorScheme.onSurfaceVariant,
+              ),
+            ),
+            if (showDetail.status != null) ...[
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 4.0),
+                child: Text('•', style: TextStyle(color: theme.colorScheme.onSurfaceVariant)),
+              ),
+              Text(
+                showDetail.status!,
+                style: theme.textTheme.bodySmall?.copyWith(
+                  color: theme.colorScheme.onSurfaceVariant,
+                ),
+              ),
+            ],
+          ],
+        ),
+        const SizedBox(height: 4),
+        
+        // Seasons and Episodes count - clickable to navigate to show details
+        if (showDetail.numberOfSeasons != null)
+          GestureDetector(
+            onTap: () => _navigateToShowDetails(showDetail),
+            child: MouseRegion(
+              cursor: SystemMouseCursors.click,
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    '${showDetail.numberOfSeasons} Season${showDetail.numberOfSeasons == 1 ? '' : 's'}',
+                    style: theme.textTheme.bodySmall?.copyWith(
+                      color: theme.colorScheme.onSurfaceVariant,
+                    ),
+                  ),
+                  if (showDetail.numberOfEpisodes != null) ...[
+                    Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 4.0),
+                      child: Text('•', style: TextStyle(color: theme.colorScheme.onSurfaceVariant)),
+                    ),
+                    Text(
+                      '${showDetail.numberOfEpisodes} Episodes',
+                      style: theme.textTheme.bodySmall?.copyWith(
+                        color: theme.colorScheme.onSurfaceVariant,
+                      ),
+                    ),
+                  ],
+                ],
+              ),
+            ),
+          ),
+        
+        const SizedBox(height: 8),
+        
+        // Rating
+        if (showDetail.tmdbRating != null && 
+            (showDetail.voteCount ?? 0) > 0 && 
+            !(prefs?.hideRatingsInDetails ?? false))
+          Row(
+            children: [
+              const Icon(Icons.star, color: Colors.amber, size: 14),
+              const SizedBox(width: 4),
+              Text(
+                showDetail.tmdbRating!.toStringAsFixed(1),
+                style: theme.textTheme.bodySmall?.copyWith(
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ],
+          ),
+      ],
+    );
+  }
+
+  String _formatYearRange(TvShowDetail showDetail) {
+    if (showDetail.firstAirDate == null) return 'Unknown';
+    final startYear = showDetail.firstAirDate!.year.toString();
+    
+    if (showDetail.status?.toLowerCase() == 'ended' || 
+        showDetail.status?.toLowerCase() == 'canceled') {
+      final endYear = showDetail.lastAirDate?.year.toString() ?? '?';
+      return '$startYear–$endYear';
+    }
+    return '$startYear–Present';
   }
 
   /// Builds the show-level "Mark All" row with status buttons.
@@ -466,6 +737,12 @@ class _ShowConfigurationScreenState
       }
     }
     
+    // Helper to generate tooltip based on whether all episodes have the status
+    String tooltipFor(WatchStatus status, String statusName) {
+      final allHaveStatus = statusCounts[status] == totalEpisodes;
+      return allHaveStatus ? 'Unmark all as $statusName' : 'Mark all as $statusName';
+    }
+    
     // Use fixedWidth: 28 to align with episode buttons (20px icon + 8px padding = 28px per button)
     return SizedBox(
       width: 112, // 4 buttons * 28px = 112px (same as episode row)
@@ -477,7 +754,7 @@ class _ShowConfigurationScreenState
             activeIcon: Icons.bookmark,
             isActive: statusCounts[WatchStatus.wantToWatch] == totalEpisodes,
             isRowHovered: isRowHovered,
-            tooltip: 'Mark all as Want to watch',
+            tooltip: tooltipFor(WatchStatus.wantToWatch, 'Want to watch'),
             size: 26,
             fixedWidth: 28,
             onTap: () => _handleMarkAllStatus(WatchStatus.wantToWatch, episodesBySeasonMap),
@@ -487,7 +764,7 @@ class _ShowConfigurationScreenState
             activeIcon: Icons.play_circle,
             isActive: statusCounts[WatchStatus.inProgress] == totalEpisodes,
             isRowHovered: isRowHovered,
-            tooltip: 'Mark all as In progress',
+            tooltip: tooltipFor(WatchStatus.inProgress, 'In progress'),
             size: 26,
             fixedWidth: 28,
             onTap: () => _handleMarkAllStatus(WatchStatus.inProgress, episodesBySeasonMap),
@@ -497,7 +774,7 @@ class _ShowConfigurationScreenState
             activeIcon: Icons.check_circle,
             isActive: statusCounts[WatchStatus.watched] == totalEpisodes,
             isRowHovered: isRowHovered,
-            tooltip: 'Mark all as Watched',
+            tooltip: tooltipFor(WatchStatus.watched, 'Watched'),
             size: 26,
             fixedWidth: 28,
             onTap: () => _handleMarkAllStatus(WatchStatus.watched, episodesBySeasonMap),
@@ -507,7 +784,7 @@ class _ShowConfigurationScreenState
             activeIcon: Icons.cancel,
             isActive: statusCounts[WatchStatus.dnf] == totalEpisodes,
             isRowHovered: isRowHovered,
-            tooltip: 'Mark all as Did not finish',
+            tooltip: tooltipFor(WatchStatus.dnf, 'Did not finish'),
             size: 26,
             fixedWidth: 28,
             onTap: () => _handleMarkAllStatus(WatchStatus.dnf, episodesBySeasonMap),
@@ -723,6 +1000,12 @@ class _ShowConfigurationScreenState
     final statusCounts = _getSeasonStatusCounts(seasonNumber, episodes);
     final totalEpisodes = episodes.length;
     
+    // Helper to generate tooltip based on whether all episodes have the status
+    String tooltipFor(WatchStatus status, String statusName) {
+      final allHaveStatus = statusCounts[status] == totalEpisodes;
+      return allHaveStatus ? 'Unmark season as $statusName' : 'Mark season as $statusName';
+    }
+    
     // Use fixedWidth: 28 to align with episode buttons (20px icon + 8px padding = 28px per button)
     return SizedBox(
       width: 112, // 4 buttons * 28px = 112px (same as episode row)
@@ -734,7 +1017,7 @@ class _ShowConfigurationScreenState
             activeIcon: Icons.bookmark,
             isActive: statusCounts[WatchStatus.wantToWatch] == totalEpisodes,
             isRowHovered: isRowHovered,
-            tooltip: 'Mark season as Want to watch',
+            tooltip: tooltipFor(WatchStatus.wantToWatch, 'Want to watch'),
             size: 26,
             fixedWidth: 28,
             onTap: () => _handleSeasonStatusTap(seasonNumber, episodes, WatchStatus.wantToWatch),
@@ -744,7 +1027,7 @@ class _ShowConfigurationScreenState
             activeIcon: Icons.play_circle,
             isActive: statusCounts[WatchStatus.inProgress] == totalEpisodes,
             isRowHovered: isRowHovered,
-            tooltip: 'Mark season as In progress',
+            tooltip: tooltipFor(WatchStatus.inProgress, 'In progress'),
             size: 26,
             fixedWidth: 28,
             onTap: () => _handleSeasonStatusTap(seasonNumber, episodes, WatchStatus.inProgress),
@@ -754,7 +1037,7 @@ class _ShowConfigurationScreenState
             activeIcon: Icons.check_circle,
             isActive: statusCounts[WatchStatus.watched] == totalEpisodes,
             isRowHovered: isRowHovered,
-            tooltip: 'Mark season as Watched',
+            tooltip: tooltipFor(WatchStatus.watched, 'Watched'),
             size: 26,
             fixedWidth: 28,
             onTap: () => _handleSeasonStatusTap(seasonNumber, episodes, WatchStatus.watched),
@@ -764,7 +1047,7 @@ class _ShowConfigurationScreenState
             activeIcon: Icons.cancel,
             isActive: statusCounts[WatchStatus.dnf] == totalEpisodes,
             isRowHovered: isRowHovered,
-            tooltip: 'Mark season as Did not finish',
+            tooltip: tooltipFor(WatchStatus.dnf, 'Did not finish'),
             size: 26,
             fixedWidth: 28,
             onTap: () => _handleSeasonStatusTap(seasonNumber, episodes, WatchStatus.dnf),

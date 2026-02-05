@@ -130,6 +130,21 @@ class _WatchlistButtonState extends ConsumerState<WatchlistButton> {
       final watchlistLogic = ref.read(watchlistLogicProvider);
 
       if (isInWatchlist) {
+        // Check if user has changed statuses from defaults
+        final hasChangedStatuses = _hasNonDefaultStatuses(watchlistLogic);
+        
+        if (hasChangedStatuses) {
+          // Show confirmation dialog
+          final result = await _showRemoveConfirmationDialog();
+          
+          if (result == null || result == 'cancel') {
+            // User cancelled - do nothing
+            setState(() => _isLoading = false);
+            return;
+          }
+          // result == 'delete' - continue with removal below
+        }
+        
         // Remove from watchlist
         await watchlistLogic.removeWorkFromWatchlist(
           widget.tmdbId,
@@ -367,5 +382,59 @@ class _WatchlistButtonState extends ConsumerState<WatchlistButton> {
         );
       }
     }
+  }
+
+  /// Checks if the work has non-default statuses (i.e., user has made changes).
+  /// Default is considered: no statuses, or only "Want to Watch" status.
+  /// For TV shows, also checks if any episodes have statuses.
+  bool _hasNonDefaultStatuses(dynamic watchlistLogic) {
+    final entry = watchlistLogic.getWork(widget.tmdbId, widget.workType);
+    if (entry == null) return false;
+    
+    // Check work-level statuses
+    final statuses = entry.statusRecords as List<StatusRecord>;
+    
+    // If there are statuses other than "Want to Watch", it's non-default
+    final hasNonWantToWatchStatus = statuses.any((r) => 
+      r.status != WatchStatus.wantToWatch
+    );
+    if (hasNonWantToWatchStatus) return true;
+    
+    // For TV shows, check if any episodes have statuses
+    if (widget.workType == WorkType.tvShow) {
+      final episodeRepo = ref.read(episodeStatusRepositoryProvider);
+      final episodes = episodeRepo.getEpisodesByShow(widget.tmdbId);
+      
+      // If any episode has any status, it's non-default
+      if (episodes.any((e) => e.statusRecords.isNotEmpty)) {
+        return true;
+      }
+    }
+    
+    return false;
+  }
+
+  /// Shows a confirmation dialog when removing a work with non-default statuses.
+  Future<String?> _showRemoveConfirmationDialog() async {
+    return showDialog<String>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Remove from Watchlist?'),
+        content: Text(
+          'You have tracking data for "${widget.workTitle}". '
+          'Are you sure you want to remove it from your watchlist?'
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop('cancel'),
+            child: const Text('CANCEL'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(context).pop('delete'),
+            child: const Text('DELETE FROM WATCHLIST'),
+          ),
+        ],
+      ),
+    );
   }
 }

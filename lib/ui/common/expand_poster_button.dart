@@ -203,92 +203,106 @@ class _FullscreenPosterDialogState extends State<FullscreenPosterDialog> {
   Widget build(BuildContext context) {
     // Use original resolution for fullscreen view
     final highResUrl = 'https://image.tmdb.org/t/p/original${widget.posterPath}';
+    // SystemMouseCursors.zoomIn/zoomOut don't work on Windows (Flutter issue #99323)
+    // Use different cursors to indicate zoom state:
+    // - When not zoomed: use 'click' to indicate clickable
+    // - When zoomed: use 'move' to indicate you can pan, or click to zoom out
+    final cursor = _isZoomed ? SystemMouseCursors.move : SystemMouseCursors.click;
     
-    return KeyboardListener(
-      focusNode: FocusNode()..requestFocus(),
-      onKeyEvent: (event) {
+    return Focus(
+      autofocus: true,
+      onKeyEvent: (node, event) {
         if (event is KeyDownEvent && event.logicalKey == LogicalKeyboardKey.escape) {
           Navigator.of(context).pop();
+          return KeyEventResult.handled; // Consume the event to prevent propagation
         }
+        return KeyEventResult.ignored;
       },
-      child: GestureDetector(
-        onTap: () => Navigator.of(context).pop(),
-        child: Dialog(
-          backgroundColor: Colors.transparent,
-          insetPadding: const EdgeInsets.all(16),
-          child: Stack(
-            alignment: Alignment.center,
-            children: [
-              // Poster image with zoom/pan support
-              MouseRegion(
-                cursor: _isZoomed ? SystemMouseCursors.zoomOut : SystemMouseCursors.zoomIn,
-                child: GestureDetector(
-                  onTapDown: _toggleZoom,
-                  child: ConstrainedBox(
-                    constraints: BoxConstraints(
-                      maxWidth: MediaQuery.of(context).size.width - 32,
-                      maxHeight: MediaQuery.of(context).size.height - 32,
-                    ),
-                    child: InteractiveViewer(
-                      transformationController: _transformationController,
-                      minScale: 1.0,
-                      maxScale: 3.5,
-                      onInteractionEnd: (details) {
-                        // Update zoom state based on current scale
-                        final scale = _transformationController.value.getMaxScaleOnAxis();
-                        setState(() => _isZoomed = scale > 1.1);
-                      },
-                      child: CachedNetworkImage(
-                        imageUrl: highResUrl,
-                        fit: BoxFit.contain,
-                        placeholder: (context, url) => Container(
-                          width: 300,
-                          height: 450,
-                          color: Colors.grey[900],
-                          child: const Center(
-                            child: CircularProgressIndicator(color: Colors.white),
-                          ),
+      child: Dialog(
+        backgroundColor: Colors.transparent,
+        insetPadding: const EdgeInsets.all(16),
+        child: Stack(
+          alignment: Alignment.center,
+          children: [
+            // Barrier to close dialog when clicking outside the poster
+            Positioned.fill(
+              child: GestureDetector(
+                onTap: () => Navigator.of(context).pop(),
+                child: Container(color: Colors.transparent),
+              ),
+            ),
+            
+            // Poster image with zoom/pan support
+            MouseRegion(
+              cursor: cursor,
+              child: GestureDetector(
+                onTapDown: _toggleZoom,
+                child: ConstrainedBox(
+                  constraints: BoxConstraints(
+                    maxWidth: MediaQuery.of(context).size.width - 32,
+                    maxHeight: MediaQuery.of(context).size.height - 32,
+                  ),
+                  child: InteractiveViewer(
+                    transformationController: _transformationController,
+                    minScale: 1.0,
+                    maxScale: 3.5,
+                    onInteractionEnd: (details) {
+                      // Update zoom state based on current scale
+                      final scale = _transformationController.value.getMaxScaleOnAxis();
+                      setState(() => _isZoomed = scale > 1.1);
+                    },
+                    child: CachedNetworkImage(
+                      imageUrl: highResUrl,
+                      fit: BoxFit.contain,
+                      placeholder: (context, url) => Container(
+                        width: 300,
+                        height: 450,
+                        color: Colors.grey[900],
+                        child: const Center(
+                          child: CircularProgressIndicator(color: Colors.white),
                         ),
-                        errorWidget: (context, url, error) => Container(
-                          width: 300,
-                          height: 450,
-                          color: Colors.grey[900],
-                          child: const Center(
-                            child: Icon(Icons.error, color: Colors.white, size: 48),
-                          ),
+                      ),
+                      errorWidget: (context, url, error) => Container(
+                        width: 300,
+                        height: 450,
+                        color: Colors.grey[900],
+                        child: const Center(
+                          child: Icon(Icons.error, color: Colors.white, size: 48),
                         ),
                       ),
                     ),
                   ),
                 ),
               ),
-              
-              // Close button in top-right corner
-              Positioned(
-                top: 0,
-                right: 0,
-                child: IconButton(
-                  onPressed: () => Navigator.of(context).pop(),
-                  icon: Container(
-                    padding: const EdgeInsets.all(4),
-                    decoration: BoxDecoration(
-                      color: Colors.black.withValues(alpha: 0.6),
-                      shape: BoxShape.circle,
-                    ),
-                    child: const Icon(
-                      Icons.close,
-                      color: Colors.white,
-                      size: 24,
-                    ),
+            ),
+            
+            // Close button in top-right corner
+            Positioned(
+              top: 0,
+              right: 0,
+              child: IconButton(
+                onPressed: () => Navigator.of(context).pop(),
+                icon: Container(
+                  padding: const EdgeInsets.all(4),
+                  decoration: BoxDecoration(
+                    color: Colors.black.withValues(alpha: 0.6),
+                    shape: BoxShape.circle,
+                  ),
+                  child: const Icon(
+                    Icons.close,
+                    color: Colors.white,
+                    size: 24,
                   ),
                 ),
               ),
-              
-              // Title at bottom
-              Positioned(
-                bottom: 0,
-                left: 0,
-                right: 0,
+            ),
+            
+            // Title at bottom
+            Positioned(
+              bottom: 0,
+              left: 0,
+              right: 0,
+              child: IgnorePointer(
                 child: Container(
                   padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
                   decoration: BoxDecoration(
@@ -312,8 +326,8 @@ class _FullscreenPosterDialogState extends State<FullscreenPosterDialog> {
                   ),
                 ),
               ),
-            ],
-          ),
+            ),
+          ],
         ),
       ),
     );

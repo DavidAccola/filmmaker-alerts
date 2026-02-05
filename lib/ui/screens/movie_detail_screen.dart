@@ -11,6 +11,7 @@ import '../common/external_navigation_utils.dart';
 import '../common/snackbar_utils.dart';
 import '../common/watchlist_button.dart';
 import '../common/expand_poster_button.dart';
+import '../common/notification_prefs_chips.dart';
 import 'contributor_detail_screen.dart';
 import '../../data/models/contributor.dart';
 import '../../logic/work_sorting_logic.dart';
@@ -406,6 +407,13 @@ class _MovieDetailScreenState extends ConsumerState<MovieDetailScreen> {
                 ],
               ),
           ],
+        ),
+        
+        // Notification preferences chips (only shown when in watchlist)
+        const SizedBox(height: 8),
+        NotificationPrefsChips(
+          tmdbId: movieDetail.tmdbId,
+          workType: WorkType.movie,
         ),
       ],
     );

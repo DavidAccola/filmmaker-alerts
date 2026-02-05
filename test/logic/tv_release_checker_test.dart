@@ -17,6 +17,7 @@ void main() {
   late MockHistoryRepository mockHistoryRepo;
   late MockMovieCacheRepository mockMovieCacheRepo;
   late MockTvCacheRepository mockTvCacheRepo;
+  late MockWatchlistRepository mockWatchlistRepo;
 
   setUp(() {
     mockTmdbService = MockTmdbService();
@@ -25,6 +26,7 @@ void main() {
     mockHistoryRepo = MockHistoryRepository();
     mockMovieCacheRepo = MockMovieCacheRepository();
     mockTvCacheRepo = MockTvCacheRepository();
+    mockWatchlistRepo = MockWatchlistRepository();
 
     releaseChecker = ReleaseChecker(
       mockTmdbService,
@@ -33,6 +35,7 @@ void main() {
       mockHistoryRepo,
       mockMovieCacheRepo,
       mockTvCacheRepo,
+      mockWatchlistRepo,
     );
   });
 

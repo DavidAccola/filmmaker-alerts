@@ -40,13 +40,14 @@ class PreferencesAdapter extends TypeAdapter<Preferences> {
       hidePopularityInDetails: fields[20] as bool?,
       hideRatingsInDetails: fields[21] as bool?,
       streamingCountry: fields[22] as String?,
+      reduceAnimations: fields[23] as bool?,
     );
   }
 
   @override
   void write(BinaryWriter writer, Preferences obj) {
     writer
-      ..writeByte(23)
+      ..writeByte(24)
       ..writeByte(0)
       ..write(obj.notifyTheatre)
       ..writeByte(1)
@@ -92,7 +93,9 @@ class PreferencesAdapter extends TypeAdapter<Preferences> {
       ..writeByte(21)
       ..write(obj.hideRatingsInDetails)
       ..writeByte(22)
-      ..write(obj.streamingCountry);
+      ..write(obj.streamingCountry)
+      ..writeByte(23)
+      ..write(obj.reduceAnimations);
   }
 
   @override

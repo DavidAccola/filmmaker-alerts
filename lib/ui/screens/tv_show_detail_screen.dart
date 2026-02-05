@@ -10,6 +10,7 @@ import '../common/external_navigation_utils.dart';
 import '../common/snackbar_utils.dart';
 import '../common/watchlist_button.dart';
 import '../common/expand_poster_button.dart';
+import '../common/notification_prefs_chips.dart';
 import 'contributor_detail_screen.dart';
 import 'tv_season_detail_screen.dart';
 import '../../data/models/contributor.dart';
@@ -421,6 +422,13 @@ class _TvShowDetailScreenState extends ConsumerState<TvShowDetailScreen> {
               ),
             ],
           ),
+        
+        // Notification preferences chips (only shown when in watchlist)
+        const SizedBox(height: 8),
+        NotificationPrefsChips(
+          tmdbId: showDetail.tmdbId,
+          workType: WorkType.tvShow,
+        ),
       ],
     );
   }

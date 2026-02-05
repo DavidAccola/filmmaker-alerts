@@ -3,6 +3,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:filmmaker_alerts/data/models/watchlist_entry.dart';
 import 'package:filmmaker_alerts/data/models/contributor_detail.dart';
+import 'package:filmmaker_alerts/data/models/status_record.dart';
 import 'package:filmmaker_alerts/ui/common/watchlist_card.dart';
 import 'package:filmmaker_alerts/ui/common/rewatch_dialog.dart';
 

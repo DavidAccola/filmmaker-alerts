@@ -3,6 +3,7 @@ import 'package:hive/hive.dart';
 import 'package:hive_test/hive_test.dart';
 import 'package:filmmaker_alerts/data/models/watchlist_entry.dart';
 import 'package:filmmaker_alerts/data/models/contributor_detail.dart';
+import 'package:filmmaker_alerts/data/models/status_record.dart';
 import 'package:filmmaker_alerts/data/repositories/watchlist_repository.dart';
 
 void main() {

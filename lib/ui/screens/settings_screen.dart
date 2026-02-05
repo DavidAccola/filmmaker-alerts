@@ -35,6 +35,20 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
             contentPadding: EdgeInsets.zero,
             onChanged: (val) => _updatePrefs(ref, prefs, useDarkMode: val),
           ),
+          const Divider(),
+          SwitchListTile(
+            title: const Text('Reduce Animations'),
+            subtitle: const Text('Disable transitions and animations (requires restart)'),
+            value: prefs.reduceAnimations ?? false,
+            dense: true,
+            contentPadding: EdgeInsets.zero,
+            onChanged: (val) async {
+              await _updatePrefs(ref, prefs, reduceAnimations: val);
+              if (context.mounted) {
+                showSimpleSnackBar(context, 'Restart app to apply animation changes');
+              }
+            },
+          ),
         ],
       ),
     );
@@ -745,6 +759,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     bool? hidePopularityInDetails,
     bool? hideRatingsInDetails,
     String? streamingCountry,
+    bool? reduceAnimations,
   }) async {
     debugPrint('[SettingsScreen] _updatePrefs called with notifyTV: $notifyTV');
     debugPrint('[SettingsScreen] Current preferences notifyTV: ${current.notifyTV}');
@@ -772,6 +787,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
       hidePopularityInDetails: hidePopularityInDetails ?? current.hidePopularityInDetails,
       hideRatingsInDetails: hideRatingsInDetails ?? current.hideRatingsInDetails,
       streamingCountry: streamingCountry ?? current.streamingCountry,
+      reduceAnimations: reduceAnimations ?? current.reduceAnimations,
     );
 
     debugPrint('[SettingsScreen] New preferences notifyTV: ${newPrefs.notifyTV}');

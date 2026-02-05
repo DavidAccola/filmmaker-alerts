@@ -5,11 +5,13 @@ import '../../data/models/episode_status_entry.dart';
 import '../../data/models/season_status_entry.dart';
 import '../../data/models/status_record.dart';
 import '../../data/models/tv_detail.dart';
+import '../../data/models/contributor_detail.dart';
 import '../../providers/providers.dart';
 import '../common/snackbar_utils.dart';
 import '../common/streaming_options_widget.dart';
 import '../common/expand_poster_button.dart';
 import '../common/adaptive_tooltip_text.dart';
+import '../common/notification_prefs_chips.dart';
 import 'tv_show_detail_screen.dart';
 
 class ShowConfigurationScreen extends ConsumerStatefulWidget {
@@ -668,6 +670,13 @@ class _ShowConfigurationScreenState
               ),
             ],
           ),
+        
+        // Notification preferences chips
+        const SizedBox(height: 8),
+        NotificationPrefsChips(
+          tmdbId: showDetail.tmdbId,
+          workType: WorkType.tvShow,
+        ),
       ],
     );
   }

@@ -214,10 +214,14 @@ void main() async {
     debugPrint('[Main] Workmanager not supported on this platform. Background tasks skipped.');
   }
 
+  // Read initial animation preference (won't change until restart)
+  final prefsRepo = container.read(preferencesRepositoryProvider);
+  final initialReduceAnimations = prefsRepo.getPreferences().reduceAnimations ?? false;
+
   runApp(
     UncontrolledProviderScope(
       container: container,
-      child: const MyApp(),
+      child: MyApp(reduceAnimations: initialReduceAnimations),
     ),
   );
 }
@@ -293,8 +297,26 @@ Future<void> _openHiveBoxes() async {
   }
 }
 
+/// Page transition builder that shows no animation
+class _NoTransitionBuilder extends PageTransitionsBuilder {
+  const _NoTransitionBuilder();
+
+  @override
+  Widget buildTransitions<T>(
+    PageRoute<T> route,
+    BuildContext context,
+    Animation<double> animation,
+    Animation<double> secondaryAnimation,
+    Widget child,
+  ) {
+    return child;
+  }
+}
+
 class MyApp extends ConsumerWidget {
-  const MyApp({super.key});
+  final bool reduceAnimations;
+  
+  const MyApp({super.key, required this.reduceAnimations});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -303,7 +325,21 @@ class MyApp extends ConsumerWidget {
     // Kumbh Sans text theme - Regular weight for body, SemiBold for titles
     final kumbhTextTheme = GoogleFonts.kumbhSansTextTheme();
     
-    return MaterialApp(
+    // Use the startup value for animations (requires restart to change)
+    // Page transitions theme - no animations when reduced
+    final pageTransitionsTheme = reduceAnimations
+        ? const PageTransitionsTheme(
+            builders: {
+              TargetPlatform.android: _NoTransitionBuilder(),
+              TargetPlatform.iOS: _NoTransitionBuilder(),
+              TargetPlatform.linux: _NoTransitionBuilder(),
+              TargetPlatform.macOS: _NoTransitionBuilder(),
+              TargetPlatform.windows: _NoTransitionBuilder(),
+            },
+          )
+        : null;
+    
+    Widget app = MaterialApp(
       title: 'Filmmaker Alerts',
       theme: ThemeData(
         // Light mode - blue palette
@@ -316,6 +352,7 @@ class MyApp extends ConsumerWidget {
         snackBarTheme: const SnackBarThemeData(
           behavior: SnackBarBehavior.floating,
         ),
+        pageTransitionsTheme: pageTransitionsTheme,
       ),
       darkTheme: ThemeData(
         // Dark mode - universally appealing blue palette
@@ -387,6 +424,7 @@ class MyApp extends ConsumerWidget {
         snackBarTheme: const SnackBarThemeData(
           behavior: SnackBarBehavior.floating,
         ),
+        pageTransitionsTheme: pageTransitionsTheme,
       ),
       themeMode: prefsAsync.maybeWhen(
         data: (prefs) => prefs.useDarkMode ?? false ? ThemeMode.dark : ThemeMode.light,
@@ -455,6 +493,18 @@ class MyApp extends ConsumerWidget {
         },
       ),
     );
+    
+    // Wrap with MediaQuery to disable animations when preference is set
+    if (reduceAnimations) {
+      return MediaQuery(
+        data: MediaQueryData.fromView(WidgetsBinding.instance.platformDispatcher.views.first).copyWith(
+          disableAnimations: true,
+        ),
+        child: app,
+      );
+    }
+    
+    return app;
   }
 }
 

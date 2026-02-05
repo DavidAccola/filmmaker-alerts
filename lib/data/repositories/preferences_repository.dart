@@ -19,13 +19,13 @@ class PreferencesRepository {
       return defaults;
     }
     final prefs = _box.getAt(0)!;
-    debugPrint('[PreferencesRepository] Loaded preferences with notifyTV: ${prefs.notifyTV}');
+    debugPrint('[PreferencesRepository] Loaded preferences - useDarkMode: ${prefs.useDarkMode}, reduceAnimations: ${prefs.reduceAnimations}');
     return prefs;
   }
 
   /// Save updated preferences.
   Future<void> savePreferences(Preferences prefs) async {
-    debugPrint('[PreferencesRepository] Saving preferences with notifyTV: ${prefs.notifyTV}');
+    debugPrint('[PreferencesRepository] Saving preferences - useDarkMode: ${prefs.useDarkMode}, reduceAnimations: ${prefs.reduceAnimations}');
     
     if (_box.isEmpty) {
       await _box.add(prefs);
@@ -36,8 +36,11 @@ class PreferencesRepository {
       debugPrint('[PreferencesRepository] Updated preferences at index 0');
     }
     
+    // Force flush to disk - ensures data survives hot restart
+    await _box.flush();
+    
     // Verify the save
     final savedPrefs = _box.getAt(0)!;
-    debugPrint('[PreferencesRepository] Verified saved notifyTV: ${savedPrefs.notifyTV}');
+    debugPrint('[PreferencesRepository] Verified saved - useDarkMode: ${savedPrefs.useDarkMode}, reduceAnimations: ${savedPrefs.reduceAnimations}');
   }
 }

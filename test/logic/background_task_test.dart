@@ -16,6 +16,7 @@ void main() {
   late MockMovieCacheRepository mockMovieCacheRepo;
   late MockTvCacheRepository mockTvCacheRepo;
   late MockNotificationService mockNotificationService;
+  late MockWatchlistRepository mockWatchlistRepo;
 
   setUp(() {
     mockTmdbService = MockTmdbService();
@@ -25,6 +26,7 @@ void main() {
     mockMovieCacheRepo = MockMovieCacheRepository();
     mockTvCacheRepo = MockTvCacheRepository();
     mockNotificationService = MockNotificationService();
+    mockWatchlistRepo = MockWatchlistRepository();
 
     processor = BackgroundTaskProcessor(
       tmdbService: mockTmdbService,
@@ -34,6 +36,7 @@ void main() {
       movieCacheRepo: mockMovieCacheRepo,
       notificationService: mockNotificationService,
       tvCacheRepo: mockTvCacheRepo,
+      watchlistRepo: mockWatchlistRepo,
     );
     
     // Default stubs

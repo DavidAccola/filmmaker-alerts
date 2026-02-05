@@ -6,10 +6,14 @@ import 'package:filmmaker_alerts/data/models/episode_status_entry.dart';
 import 'package:filmmaker_alerts/data/models/season_status_entry.dart';
 import 'package:filmmaker_alerts/data/models/contributor_detail.dart';
 import 'package:filmmaker_alerts/data/models/contributor.dart';
+import 'package:filmmaker_alerts/data/models/status_record.dart';
+import 'package:filmmaker_alerts/data/models/preferences.dart';
 import 'package:filmmaker_alerts/data/repositories/watchlist_repository.dart';
 import 'package:filmmaker_alerts/data/repositories/episode_status_repository.dart';
 import 'package:filmmaker_alerts/data/repositories/season_status_repository.dart';
+import 'package:filmmaker_alerts/data/repositories/preferences_repository.dart';
 import 'package:filmmaker_alerts/logic/watchlist_logic.dart';
+import 'package:filmmaker_alerts/core/constants.dart';
 
 void main() {
   setUpAll(() {
@@ -22,11 +26,16 @@ void main() {
     Hive.registerAdapter(ReleaseTypeAdapter());
     Hive.registerAdapter(EpisodeStatusEntryAdapter());
     Hive.registerAdapter(SeasonStatusEntryAdapter());
+    Hive.registerAdapter(PreferencesAdapter());
+    Hive.registerAdapter(TvNotificationPreferencesAdapter());
+    Hive.registerAdapter(ReleaseNotificationPreferencesAdapter());
   });
 
   group('WatchlistLogic', () {
     setUp(() async {
       await setUpTestHive();
+      // Open the preferences box for tests
+      await Hive.openBox<Preferences>(AppConstants.preferencesBox);
     });
 
     tearDown(() async {
@@ -41,7 +50,8 @@ void main() {
       final watchlistRepo = WatchlistRepository(watchlistBox);
       final episodeRepo = EpisodeStatusRepository(episodeBox);
       final seasonRepo = SeasonStatusRepository(seasonBox);
-      final logic = WatchlistLogic(watchlistRepo, episodeRepo, seasonRepo);
+      final prefsRepo = PreferencesRepository();
+      final logic = WatchlistLogic(watchlistRepo, episodeRepo, seasonRepo, prefsRepo);
 
       await logic.addWorkToWatchlist(
         tmdbId: 123,
@@ -64,7 +74,8 @@ void main() {
       final watchlistRepo = WatchlistRepository(watchlistBox);
       final episodeRepo = EpisodeStatusRepository(episodeBox);
       final seasonRepo = SeasonStatusRepository(seasonBox);
-      final logic = WatchlistLogic(watchlistRepo, episodeRepo, seasonRepo);
+      final prefsRepo = PreferencesRepository();
+      final logic = WatchlistLogic(watchlistRepo, episodeRepo, seasonRepo, prefsRepo);
 
       // Add TV show to watchlist
       await logic.addWorkToWatchlist(
@@ -107,7 +118,8 @@ void main() {
       final watchlistRepo = WatchlistRepository(watchlistBox);
       final episodeRepo = EpisodeStatusRepository(episodeBox);
       final seasonRepo = SeasonStatusRepository(seasonBox);
-      final logic = WatchlistLogic(watchlistRepo, episodeRepo, seasonRepo);
+      final prefsRepo = PreferencesRepository();
+      final logic = WatchlistLogic(watchlistRepo, episodeRepo, seasonRepo, prefsRepo);
 
       await logic.addWorkToWatchlist(
         tmdbId: 123,
@@ -137,7 +149,8 @@ void main() {
       final watchlistRepo = WatchlistRepository(watchlistBox);
       final episodeRepo = EpisodeStatusRepository(episodeBox);
       final seasonRepo = SeasonStatusRepository(seasonBox);
-      final logic = WatchlistLogic(watchlistRepo, episodeRepo, seasonRepo);
+      final prefsRepo = PreferencesRepository();
+      final logic = WatchlistLogic(watchlistRepo, episodeRepo, seasonRepo, prefsRepo);
 
       // Create episode first
       await episodeRepo.getOrCreateEpisode(
@@ -168,7 +181,8 @@ void main() {
       final watchlistRepo = WatchlistRepository(watchlistBox);
       final episodeRepo = EpisodeStatusRepository(episodeBox);
       final seasonRepo = SeasonStatusRepository(seasonBox);
-      final logic = WatchlistLogic(watchlistRepo, episodeRepo, seasonRepo);
+      final prefsRepo = PreferencesRepository();
+      final logic = WatchlistLogic(watchlistRepo, episodeRepo, seasonRepo, prefsRepo);
 
       // Create season first
       await seasonRepo.getOrCreateSeason(
@@ -197,7 +211,8 @@ void main() {
         final watchlistRepo = WatchlistRepository(watchlistBox);
         final episodeRepo = EpisodeStatusRepository(episodeBox);
         final seasonRepo = SeasonStatusRepository(seasonBox);
-        final logic = WatchlistLogic(watchlistRepo, episodeRepo, seasonRepo);
+        final prefsRepo = PreferencesRepository();
+        final logic = WatchlistLogic(watchlistRepo, episodeRepo, seasonRepo, prefsRepo);
 
         await logic.addWorkToWatchlist(
           tmdbId: 123,
@@ -236,7 +251,8 @@ void main() {
         final watchlistRepo = WatchlistRepository(watchlistBox);
         final episodeRepo = EpisodeStatusRepository(episodeBox);
         final seasonRepo = SeasonStatusRepository(seasonBox);
-        final logic = WatchlistLogic(watchlistRepo, episodeRepo, seasonRepo);
+        final prefsRepo = PreferencesRepository();
+        final logic = WatchlistLogic(watchlistRepo, episodeRepo, seasonRepo, prefsRepo);
 
         // Add multiple works to watchlist
         await logic.addWorkToWatchlist(
@@ -273,7 +289,8 @@ void main() {
       final watchlistRepo = WatchlistRepository(watchlistBox);
       final episodeRepo = EpisodeStatusRepository(episodeBox);
       final seasonRepo = SeasonStatusRepository(seasonBox);
-      final logic = WatchlistLogic(watchlistRepo, episodeRepo, seasonRepo);
+      final prefsRepo = PreferencesRepository();
+      final logic = WatchlistLogic(watchlistRepo, episodeRepo, seasonRepo, prefsRepo);
 
       await logic.addWorkToWatchlist(
         tmdbId: 123,
@@ -295,7 +312,8 @@ void main() {
       final watchlistRepo = WatchlistRepository(watchlistBox);
       final episodeRepo = EpisodeStatusRepository(episodeBox);
       final seasonRepo = SeasonStatusRepository(seasonBox);
-      final logic = WatchlistLogic(watchlistRepo, episodeRepo, seasonRepo);
+      final prefsRepo = PreferencesRepository();
+      final logic = WatchlistLogic(watchlistRepo, episodeRepo, seasonRepo, prefsRepo);
 
       await logic.addWorkToWatchlist(
         tmdbId: 123,

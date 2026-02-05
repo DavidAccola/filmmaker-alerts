@@ -5,6 +5,7 @@ import 'package:filmmaker_alerts/data/models/watchlist_entry.dart';
 import 'package:filmmaker_alerts/data/models/episode_status_entry.dart';
 import 'package:filmmaker_alerts/data/models/season_status_entry.dart';
 import 'package:filmmaker_alerts/data/models/contributor_detail.dart';
+import 'package:filmmaker_alerts/data/models/status_record.dart';
 import 'package:filmmaker_alerts/data/repositories/watchlist_repository.dart';
 import 'package:filmmaker_alerts/data/repositories/episode_status_repository.dart';
 import 'package:filmmaker_alerts/data/repositories/season_status_repository.dart';

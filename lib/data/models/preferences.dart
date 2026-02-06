@@ -99,7 +99,7 @@ class Preferences extends HiveObject {
     this.movieDetailsPreference = 'both',
     this.defaultTvNotificationPrefs,
     this.notifyPersonTvEpisodes = true,
-    this.useDarkMode = false,
+    this.useDarkMode = true,
     this.hidePopularityInDetails = false,
     this.hideRatingsInDetails = false,
     this.streamingCountry = 'US',

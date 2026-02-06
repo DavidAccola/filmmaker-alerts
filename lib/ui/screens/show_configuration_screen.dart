@@ -463,7 +463,7 @@ class _ShowConfigurationScreenState
                 const SizedBox(width: 24),
                 // Right side: Streaming options
                 SizedBox(
-                  width: 300,
+                  width: 350,
                   child: StreamingOptionsWidget(
                     streamingOptions: showDetail.streamingOptions,
                     tmdbId: showDetail.tmdbId,

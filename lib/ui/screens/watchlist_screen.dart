@@ -6,11 +6,13 @@ import '../../data/models/contributor_detail.dart';
 import '../../data/models/status_record.dart';
 import '../../providers/providers.dart';
 import '../common/watchlist_card.dart';
+import '../common/watchlist_rank_card.dart';
 import '../common/snackbar_utils.dart';
 import '../common/rewatch_dialog.dart';
 import '../common/tmdb_attribution.dart';
 import 'add_contributor_screen.dart';
 import 'movie_detail_screen.dart';
+import 'show_configuration_screen.dart';
 
 enum WatchlistSortOption {
   addOrder,
@@ -55,6 +57,14 @@ class _WatchlistScreenState extends ConsumerState<WatchlistScreen>
   /// Helper to update FAB raised state via provider (shared with HomeScreen)
   void _setFabRaised(bool raised) {
     ref.read(fabRaisedProvider.notifier).setRaised(raised);
+  }
+  
+  /// Check if we're in rank edit mode
+  bool get _isRankEditMode => ref.read(rankEditModeProvider);
+  
+  /// Toggle rank edit mode
+  void _setRankEditMode(bool editing) {
+    ref.read(rankEditModeProvider.notifier).setEditMode(editing);
   }
 
   @override
@@ -391,15 +401,9 @@ class _WatchlistScreenState extends ConsumerState<WatchlistScreen>
                       setState(() {
                         _sortOption = option;
                       });
-                      
-                      // Show hint about drag-and-drop when user rank is selected
-                      if (option == WatchlistSortOption.userRank && mounted) {
-                        showSimpleSnackBar(
-                          context,
-                          'Drag and drop cards to reorder',
-                          duration: const Duration(seconds: 2),
-                          onSnackBarVisibilityChanged: (isVisible) => _setFabRaised(isVisible),
-                        );
+                      // Exit rank edit mode when changing sort
+                      if (option != WatchlistSortOption.userRank) {
+                        _setRankEditMode(false);
                       }
                     },
                     itemBuilder: (context) => [
@@ -424,6 +428,10 @@ class _WatchlistScreenState extends ConsumerState<WatchlistScreen>
                 ],
               ),
             ),
+            
+            // Edit Ranking banner (shown when in User Rank sort mode and not editing)
+            if (_sortOption == WatchlistSortOption.userRank && !ref.watch(rankEditModeProvider))
+              _buildEditRankingBanner(),
             
             // Main content
             Expanded(
@@ -566,43 +574,10 @@ class _WatchlistScreenState extends ConsumerState<WatchlistScreen>
                               ),
                             ),
 
-                          // Grid of cards
+                          // Grid of cards (or rank edit list when in edit mode)
                           Expanded(
-                            child: _sortOption == WatchlistSortOption.userRank
-                                ? ReorderableListView.builder(
-                                    padding: const EdgeInsets.all(16),
-                                    itemCount: sortedEntries.length,
-                                    onReorder: (oldIndex, newIndex) => _handleReorder(oldIndex, newIndex, sortedEntries),
-                                    itemBuilder: (context, index) {
-                                      final entry = sortedEntries[index];
-                                      return Container(
-                                        key: ValueKey(entry.uniqueKey),
-                                        margin: const EdgeInsets.only(bottom: 16),
-                                        child: Row(
-                                          children: [
-                                            SizedBox(
-                                              width: 150,
-                                              child: WatchlistCard(
-                                                entry: entry,
-                                                onTap: () => _navigateToDetail(entry),
-                                                onDelete: () => _handleDelete(entry),
-                                                onSnooze: () => _handleHide(entry),
-                                                onToggleNotificationSnooze: () =>
-                                                    _handleToggleNotificationSnooze(entry),
-                                                onStatusChanged: (status) =>
-                                                    _handleStatusChanged(entry, status),
-                                              ),
-                                            ),
-                                            const Spacer(),
-                                            Icon(
-                                              Icons.drag_handle,
-                                              color: Theme.of(context).colorScheme.onSurfaceVariant,
-                                            ),
-                                          ],
-                                        ),
-                                      );
-                                    },
-                                  )
+                            child: (_sortOption == WatchlistSortOption.userRank && ref.watch(rankEditModeProvider))
+                                ? _buildUserRankList(sortedEntries)
                                 : LayoutBuilder(
                                     builder: (context, constraints) {
                                       // Use taller cards on small screens to prevent overflow
@@ -815,6 +790,195 @@ class _WatchlistScreenState extends ConsumerState<WatchlistScreen>
     
     debugPrint('[WatchlistScreen] _filterEntries returning ${filtered.length} entries');
     return filtered;
+  }
+
+  /// Builds the Edit Ranking banner shown when in User Rank view mode.
+  Widget _buildEditRankingBanner() {
+    final theme = Theme.of(context);
+    
+    return Material(
+      color: theme.colorScheme.primaryContainer.withValues(alpha: 0.4),
+      child: InkWell(
+        onTap: () => _setRankEditMode(true),
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+          decoration: BoxDecoration(
+            border: Border(
+              bottom: BorderSide(
+                color: theme.colorScheme.primary.withValues(alpha: 0.3),
+              ),
+            ),
+          ),
+          child: Row(
+            children: [
+              Icon(
+                Icons.format_list_numbered,
+                size: 20,
+                color: theme.colorScheme.primary,
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Text(
+                  'Sorted by your personal ranking',
+                  style: theme.textTheme.bodyMedium?.copyWith(
+                    color: theme.colorScheme.onSurface,
+                  ),
+                ),
+              ),
+              FilledButton.icon(
+                onPressed: () => _setRankEditMode(true),
+                icon: const Icon(Icons.edit, size: 18),
+                label: const Text('Edit Ranking'),
+                style: FilledButton.styleFrom(
+                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  /// Builds the User Rank mode list with drag-to-reorder functionality.
+  Widget _buildUserRankList(List<WatchlistEntry> entries) {
+    final theme = Theme.of(context);
+    
+    if (entries.isEmpty) {
+      return Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(
+              Icons.format_list_numbered,
+              size: 64,
+              color: theme.colorScheme.onSurfaceVariant,
+            ),
+            const SizedBox(height: 16),
+            Text(
+              'No items to rank',
+              style: theme.textTheme.headlineSmall?.copyWith(
+                color: theme.colorScheme.onSurfaceVariant,
+              ),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              'Add items to your watchlist to start ranking',
+              style: theme.textTheme.bodyMedium?.copyWith(
+                color: theme.colorScheme.onSurfaceVariant,
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+    
+    return Column(
+      children: [
+        // Header with instructions
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+          decoration: BoxDecoration(
+            color: theme.colorScheme.primaryContainer.withValues(alpha: 0.3),
+            border: Border(
+              bottom: BorderSide(
+                color: theme.colorScheme.outlineVariant.withValues(alpha: 0.5),
+              ),
+            ),
+          ),
+          child: Row(
+            children: [
+              Icon(
+                Icons.drag_indicator,
+                size: 20,
+                color: theme.colorScheme.primary,
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  'Drag items to reorder your personal ranking',
+                  style: theme.textTheme.bodySmall?.copyWith(
+                    color: theme.colorScheme.onSurfaceVariant,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+        
+        // Reorderable list
+        Expanded(
+          child: ReorderableListView.builder(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+            itemCount: entries.length,
+            proxyDecorator: (child, index, animation) {
+              // Add elevation and scale effect when dragging
+              return AnimatedBuilder(
+                animation: animation,
+                builder: (context, child) {
+                  final animValue = Curves.easeInOut.transform(animation.value);
+                  final elevation = 8.0 * animValue;
+                  final scale = 1.0 + (0.02 * animValue);
+                  
+                  return Transform.scale(
+                    scale: scale,
+                    child: Material(
+                      elevation: elevation,
+                      color: Colors.transparent,
+                      borderRadius: BorderRadius.circular(12),
+                      child: child,
+                    ),
+                  );
+                },
+                child: child,
+              );
+            },
+            onReorder: (oldIndex, newIndex) => _handleReorder(oldIndex, newIndex, entries),
+            itemBuilder: (context, index) {
+              final entry = entries[index];
+              return Padding(
+                key: ValueKey(entry.uniqueKey),
+                padding: const EdgeInsets.symmetric(vertical: 4),
+                child: WatchlistRankCard(
+                  entry: entry,
+                  rank: index + 1,
+                  index: index,
+                  onTap: () => _navigateToDetailFromRank(entry),
+                ),
+              );
+            },
+          ),
+        ),
+        
+        // TMDB Attribution at bottom
+        const TmdbAttribution(),
+      ],
+    );
+  }
+
+  /// Navigate to detail screen from rank mode
+  void _navigateToDetailFromRank(WatchlistEntry entry) {
+    if (entry.type == WorkType.movie) {
+      Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (context) => MovieDetailScreen(
+            movieId: entry.tmdbId,
+            movieTitle: entry.title,
+          ),
+        ),
+      );
+    } else if (entry.type == WorkType.tvShow) {
+      Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (context) => ShowConfigurationScreen(
+            showId: entry.tmdbId,
+            showTitle: entry.title,
+          ),
+        ),
+      );
+    }
   }
 
   List<WatchlistEntry> _sortEntries(List<WatchlistEntry> entries) {

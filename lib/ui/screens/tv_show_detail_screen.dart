@@ -379,7 +379,7 @@ class _TvShowDetailScreenState extends ConsumerState<TvShowDetailScreen> {
           Row(
             children: [
               Text(
-                '${showDetail.numberOfSeasons} Seasons',
+                '${showDetail.numberOfSeasons} ${showDetail.numberOfSeasons == 1 ? 'Season' : 'Seasons'}',
                 style: Theme.of(context).textTheme.bodySmall?.copyWith(color: Theme.of(context).colorScheme.onSurfaceVariant),
               ),
               if (showDetail.numberOfEpisodes != null) ...[
@@ -388,7 +388,7 @@ class _TvShowDetailScreenState extends ConsumerState<TvShowDetailScreen> {
                    child: Text('•', style: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant)),
                 ),
                 Text(
-                  '${showDetail.numberOfEpisodes} Episodes',
+                  '${showDetail.numberOfEpisodes} ${showDetail.numberOfEpisodes == 1 ? 'Episode' : 'Episodes'}',
                   style: Theme.of(context).textTheme.bodySmall?.copyWith(color: Theme.of(context).colorScheme.onSurfaceVariant),
                 ),
               ],
@@ -406,13 +406,13 @@ class _TvShowDetailScreenState extends ConsumerState<TvShowDetailScreen> {
             ],
           ),
         
-        const SizedBox(height: 12),
+        const SizedBox(height: 8),
         
         // Rating
         if (showDetail.tmdbRating != null && (showDetail.voteCount ?? 0) > 0 && !(prefs.hideRatingsInDetails ?? false))
           Row(
             children: [
-              const Icon(Icons.star, color: Colors.amber, size: 16),
+              const Icon(Icons.star, color: Colors.amber, size: 14),
               const SizedBox(width: 4),
               Text(
                 showDetail.tmdbRating!.toStringAsFixed(1),

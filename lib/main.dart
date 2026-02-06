@@ -379,9 +379,9 @@ class MyApp extends ConsumerWidget {
           errorContainer: Color(0xFF4d3030),
           onErrorContainer: Color(0xFFffc9c9),
           // Surfaces - very dark backgrounds
-          surface: Color(0xFF171717),
+          surface: Color(0xFF141414),
           onSurface: Color(0xFFF2F2F2),
-          surfaceContainerHighest: Color(0xFF212121),
+          surfaceContainerHighest: Color(0xFF2a2a2a),
           onSurfaceVariant: Color(0xFFb3b3b3),
           outline: Color(0xFF4d4d4d),
           outlineVariant: Color(0xFF404040),
@@ -392,8 +392,8 @@ class MyApp extends ConsumerWidget {
           inversePrimary: Color(0xFF1971c2),
           surfaceTint: Color(0xFF4dabf7),
         ),
-        scaffoldBackgroundColor: const Color(0xFF141414), // hsl(255 2% 8%) - slightly darker
-        cardColor: const Color(0xFF212121),     // hsl(255 2% 13%) - card background
+        scaffoldBackgroundColor: const Color(0xFF0f0f0f), // Darker background for more contrast
+        cardColor: const Color(0xFF2a2a2a),     // Lighter card for better contrast
         dividerColor: const Color(0xFF4d4d4d),  // borders
         // Kumbh Sans with bright text colors for dark mode
         textTheme: GoogleFonts.kumbhSansTextTheme(
@@ -427,8 +427,8 @@ class MyApp extends ConsumerWidget {
         pageTransitionsTheme: pageTransitionsTheme,
       ),
       themeMode: prefsAsync.maybeWhen(
-        data: (prefs) => prefs.useDarkMode ?? false ? ThemeMode.dark : ThemeMode.light,
-        orElse: () => ThemeMode.light,
+        data: (prefs) => prefs.useDarkMode ?? true ? ThemeMode.dark : ThemeMode.light,
+        orElse: () => ThemeMode.dark,
       ),
       home: prefsAsync.when(
         data: (prefs) {

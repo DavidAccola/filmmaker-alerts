@@ -409,6 +409,17 @@ final watchlistScrollTargetProvider = NotifierProvider<WatchlistScrollTargetNoti
 /// FAB visibility state - controls whether the FAB should be raised for snackbars
 final fabRaisedProvider = NotifierProvider<FabRaisedNotifier, bool>(FabRaisedNotifier.new);
 
+/// Rank edit mode state - when true, watchlist shows drag-to-reorder interface
+final rankEditModeProvider = NotifierProvider<RankEditModeNotifier, bool>(RankEditModeNotifier.new);
+
+class RankEditModeNotifier extends Notifier<bool> {
+  @override
+  bool build() => false;
+  
+  void setEditMode(bool editing) => state = editing;
+  void toggle() => state = !state;
+}
+
 // --- Watchlist Providers ---
 
 /// Watchlist entries provider - fetches all watchlist entries

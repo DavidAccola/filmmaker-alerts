@@ -30,6 +30,24 @@ class WatchlistRankCard extends StatefulWidget {
 class _WatchlistRankCardState extends State<WatchlistRankCard> {
   bool _isHovered = false;
 
+  /// Checks if this entry is a collection (movie with Collection role)
+  bool get _isCollection => widget.entry.type == WorkType.movie && 
+      widget.entry.followedContributors.any((c) => c.role == 'Collection');
+
+  /// Gets the appropriate icon for this entry type
+  IconData get _typeIcon => widget.entry.type == WorkType.tvShow 
+      ? Icons.tv 
+      : _isCollection 
+          ? Icons.video_library 
+          : Icons.movie;
+
+  /// Gets the appropriate label for this entry type
+  String get _typeLabel => widget.entry.type == WorkType.tvShow 
+      ? 'TV' 
+      : _isCollection 
+          ? 'Collection' 
+          : 'Movie';
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
@@ -121,7 +139,7 @@ class _WatchlistRankCardState extends State<WatchlistRankCard> {
                               errorWidget: (context, url, error) => Container(
                                 color: theme.colorScheme.surfaceContainerHighest,
                                 child: Icon(
-                                  widget.entry.type == WorkType.movie ? Icons.movie : Icons.tv,
+                                  _typeIcon,
                                   size: 24,
                                   color: theme.colorScheme.onSurfaceVariant,
                                 ),
@@ -130,7 +148,7 @@ class _WatchlistRankCardState extends State<WatchlistRankCard> {
                           : Container(
                               color: theme.colorScheme.surfaceContainerHighest,
                               child: Icon(
-                                widget.entry.type == WorkType.movie ? Icons.movie : Icons.tv,
+                                _typeIcon,
                                 size: 24,
                                 color: theme.colorScheme.onSurfaceVariant,
                               ),
@@ -164,13 +182,13 @@ class _WatchlistRankCardState extends State<WatchlistRankCard> {
                             mainAxisSize: MainAxisSize.min,
                             children: [
                               Icon(
-                                widget.entry.type == WorkType.movie ? Icons.movie : Icons.tv,
+                                _typeIcon,
                                 size: 12,
                                 color: theme.colorScheme.onSurfaceVariant,
                               ),
                               const SizedBox(width: 4),
                               Text(
-                                widget.entry.type == WorkType.movie ? 'Movie' : 'TV',
+                                _typeLabel,
                                 style: theme.textTheme.labelSmall?.copyWith(
                                   color: theme.colorScheme.onSurfaceVariant,
                                   fontSize: 11,

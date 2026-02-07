@@ -544,7 +544,7 @@ void showSnoozedSnackBar(
       padding: EdgeInsets.zero,
       behavior: SnackBarBehavior.fixed,
       content: _TimerSnackBarContent(
-        message: '$title frozen',
+        message: '$title hidden',
         duration: const Duration(seconds: 4),
         onDismiss: () => onSnackBarVisibilityChanged?.call(false),
         actionLabel: 'UNDO',

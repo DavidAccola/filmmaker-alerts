@@ -37,7 +37,7 @@ class _WatchlistScreenState extends ConsumerState<WatchlistScreen>
     with TickerProviderStateMixin {
   late TabController _tabController;
   late ScrollController _scrollController;
-  bool _hasFrozenItems = false;
+  bool _hasHiddenItems = false;
   int? _lastScrolledTmdbId; // Track which item we've already scrolled to
   
   // Filter state
@@ -81,16 +81,16 @@ class _WatchlistScreenState extends ConsumerState<WatchlistScreen>
     super.dispose();
   }
 
-  void _updateTabController(bool hasFrozen) {
-    if (_hasFrozenItems != hasFrozen && mounted) {
-      _hasFrozenItems = hasFrozen;
+  void _updateTabController(bool hasHidden) {
+    if (_hasHiddenItems != hasHidden && mounted) {
+      _hasHiddenItems = hasHidden;
       try {
         _tabController.dispose();
       } catch (_) {
         // Ignore if already disposed
       }
       _tabController = TabController(
-        length: hasFrozen ? 2 : 1,
+        length: hasHidden ? 2 : 1,
         vsync: this,
       );
     }
@@ -137,18 +137,18 @@ class _WatchlistScreenState extends ConsumerState<WatchlistScreen>
         debugPrint('[WatchlistScreen] === BUILD DEBUG ===');
         debugPrint('[WatchlistScreen] Total entries: ${entries.length}');
         
-        final hasFrozen = entries.any((e) => e.isSnoozed);
-        debugPrint('[WatchlistScreen] Has frozen items: $hasFrozen');
+        final hasHidden = entries.any((e) => e.isSnoozed);
+        debugPrint('[WatchlistScreen] Has hidden items: $hasHidden');
         
         final activeEntries = entries.where((e) => !e.isSnoozed).toList();
         final hiddenEntries = entries.where((e) => e.isSnoozed).toList();
         debugPrint('[WatchlistScreen] Active entries: ${activeEntries.length}, Hidden entries: ${hiddenEntries.length}');
         
-        // Update tab controller if frozen status changed (outside of build)
-        if (_hasFrozenItems != hasFrozen) {
+        // Update tab controller if hidden status changed (outside of build)
+        if (_hasHiddenItems != hasHidden) {
           WidgetsBinding.instance.addPostFrameCallback((_) {
             if (mounted) {
-              _updateTabController(hasFrozen);
+              _updateTabController(hasHidden);
             }
           });
         }
@@ -1249,11 +1249,6 @@ class _WatchlistScreenState extends ConsumerState<WatchlistScreen>
     } else {
       // Other statuses
       await logic.addStatusToWork(entry.tmdbId, entry.type, status);
-      
-      // If DNF, also freeze the item
-      if (status == WatchStatus.dnf) {
-        await logic.setSnoozed(entry.tmdbId, entry.type, true);
-      }
       
       if (mounted) {
         String text = '';

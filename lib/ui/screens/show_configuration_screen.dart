@@ -12,16 +12,19 @@ import '../common/streaming_options_widget.dart';
 import '../common/expand_poster_button.dart';
 import '../common/adaptive_tooltip_text.dart';
 import '../common/notification_prefs_chips.dart';
+import '../common/status_colors.dart';
 import 'tv_show_detail_screen.dart';
 
 class ShowConfigurationScreen extends ConsumerStatefulWidget {
   final int showId;
   final String showTitle;
+  final WatchStatus? initialMarkAllStatus;
 
   const ShowConfigurationScreen({
     super.key,
     required this.showId,
     required this.showTitle,
+    this.initialMarkAllStatus,
   });
 
   @override
@@ -211,10 +214,47 @@ class _ShowConfigurationScreenState
       // Refresh the UI
       if (mounted) {
         setState(() {});
+        
+        // Apply initial mark all status if provided
+        if (widget.initialMarkAllStatus != null) {
+          // Use a post-frame callback to ensure the UI is built first
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            if (mounted) {
+              _applyInitialMarkAll(widget.initialMarkAllStatus!);
+            }
+          });
+        }
       }
     } catch (e) {
       debugPrint('[ShowConfigurationScreen] Error fetching episodes: $e');
     }
+  }
+
+  /// Applies the initial mark all status to all episodes
+  void _applyInitialMarkAll(WatchStatus status) {
+    final tvDetailRepo = ref.read(tvDetailRepositoryProvider);
+    final showDetail = tvDetailRepo.getTvShowDetail(widget.showId);
+    if (showDetail == null) return;
+    
+    // Build episodes by season map
+    final episodesBySeasonMap = <int, List<EpisodeStatusEntry>>{};
+    for (final season in showDetail.seasons) {
+      final seasonDetail = tvDetailRepo.getTvSeasonDetail(widget.showId, season.seasonNumber);
+      if (seasonDetail != null) {
+        episodesBySeasonMap[season.seasonNumber] = seasonDetail.episodes
+            .map((episode) => EpisodeStatusEntry(
+              showId: widget.showId,
+              seasonNumber: season.seasonNumber,
+              episodeNumber: episode.episodeNumber,
+              episodeTitle: episode.name,
+              statusRecords: [],
+            ))
+            .toList();
+      }
+    }
+    
+    // Apply mark all
+    _handleMarkAllStatus(status, episodesBySeasonMap);
   }
 
   void _initializeLocalChanges() {
@@ -761,6 +801,7 @@ class _ShowConfigurationScreenState
           _EpisodeStatusButton(
             icon: Icons.bookmark_border,
             activeIcon: Icons.bookmark,
+            status: WatchStatus.wantToWatch,
             isActive: statusCounts[WatchStatus.wantToWatch] == totalEpisodes,
             isRowHovered: isRowHovered,
             tooltip: tooltipFor(WatchStatus.wantToWatch, 'Want to watch'),
@@ -771,6 +812,7 @@ class _ShowConfigurationScreenState
           _EpisodeStatusButton(
             icon: Icons.play_circle_outline,
             activeIcon: Icons.play_circle,
+            status: WatchStatus.inProgress,
             isActive: statusCounts[WatchStatus.inProgress] == totalEpisodes,
             isRowHovered: isRowHovered,
             tooltip: tooltipFor(WatchStatus.inProgress, 'In progress'),
@@ -781,6 +823,7 @@ class _ShowConfigurationScreenState
           _EpisodeStatusButton(
             icon: Icons.check_circle_outline,
             activeIcon: Icons.check_circle,
+            status: WatchStatus.watched,
             isActive: statusCounts[WatchStatus.watched] == totalEpisodes,
             isRowHovered: isRowHovered,
             tooltip: tooltipFor(WatchStatus.watched, 'Watched'),
@@ -791,6 +834,7 @@ class _ShowConfigurationScreenState
           _EpisodeStatusButton(
             icon: Icons.cancel_outlined,
             activeIcon: Icons.cancel,
+            status: WatchStatus.dnf,
             isActive: statusCounts[WatchStatus.dnf] == totalEpisodes,
             isRowHovered: isRowHovered,
             tooltip: tooltipFor(WatchStatus.dnf, 'Did not finish'),
@@ -1024,6 +1068,7 @@ class _ShowConfigurationScreenState
           _EpisodeStatusButton(
             icon: Icons.bookmark_border,
             activeIcon: Icons.bookmark,
+            status: WatchStatus.wantToWatch,
             isActive: statusCounts[WatchStatus.wantToWatch] == totalEpisodes,
             isRowHovered: isRowHovered,
             tooltip: tooltipFor(WatchStatus.wantToWatch, 'Want to watch'),
@@ -1034,6 +1079,7 @@ class _ShowConfigurationScreenState
           _EpisodeStatusButton(
             icon: Icons.play_circle_outline,
             activeIcon: Icons.play_circle,
+            status: WatchStatus.inProgress,
             isActive: statusCounts[WatchStatus.inProgress] == totalEpisodes,
             isRowHovered: isRowHovered,
             tooltip: tooltipFor(WatchStatus.inProgress, 'In progress'),
@@ -1044,6 +1090,7 @@ class _ShowConfigurationScreenState
           _EpisodeStatusButton(
             icon: Icons.check_circle_outline,
             activeIcon: Icons.check_circle,
+            status: WatchStatus.watched,
             isActive: statusCounts[WatchStatus.watched] == totalEpisodes,
             isRowHovered: isRowHovered,
             tooltip: tooltipFor(WatchStatus.watched, 'Watched'),
@@ -1054,6 +1101,7 @@ class _ShowConfigurationScreenState
           _EpisodeStatusButton(
             icon: Icons.cancel_outlined,
             activeIcon: Icons.cancel,
+            status: WatchStatus.dnf,
             isActive: statusCounts[WatchStatus.dnf] == totalEpisodes,
             isRowHovered: isRowHovered,
             tooltip: tooltipFor(WatchStatus.dnf, 'Did not finish'),
@@ -1468,6 +1516,7 @@ class _EpisodeRowState extends State<_EpisodeRow> {
                   _EpisodeStatusButton(
                     icon: Icons.bookmark_border,
                     activeIcon: Icons.bookmark,
+                    status: WatchStatus.wantToWatch,
                     isActive: effectiveStatuses.contains(WatchStatus.wantToWatch),
                     isRowHovered: _isHovered,
                     tooltip: 'Want to watch',
@@ -1476,6 +1525,7 @@ class _EpisodeRowState extends State<_EpisodeRow> {
                   _EpisodeStatusButton(
                     icon: Icons.play_circle_outline,
                     activeIcon: Icons.play_circle,
+                    status: WatchStatus.inProgress,
                     isActive: effectiveStatuses.contains(WatchStatus.inProgress),
                     isRowHovered: _isHovered,
                     tooltip: 'In progress',
@@ -1484,6 +1534,7 @@ class _EpisodeRowState extends State<_EpisodeRow> {
                   _EpisodeStatusButton(
                     icon: Icons.check_circle_outline,
                     activeIcon: Icons.check_circle,
+                    status: WatchStatus.watched,
                     isActive: effectiveStatuses.contains(WatchStatus.watched),
                     isRowHovered: _isHovered,
                     tooltip: 'Watched',
@@ -1492,6 +1543,7 @@ class _EpisodeRowState extends State<_EpisodeRow> {
                   _EpisodeStatusButton(
                     icon: Icons.cancel_outlined,
                     activeIcon: Icons.cancel,
+                    status: WatchStatus.dnf,
                     isActive: effectiveStatuses.contains(WatchStatus.dnf),
                     isRowHovered: _isHovered,
                     tooltip: 'Did not finish',
@@ -1521,6 +1573,7 @@ class _EpisodeRowState extends State<_EpisodeRow> {
 class _EpisodeStatusButton extends StatefulWidget {
   final IconData icon;
   final IconData activeIcon;
+  final WatchStatus status;
   final bool isActive;
   final bool isRowHovered;
   final String tooltip;
@@ -1531,6 +1584,7 @@ class _EpisodeStatusButton extends StatefulWidget {
   const _EpisodeStatusButton({
     required this.icon,
     required this.activeIcon,
+    required this.status,
     required this.isActive,
     required this.tooltip,
     this.isRowHovered = false,
@@ -1553,23 +1607,25 @@ class _EpisodeStatusButtonState extends State<_EpisodeStatusButton> {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
+    final statusColor = StatusColors.getColor(widget.status, isDark: isDark);
     
     // Determine icon and color based on state:
-    // - Active: filled icon, full primary color
-    // - Hovered (not active): filled icon, lighter primary color
+    // - Active: filled icon, status color
+    // - Hovered (not active): filled icon, lighter status color
     // - Row hovered (not icon hovered, not active): outline icon, visible but not highlighted
     // - Default: outline icon, subtle/faded color
     final IconData icon;
     final Color color;
     
     if (widget.isActive) {
-      // Active - filled icon, full primary color
+      // Active - filled icon, status color
       icon = widget.activeIcon;
-      color = theme.colorScheme.primary;
+      color = statusColor;
     } else if (_isHovered) {
-      // Hovered - filled icon, lighter primary color
+      // Hovered - filled icon, lighter status color
       icon = widget.activeIcon;
-      color = theme.colorScheme.primary.withValues(alpha: 0.6);
+      color = statusColor.withValues(alpha: 0.6);
     } else if (widget.isRowHovered) {
       // Row is hovered but not this specific icon - show outline but not faded
       icon = widget.icon;

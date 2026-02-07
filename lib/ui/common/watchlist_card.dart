@@ -11,6 +11,7 @@ import 'snackbar_utils.dart';
 import 'release_preferences_dialog.dart';
 import 'tv_preferences_dialog.dart';
 import 'expand_poster_button.dart';
+import 'status_colors.dart';
 import '../../providers/providers.dart';
 import '../screens/show_configuration_screen.dart';
 import '../screens/collection_configuration_screen.dart';
@@ -40,6 +41,10 @@ class WatchlistCard extends ConsumerStatefulWidget {
 class _WatchlistCardState extends ConsumerState<WatchlistCard> {
   bool _isHovered = false;
 
+  /// Checks if this entry is a collection (movie with Collection role)
+  bool get _isCollection => widget.entry.type == WorkType.movie && 
+      widget.entry.followedContributors.any((c) => c.role == 'Collection');
+
   /// Gets episode status counts for a TV show
   Map<WatchStatus, int> _getEpisodeStatusCounts() {
     if (widget.entry.type != WorkType.tvShow) return {};
@@ -57,6 +62,101 @@ class _WatchlistCardState extends ConsumerState<WatchlistCard> {
     return counts;
   }
 
+  /// Gets movie status counts for a collection
+  Map<WatchStatus, int> _getMovieStatusCounts() {
+    if (!_isCollection) return {};
+    
+    final movieStatusRepo = ref.read(movieStatusRepositoryProvider);
+    final movies = movieStatusRepo.getMoviesByCollection(widget.entry.tmdbId);
+    
+    final counts = <WatchStatus, int>{};
+    for (final movie in movies) {
+      // Count all statuses for each movie (movies can have multiple statuses)
+      for (final record in movie.statusRecords) {
+        counts[record.status] = (counts[record.status] ?? 0) + 1;
+      }
+    }
+    return counts;
+  }
+
+  void _navigateToCollectionConfig() {
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (context) => CollectionConfigurationScreen(
+          collectionId: widget.entry.tmdbId,
+          collectionTitle: widget.entry.title,
+        ),
+      ),
+    );
+  }
+
+  /// Navigates to the config screen and shows a "Mark all as X" dialog
+  Future<void> _navigateToConfigWithMarkAll(WatchStatus status) async {
+    final entry = widget.entry;
+    final isTvShow = entry.type == WorkType.tvShow;
+    final itemLabel = isTvShow ? 'episodes' : 'movies';
+    
+    String statusName;
+    switch (status) {
+      case WatchStatus.wantToWatch:
+        statusName = 'Want to watch';
+        break;
+      case WatchStatus.inProgress:
+        statusName = 'In progress';
+        break;
+      case WatchStatus.watched:
+        statusName = 'Watched';
+        break;
+      case WatchStatus.dnf:
+        statusName = 'Did not finish';
+        break;
+    }
+    
+    // Show confirmation dialog
+    final result = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text('Mark all as $statusName?'),
+        content: Text('This will mark all $itemLabel in "${entry.title}" as $statusName.'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('Yes'),
+          ),
+        ],
+      ),
+    );
+    
+    if (result == true && mounted) {
+      // Navigate to config screen
+      if (isTvShow) {
+        Navigator.of(context).push(
+          MaterialPageRoute(
+            builder: (context) => ShowConfigurationScreen(
+              showId: entry.tmdbId,
+              showTitle: entry.title,
+              initialMarkAllStatus: status,
+            ),
+          ),
+        );
+      } else {
+        Navigator.of(context).push(
+          MaterialPageRoute(
+            builder: (context) => CollectionConfigurationScreen(
+              collectionId: entry.tmdbId,
+              collectionTitle: entry.title,
+              initialMarkAllStatus: status,
+            ),
+          ),
+        );
+      }
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
@@ -68,6 +168,44 @@ class _WatchlistCardState extends ConsumerState<WatchlistCard> {
     final watchedRecords = entry.statusRecords.where((r) => r.status == WatchStatus.watched).toList();
     final hasWatched = watchedRecords.isNotEmpty;
     final watchCount = watchedRecords.isNotEmpty ? watchedRecords.first.watchCount : 0;
+    final hasDnf = entry.statusRecords.any((r) => r.status == WatchStatus.dnf);
+    
+    // For TV/collections, get DNF count and total count
+    final isTvShow = entry.type == WorkType.tvShow;
+    final isCollection = _isCollection;
+    final hasConfigScreen = isTvShow || isCollection;
+    
+    int dnfCount = 0;
+    int totalItemCount = 0;
+    if (hasConfigScreen) {
+      final statusCounts = isTvShow ? _getEpisodeStatusCounts() : _getMovieStatusCounts();
+      dnfCount = statusCounts[WatchStatus.dnf] ?? 0;
+      // Get total count from the repository
+      if (isTvShow) {
+        final episodeRepo = ref.read(episodeStatusRepositoryProvider);
+        final tvDetailRepo = ref.read(tvDetailRepositoryProvider);
+        final showDetail = tvDetailRepo.getTvShowDetail(entry.tmdbId);
+        totalItemCount = showDetail?.numberOfEpisodes ?? 0;
+      } else {
+        // For collections, we need to check the movie count
+        final movieStatusRepo = ref.read(movieStatusRepositoryProvider);
+        final movies = movieStatusRepo.getMoviesByCollection(entry.tmdbId);
+        // Use the count from TMDB if available, otherwise use what we have
+        totalItemCount = movies.length;
+      }
+    }
+    
+    // Determine if we should show reduced opacity
+    // For movies: when hasDnf is true
+    // For TV/collections: only when ALL items are DNF
+    final showReducedOpacity = hasConfigScreen 
+        ? (dnfCount > 0 && totalItemCount > 0 && dnfCount >= totalItemCount)
+        : hasDnf;
+    
+    // Determine if we should show DNF indicator
+    // For movies: when hasDnf is true
+    // For TV/collections: when any items are DNF (show with count)
+    final showDnfIndicator = hasConfigScreen ? dnfCount > 0 : hasDnf;
 
     Widget poster = entry.posterPath != null
         ? CachedNetworkImage(
@@ -107,44 +245,46 @@ class _WatchlistCardState extends ConsumerState<WatchlistCard> {
     return MouseRegion(
       onEnter: (_) => setState(() => _isHovered = true),
       onExit: (_) => setState(() => _isHovered = false),
-      child: Card(
-        elevation: _isHovered ? 4 : 1,
-        clipBehavior: Clip.antiAlias,
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(12),
-        ),
-        child: InkWell(
-          onTap: () {
-            if (entry.type == WorkType.tvShow) {
-              Navigator.of(context).push(
-                MaterialPageRoute(
-                  builder: (context) => ShowConfigurationScreen(
-                    showId: entry.tmdbId,
-                    showTitle: entry.title,
+      child: Opacity(
+        opacity: showReducedOpacity ? 0.6 : 1.0,
+        child: Card(
+          elevation: _isHovered ? 4 : 1,
+          clipBehavior: Clip.antiAlias,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(12),
+          ),
+          child: InkWell(
+            onTap: () {
+              if (entry.type == WorkType.tvShow) {
+                Navigator.of(context).push(
+                  MaterialPageRoute(
+                    builder: (context) => ShowConfigurationScreen(
+                      showId: entry.tmdbId,
+                      showTitle: entry.title,
+                    ),
                   ),
-                ),
-              );
-            } else if (entry.type == WorkType.movie && 
-                      entry.followedContributors.any((c) => c.role == 'Collection')) {
-              Navigator.of(context).push(
-                MaterialPageRoute(
-                  builder: (context) => CollectionConfigurationScreen(
-                    collectionId: entry.tmdbId,
-                    collectionTitle: entry.title,
+                );
+              } else if (entry.type == WorkType.movie && 
+                        entry.followedContributors.any((c) => c.role == 'Collection')) {
+                Navigator.of(context).push(
+                  MaterialPageRoute(
+                    builder: (context) => CollectionConfigurationScreen(
+                      collectionId: entry.tmdbId,
+                      collectionTitle: entry.title,
+                    ),
                   ),
-                ),
-              );
-            } else {
-              widget.onTap?.call();
-            }
-          },
-          child: Column(
-          mainAxisSize: MainAxisSize.max,
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            // Poster image area - takes remaining space after title and buttons
-            Expanded(
-              child: Stack(
+                );
+              } else {
+                widget.onTap?.call();
+              }
+            },
+            child: Column(
+            mainAxisSize: MainAxisSize.max,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              // Poster image area - takes remaining space after title and buttons
+              Expanded(
+                child: Stack(
                 fit: StackFit.expand,
                 children: [
                   // Fallback background for transparent posters
@@ -178,20 +318,46 @@ class _WatchlistCardState extends ConsumerState<WatchlistCard> {
                               widget.onToggleNotificationSnooze?.call();
                               break;
                             case 'dnf':
-                              widget.onStatusChanged?.call(WatchStatus.dnf);
+                              // For movies: toggle DNF status
+                              // For TV/collections: navigate to config screen
+                              if (entry.type == WorkType.tvShow) {
+                                _navigateToShowConfig();
+                              } else if (_isCollection) {
+                                _navigateToCollectionConfig();
+                              } else {
+                                // Movie - toggle DNF
+                                if (hasDnf) {
+                                  // Remove DNF status
+                                  final logic = ref.read(watchlistLogicProvider);
+                                  logic.removeStatusFromWork(
+                                    entry.tmdbId,
+                                    entry.type,
+                                    WatchStatus.dnf,
+                                  );
+                                  ref.invalidate(watchlistEntriesProvider);
+                                } else {
+                                  widget.onStatusChanged?.call(WatchStatus.dnf);
+                                }
+                              }
                               break;
                           }
                         },
                         itemBuilder: (context) {
+                          final dnfLabel = entry.type == WorkType.tvShow || _isCollection
+                              ? 'Did not finish...'
+                              : hasDnf 
+                                  ? 'Unmark Did not finish'
+                                  : 'Did not finish';
+                          
                           if (entry.isSnoozed) {
                             return [
                               const PopupMenuItem(
                                 value: 'snooze',
                                 child: Text('Unhide'),
                               ),
-                              const PopupMenuItem(
+                              PopupMenuItem(
                                 value: 'dnf',
-                                child: Text('Did not finish'),
+                                child: Text(dnfLabel),
                               ),
                               const PopupMenuItem(
                                 value: 'release_preferences',
@@ -207,6 +373,10 @@ class _WatchlistCardState extends ConsumerState<WatchlistCard> {
                               PopupMenuItem(
                                 value: 'toggle_notifications',
                                 child: Text(entry.notificationsSnoozed ? 'Unpause Notifications' : 'Pause Notifications'),
+                              ),
+                              PopupMenuItem(
+                                value: 'dnf',
+                                child: Text(dnfLabel),
                               ),
                               const PopupMenuItem(
                                 value: 'release_preferences',
@@ -246,23 +416,41 @@ class _WatchlistCardState extends ConsumerState<WatchlistCard> {
                       ),
                     ),
 
-                  // DNF indicator (when hidden)
-                  if (entry.isSnoozed && entry.statusRecords.any((r) => r.status == WatchStatus.dnf))
+                  // DNF indicator (shows when item has DNF status)
+                  if (showDnfIndicator)
                     Positioned(
-                      top: 8,
-                      left: entry.notificationsSnoozed ? 40 : 8,
+                      top: entry.notificationsSnoozed ? 40 : 8,
+                      left: 8,
                       child: Tooltip(
-                        message: 'Did not finish',
+                        message: hasConfigScreen && dnfCount > 0
+                            ? 'Did not finish ($dnfCount ${isTvShow ? 'episodes' : 'movies'})'
+                            : 'Did not finish',
                         child: Container(
                           padding: const EdgeInsets.all(6),
                           decoration: BoxDecoration(
                             color: Colors.black.withValues(alpha: 0.6),
                             borderRadius: BorderRadius.circular(6),
                           ),
-                          child: const Icon(
-                            Icons.close,
-                            size: 16,
-                            color: Colors.white,
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Icon(
+                                Icons.close,
+                                size: 16,
+                                color: StatusColors.getColor(WatchStatus.dnf),
+                              ),
+                              if (hasConfigScreen && dnfCount > 0) ...[
+                                const SizedBox(width: 2),
+                                Text(
+                                  dnfCount > 99 ? '99+' : '$dnfCount',
+                                  style: TextStyle(
+                                    color: StatusColors.getColor(WatchStatus.dnf),
+                                    fontSize: 10,
+                                    fontWeight: FontWeight.bold,
+                                  ),
+                                ),
+                              ],
+                            ],
                           ),
                         ),
                       ),
@@ -301,7 +489,11 @@ class _WatchlistCardState extends ConsumerState<WatchlistCard> {
                         borderRadius: BorderRadius.circular(6),
                       ),
                       child: Icon(
-                        entry.type == WorkType.movie ? Icons.movie : Icons.tv,
+                        entry.type == WorkType.tvShow 
+                            ? Icons.tv 
+                            : _isCollection 
+                                ? Icons.video_library 
+                                : Icons.movie,
                         size: 16,
                         color: Colors.white,
                       ),
@@ -358,20 +550,25 @@ class _WatchlistCardState extends ConsumerState<WatchlistCard> {
               padding: const EdgeInsets.symmetric(horizontal: 4),
               child: Builder(
                 builder: (context) {
-                  // Get episode counts for TV shows
-                  final episodeCounts = entry.type == WorkType.tvShow 
-                      ? _getEpisodeStatusCounts() 
-                      : <WatchStatus, int>{};
-                  final wantToWatchCount = episodeCounts[WatchStatus.wantToWatch] ?? 0;
-                  final inProgressCount = episodeCounts[WatchStatus.inProgress] ?? 0;
-                  final watchedCount = episodeCounts[WatchStatus.watched] ?? 0;
-                  
-                  // For TV shows, icons are active if ANY episodes have that status
-                  // For movies, use the work-level status
+                  // Get episode counts for TV shows, movie counts for collections
                   final isTvShow = entry.type == WorkType.tvShow;
-                  final showWantToWatch = isTvShow ? wantToWatchCount > 0 : hasWantToWatch;
-                  final showInProgress = isTvShow ? inProgressCount > 0 : hasInProgress;
-                  final showWatched = isTvShow ? watchedCount > 0 : hasWatched;
+                  final isCollection = _isCollection;
+                  final hasConfigScreen = isTvShow || isCollection;
+                  
+                  final statusCounts = isTvShow 
+                      ? _getEpisodeStatusCounts() 
+                      : isCollection
+                          ? _getMovieStatusCounts()
+                          : <WatchStatus, int>{};
+                  final wantToWatchCount = statusCounts[WatchStatus.wantToWatch] ?? 0;
+                  final inProgressCount = statusCounts[WatchStatus.inProgress] ?? 0;
+                  final watchedCount = statusCounts[WatchStatus.watched] ?? 0;
+                  
+                  // For TV shows and collections, icons are active if ANY items have that status
+                  // For movies, use the work-level status
+                  final showWantToWatch = hasConfigScreen ? wantToWatchCount > 0 : hasWantToWatch;
+                  final showInProgress = hasConfigScreen ? inProgressCount > 0 : hasInProgress;
+                  final showWatched = hasConfigScreen ? watchedCount > 0 : hasWatched;
                   
                   // Format count for display - abbreviate large numbers
                   String? formatCount(int count) {
@@ -379,6 +576,9 @@ class _WatchlistCardState extends ConsumerState<WatchlistCard> {
                     if (count > 99) return '99+';
                     return '$count';
                   }
+
+                  // Item label for tooltips
+                  final itemLabel = isTvShow ? 'episodes' : 'movies';
                   
                   return Row(
                     mainAxisAlignment: MainAxisAlignment.spaceEvenly,
@@ -388,13 +588,17 @@ class _WatchlistCardState extends ConsumerState<WatchlistCard> {
                         child: _StatusButton(
                           icon: Icons.bookmark_border,
                           activeIcon: Icons.bookmark,
+                          status: WatchStatus.wantToWatch,
                           isActive: showWantToWatch,
-                          tooltip: isTvShow && wantToWatchCount > 0 
-                              ? 'Want to watch ($wantToWatchCount episodes)' 
+                          tooltip: hasConfigScreen && wantToWatchCount > 0 
+                              ? 'Want to watch ($wantToWatchCount $itemLabel)' 
                               : 'Want to watch',
                           label: formatCount(wantToWatchCount),
-                          // TV shows: navigate to config screen, movies: toggle want to watch
-                          onTap: isTvShow ? () => _navigateToShowConfig() : () => _handleWantToWatchToggle(hasWantToWatch),
+                          // TV shows/collections: navigate with mark all dialog, movies: toggle want to watch
+                          onTap: hasConfigScreen 
+                              ? () => _navigateToConfigWithMarkAll(WatchStatus.wantToWatch)
+                              : () => _handleWantToWatchToggle(hasWantToWatch),
+                          onLongPress: hasConfigScreen ? () => _showDNFMenu(WatchStatus.wantToWatch) : null,
                         ),
                       ),
 
@@ -403,14 +607,17 @@ class _WatchlistCardState extends ConsumerState<WatchlistCard> {
                         child: _StatusButton(
                           icon: Icons.play_circle_outline,
                           activeIcon: Icons.play_circle,
+                          status: WatchStatus.inProgress,
                           isActive: showInProgress,
-                          tooltip: isTvShow && inProgressCount > 0 
-                              ? 'In progress ($inProgressCount episodes)' 
+                          tooltip: hasConfigScreen && inProgressCount > 0 
+                              ? 'In progress ($inProgressCount $itemLabel)' 
                               : 'In progress',
                           label: formatCount(inProgressCount),
-                          // TV shows: navigate to config screen, movies: set in progress
-                          onTap: isTvShow ? () => _navigateToShowConfig() : () => widget.onStatusChanged?.call(WatchStatus.inProgress),
-                          onLongPress: isTvShow ? null : () => _showDNFMenu(WatchStatus.inProgress),
+                          // TV shows/collections: navigate with mark all dialog, movies: set in progress
+                          onTap: hasConfigScreen 
+                              ? () => _navigateToConfigWithMarkAll(WatchStatus.inProgress)
+                              : () => widget.onStatusChanged?.call(WatchStatus.inProgress),
+                          onLongPress: () => _showDNFMenu(WatchStatus.inProgress),
                         ),
                       ),
 
@@ -419,20 +626,23 @@ class _WatchlistCardState extends ConsumerState<WatchlistCard> {
                         child: _StatusButton(
                           icon: Icons.check_circle_outline,
                           activeIcon: Icons.check_circle,
+                          status: WatchStatus.watched,
                           isActive: showWatched,
-                          tooltip: isTvShow && watchedCount > 0
-                              ? 'Watched ($watchedCount episodes)'
+                          tooltip: hasConfigScreen && watchedCount > 0
+                              ? 'Watched ($watchedCount $itemLabel)'
                               : watchCount > 1 
                                   ? 'Watched x$watchCount' 
                                   : 'Watched',
-                          label: isTvShow 
+                          label: hasConfigScreen 
                               ? formatCount(watchedCount)
                               : watchCount > 1 
                                   ? 'x$watchCount' 
                                   : null,
-                          // TV shows: navigate to config screen, movies: set watched
-                          onTap: isTvShow ? () => _navigateToShowConfig() : () => widget.onStatusChanged?.call(WatchStatus.watched),
-                          onLongPress: isTvShow ? null : () => _showDNFMenu(WatchStatus.watched),
+                          // TV shows/collections: navigate with mark all dialog, movies: set watched
+                          onTap: hasConfigScreen 
+                              ? () => _navigateToConfigWithMarkAll(WatchStatus.watched)
+                              : () => widget.onStatusChanged?.call(WatchStatus.watched),
+                          onLongPress: () => _showDNFMenu(WatchStatus.watched),
                         ),
                       ),
                     ],
@@ -443,6 +653,7 @@ class _WatchlistCardState extends ConsumerState<WatchlistCard> {
           ],
         ),
         ),
+      ),
       ),
     );
   }
@@ -491,6 +702,12 @@ class _WatchlistCardState extends ConsumerState<WatchlistCard> {
   }
 
   void _showDNFMenu(WatchStatus otherStatus) {
+    final entry = widget.entry;
+    final hasDnf = entry.statusRecords.any((r) => r.status == WatchStatus.dnf);
+    final isTvShow = entry.type == WorkType.tvShow;
+    final isCollection = _isCollection;
+    final hasConfigScreen = isTvShow || isCollection;
+    
     showModalBottomSheet(
       context: context,
       builder: (context) {
@@ -499,11 +716,28 @@ class _WatchlistCardState extends ConsumerState<WatchlistCard> {
             mainAxisSize: MainAxisSize.min,
             children: [
               ListTile(
-                leading: const Icon(Icons.cancel),
-                title: const Text('Did not finish'),
+                leading: Icon(
+                  hasDnf ? Icons.cancel_outlined : Icons.cancel,
+                  color: hasDnf ? null : StatusColors.getColor(WatchStatus.dnf),
+                ),
+                title: Text(hasDnf ? 'Unmark Did not finish' : 'Did not finish'),
                 onTap: () {
                   Navigator.pop(context);
-                  widget.onStatusChanged?.call(WatchStatus.dnf);
+                  if (hasConfigScreen) {
+                    // Navigate to config screen with mark all dialog
+                    _navigateToConfigWithMarkAll(WatchStatus.dnf);
+                  } else if (hasDnf) {
+                    // Remove DNF status for movies
+                    final logic = ref.read(watchlistLogicProvider);
+                    logic.removeStatusFromWork(
+                      entry.tmdbId,
+                      entry.type,
+                      WatchStatus.dnf,
+                    );
+                    ref.invalidate(watchlistEntriesProvider);
+                  } else {
+                    widget.onStatusChanged?.call(WatchStatus.dnf);
+                  }
                 },
               ),
               ListTile(
@@ -511,6 +745,7 @@ class _WatchlistCardState extends ConsumerState<WatchlistCard> {
                   otherStatus == WatchStatus.inProgress
                       ? Icons.play_circle
                       : Icons.check_circle,
+                  color: StatusColors.getColor(otherStatus),
                 ),
                 title: Text(
                   otherStatus == WatchStatus.inProgress
@@ -519,7 +754,11 @@ class _WatchlistCardState extends ConsumerState<WatchlistCard> {
                 ),
                 onTap: () {
                   Navigator.pop(context);
-                  widget.onStatusChanged?.call(otherStatus);
+                  if (hasConfigScreen) {
+                    _navigateToConfigWithMarkAll(otherStatus);
+                  } else {
+                    widget.onStatusChanged?.call(otherStatus);
+                  }
                 },
               ),
             ],
@@ -605,6 +844,7 @@ class _WatchlistCardState extends ConsumerState<WatchlistCard> {
 class _StatusButton extends StatefulWidget {
   final IconData icon;
   final IconData activeIcon;
+  final WatchStatus status;
   final bool isActive;
   final String tooltip;
   final String? label;
@@ -614,6 +854,7 @@ class _StatusButton extends StatefulWidget {
   const _StatusButton({
     required this.icon,
     required this.activeIcon,
+    required this.status,
     required this.isActive,
     required this.tooltip,
     this.label,
@@ -656,6 +897,8 @@ class _StatusButtonState extends State<_StatusButton>
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
+    final statusColor = StatusColors.getColor(widget.status, isDark: isDark);
     
     return Tooltip(
       message: widget.tooltip,
@@ -685,7 +928,7 @@ class _StatusButtonState extends State<_StatusButton>
                 padding: const EdgeInsets.symmetric(vertical: 8.0, horizontal: 6),
                 decoration: BoxDecoration(
                   color: widget.isActive
-                      ? theme.colorScheme.primaryContainer.withValues(alpha: 0.3)
+                      ? statusColor.withValues(alpha: 0.2)
                       : _isPressed
                           ? theme.colorScheme.surfaceContainerHighest
                           : Colors.transparent,
@@ -702,7 +945,7 @@ class _StatusButtonState extends State<_StatusButton>
                         key: ValueKey(widget.isActive),
                         size: 20,
                         color: widget.isActive
-                            ? theme.colorScheme.primary
+                            ? statusColor
                             : theme.colorScheme.onSurfaceVariant,
                       ),
                     ),
@@ -715,7 +958,7 @@ class _StatusButtonState extends State<_StatusButton>
                             fontSize: 9,
                             fontWeight: FontWeight.w600,
                             color: widget.isActive
-                                ? theme.colorScheme.primary
+                                ? statusColor
                                 : theme.colorScheme.onSurfaceVariant,
                           ) ?? const TextStyle(),
                           child: Text(widget.label!),

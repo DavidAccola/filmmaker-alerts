@@ -15,6 +15,7 @@ class AppConstants {
   static const String episodeStatusesBox = 'episode_statuses';
   static const String seasonStatusesBox = 'season_statuses';
   static const String movieStatusesBox = 'movie_statuses';
+  static const String collectionOrdersBox = 'collection_orders';
 
   // Department Order (Critical for UI consistency)
   // This is used for broad categorization priority if specific roles aren't found

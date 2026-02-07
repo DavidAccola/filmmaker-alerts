@@ -21,6 +21,7 @@ import 'data/models/status_record.dart';
 import 'data/models/episode_status_entry.dart';
 import 'data/models/season_status_entry.dart';
 import 'data/models/movie_status_entry.dart';
+import 'data/models/collection_order.dart';
 import 'ui/screens/main_screen.dart';
 import 'ui/common/rate_limit_listener.dart';
 import 'logic/background_service.dart';
@@ -127,6 +128,7 @@ void main() async {
   Hive.registerAdapter(EpisodeStatusEntryAdapter());
   Hive.registerAdapter(SeasonStatusEntryAdapter());
   Hive.registerAdapter(MovieStatusEntryAdapter());
+  Hive.registerAdapter(CollectionOrderAdapter());
 
   // 4. Open Boxes with error handling for lock conflicts
   try {
@@ -245,6 +247,7 @@ Future<void> _openHiveBoxes() async {
     (AppConstants.episodeStatusesBox, EpisodeStatusEntry),
     (AppConstants.seasonStatusesBox, SeasonStatusEntry),
     (AppConstants.movieStatusesBox, MovieStatusEntry),
+    (AppConstants.collectionOrdersBox, CollectionOrder),
   ];
 
   for (final (boxName, _) in boxes) {
@@ -280,6 +283,8 @@ Future<void> _openHiveBoxes() async {
           await Hive.openBox<SeasonStatusEntry>(boxName);
         } else if (boxName == AppConstants.movieStatusesBox) {
           await Hive.openBox<MovieStatusEntry>(boxName);
+        } else if (boxName == AppConstants.collectionOrdersBox) {
+          await Hive.openBox<CollectionOrder>(boxName);
         }
         
         debugPrint('[Main] Successfully opened Hive box: $boxName');

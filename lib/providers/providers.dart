@@ -8,6 +8,7 @@ import '../data/models/watchlist_entry.dart';
 import '../data/models/episode_status_entry.dart';
 import '../data/models/season_status_entry.dart';
 import '../data/models/movie_status_entry.dart';
+import '../data/models/collection_order.dart';
 import '../data/repositories/contributor_repository.dart';
 import '../data/repositories/contributor_detail_repository.dart';
 import '../data/repositories/history_repository.dart';
@@ -21,6 +22,7 @@ import '../data/repositories/watchlist_repository.dart';
 import '../data/repositories/episode_status_repository.dart';
 import '../data/repositories/season_status_repository.dart';
 import '../data/repositories/movie_status_repository.dart';
+import '../data/repositories/collection_order_repository.dart';
 import '../data/services/tmdb_service.dart';
 import '../data/services/justwatch_service.dart';
 import '../data/services/streaming_service.dart';
@@ -96,6 +98,11 @@ final seasonStatusRepositoryProvider = Provider<SeasonStatusRepository>((ref) {
 final movieStatusRepositoryProvider = Provider<MovieStatusRepository>((ref) {
   final box = Hive.box<MovieStatusEntry>(AppConstants.movieStatusesBox);
   return MovieStatusRepository(box);
+});
+
+final collectionOrderRepositoryProvider = Provider<CollectionOrderRepository>((ref) {
+  final box = Hive.box<CollectionOrder>(AppConstants.collectionOrdersBox);
+  return CollectionOrderRepository(box);
 });
 
 // --- Services ---

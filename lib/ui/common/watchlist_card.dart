@@ -1,7 +1,9 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:intl/intl.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:material_symbols_icons/symbols.dart';
 import '../../data/models/watchlist_entry.dart';
 import '../../data/models/contributor_detail.dart';
 import '../../data/models/contributor.dart'; // For TvNotificationPreferences
@@ -21,8 +23,9 @@ class WatchlistCard extends ConsumerStatefulWidget {
   final VoidCallback? onTap;
   final VoidCallback? onDelete;
   final VoidCallback? onSnooze;
-  final VoidCallback? onToggleNotificationSnooze;
   final Function(WatchStatus)? onStatusChanged;
+  final bool showDateAlways;
+  final int? displayRank;
 
   const WatchlistCard({
     super.key,
@@ -30,16 +33,43 @@ class WatchlistCard extends ConsumerStatefulWidget {
     this.onTap,
     this.onDelete,
     this.onSnooze,
-    this.onToggleNotificationSnooze,
     this.onStatusChanged,
+    this.showDateAlways = false,
+    this.displayRank,
   });
 
   @override
   ConsumerState<WatchlistCard> createState() => _WatchlistCardState();
 }
 
-class _WatchlistCardState extends ConsumerState<WatchlistCard> {
+class _WatchlistCardState extends ConsumerState<WatchlistCard>
+    with SingleTickerProviderStateMixin {
   bool _isHovered = false;
+  bool _showDateOnHover = false;
+  bool _hasHoverInteracted = false; // true after first hover, enables crossfade animation
+  Timer? _hoverTimer;
+  late AnimationController _dateBadgeAnimController;
+  late Animation<double> _dateBadgeFade;
+
+  @override
+  void initState() {
+    super.initState();
+    _dateBadgeAnimController = AnimationController(
+      duration: const Duration(milliseconds: 200),
+      vsync: this,
+    );
+    _dateBadgeFade = CurvedAnimation(
+      parent: _dateBadgeAnimController,
+      curve: Curves.easeInOut,
+    );
+  }
+
+  @override
+  void dispose() {
+    _hoverTimer?.cancel();
+    _dateBadgeAnimController.dispose();
+    super.dispose();
+  }
 
   /// Checks if this entry is a collection (movie with Collection role)
   bool get _isCollection => widget.entry.type == WorkType.movie && 
@@ -79,6 +109,245 @@ class _WatchlistCardState extends ConsumerState<WatchlistCard> {
     return counts;
   }
 
+  /// Gets the most relevant release date for display:
+  /// - TV shows: lastAirDate from cached TvShowDetail (most recent episode)
+  /// - Collections: most recent releaseDate among collection movies
+  /// - Movies: the stored entry.releaseDate
+  DateTime? _getEffectiveReleaseDate() {
+    final entry = widget.entry;
+
+    if (entry.type == WorkType.tvShow) {
+      final tvDetailRepo = ref.read(tvDetailRepositoryProvider);
+      final showDetail = tvDetailRepo.getTvShowDetail(entry.tmdbId);
+      if (showDetail != null && showDetail.lastAirDate != null) {
+        return showDetail.lastAirDate;
+      }
+      // Fall back to stored releaseDate (firstAirDate), then cached detail's firstAirDate
+      if (entry.releaseDate != null) return entry.releaseDate;
+      if (showDetail?.firstAirDate != null) return showDetail!.firstAirDate;
+      return null;
+    }
+
+    if (_isCollection) {
+      final movieStatusRepo = ref.read(movieStatusRepositoryProvider);
+      final movies = movieStatusRepo.getMoviesByCollection(entry.tmdbId);
+      DateTime? mostRecent;
+      for (final movie in movies) {
+        if (movie.releaseDate != null) {
+          if (mostRecent == null || movie.releaseDate!.isAfter(mostRecent)) {
+            mostRecent = movie.releaseDate;
+          }
+        }
+      }
+      if (mostRecent != null) return mostRecent;
+      // Fall back to entry.releaseDate, then cached movie detail
+      if (entry.releaseDate != null) return entry.releaseDate;
+      final movieDetailRepo = ref.read(movieDetailRepositoryProvider);
+      final movieDetail = movieDetailRepo.getMovieDetail(entry.tmdbId);
+      return movieDetail?.releaseDate;
+    }
+
+    // For movies, try entry.releaseDate first, then cached movie detail, then movie cache
+    if (entry.type == WorkType.movie) {
+      if (entry.releaseDate != null) return entry.releaseDate;
+      final movieDetailRepo = ref.read(movieDetailRepositoryProvider);
+      final movieDetail = movieDetailRepo.getMovieDetail(entry.tmdbId);
+      if (movieDetail?.releaseDate != null) return movieDetail!.releaseDate;
+      // Try the movie cache (populated by release checker)
+      final movieCacheRepo = ref.read(movieCacheRepositoryProvider);
+      final cacheEntry = movieCacheRepo.getMovie(entry.tmdbId);
+      if (cacheEntry?.releaseDate != null && cacheEntry!.releaseDate!.isNotEmpty) {
+        return DateTime.tryParse(cacheEntry.releaseDate!);
+      }
+      return null;
+    }
+
+    return entry.releaseDate;
+  }
+
+  /// Whether this entry represents an ended/completed TV show.
+  /// Only applies to TV shows with status "Ended" or "Canceled".
+  bool _isEndedOrCompleted() {
+    final entry = widget.entry;
+    if (entry.type != WorkType.tvShow) return false;
+
+    final tvDetailRepo = ref.read(tvDetailRepositoryProvider);
+    final showDetail = tvDetailRepo.getTvShowDetail(entry.tmdbId);
+    if (showDetail?.status != null) {
+      final status = showDetail!.status!.toLowerCase();
+      return status == 'ended' || status == 'canceled';
+    }
+    return false;
+  }
+
+  /// Whether this entry represents an ongoing TV show (still airing new content).
+  /// Only applies to TV shows with status like "Returning Series" or "In Production".
+  bool _isOngoing() {
+    final entry = widget.entry;
+    if (entry.type != WorkType.tvShow) return false;
+
+    final tvDetailRepo = ref.read(tvDetailRepositoryProvider);
+    final showDetail = tvDetailRepo.getTvShowDetail(entry.tmdbId);
+    if (showDetail?.status != null) {
+      final status = showDetail!.status!.toLowerCase();
+      // TMDB statuses that indicate a show is still active
+      return status == 'returning series' || status == 'in production';
+    }
+    return false;
+  }
+
+  /// Returns the date-related status label for this entry, or null if no special status.
+  String? _getDateStatusLabel() {
+    final effectiveDate = _getEffectiveReleaseDate();
+    final now = DateTime.now();
+    final sixMonthsAgo = now.subtract(const Duration(days: 183));
+
+    if (_isEndedOrCompleted()) return 'Ended';
+    if (_isOngoing()) return 'Ongoing';
+    if (effectiveDate != null && effectiveDate.isAfter(now)) return 'Upcoming';
+    if (effectiveDate != null &&
+        effectiveDate.isBefore(now) &&
+        effectiveDate.isAfter(sixMonthsAgo)) {
+      final entry = widget.entry;
+      if (entry.lastViewedAt == null || entry.lastViewedAt!.isBefore(effectiveDate)) {
+        return 'Recently released';
+      }
+    }
+    if (effectiveDate == null) return 'TBD';
+    return null;
+  }
+
+  /// Builds the date status badge for the bottom-left of the poster.
+  /// - showDateAlways mode (release date sort): always show date text, no hover needed.
+  /// - Normal mode: icons for upcoming/recently released/TBD when not hovered.
+  ///   On hover: crossfade to date only for upcoming/TBD. No date shown for released items.
+  Widget? _buildDateStatusBadge(ThemeData theme) {
+    final effectiveDate = _getEffectiveReleaseDate();
+    final now = DateTime.now();
+    final sixMonthsAgo = now.subtract(const Duration(days: 183));
+    final isFuture = effectiveDate != null && effectiveDate.isAfter(now);
+    final dateColor = isFuture ? const Color(0xFFFFF59D) : Colors.white;
+
+    // --- showDateAlways mode: always show the date text ---
+    if (widget.showDateAlways) {
+      if (effectiveDate == null) {
+        return _textBadge('TBD', Colors.white, theme);
+      }
+      return _textBadge(_formatReleaseDate(effectiveDate), dateColor, theme);
+    }
+
+    // --- Normal mode ---
+
+    // Determine the icon to show when not hovered
+    Widget? iconWidget;
+    bool hasIconStatus = false;
+    if (isFuture) {
+      iconWidget = _dateIconBadgeRaw(Symbols.schedule, 'Upcoming');
+      hasIconStatus = true;
+    } else if (effectiveDate != null &&
+        effectiveDate.isBefore(now) &&
+        effectiveDate.isAfter(sixMonthsAgo)) {
+      final entry = widget.entry;
+      if (entry.lastViewedAt == null || entry.lastViewedAt!.isBefore(effectiveDate)) {
+        iconWidget = _dateIconBadgeRaw(Symbols.fiber_new, 'Recently released');
+        hasIconStatus = true;
+      }
+    } else if (effectiveDate == null) {
+      iconWidget = _dateIconBadgeRaw(Symbols.schedule, 'TBD');
+      hasIconStatus = true;
+    }
+
+    // Only show date on hover for upcoming or TBD — not for already-released items
+    final showDateOnHoverAllowed = isFuture || effectiveDate == null;
+
+    // Build date text widget (or "TBD" text for null dates)
+    Widget? dateWidget;
+    if (effectiveDate != null && showDateOnHoverAllowed) {
+      dateWidget = Text(
+        _formatReleaseDate(effectiveDate),
+        style: theme.textTheme.labelSmall?.copyWith(
+          color: dateColor,
+          fontWeight: FontWeight.w600,
+          fontSize: 10,
+        ),
+      );
+    } else if (effectiveDate == null && showDateOnHoverAllowed) {
+      dateWidget = Text(
+        'TBD',
+        style: theme.textTheme.labelSmall?.copyWith(
+          color: Colors.white,
+          fontWeight: FontWeight.w600,
+          fontSize: 10,
+        ),
+      );
+    }
+
+    // If there's an icon and a date: crossfade between them on hover
+    if (hasIconStatus && dateWidget != null) {
+      return Container(
+        padding: iconWidget is! Text
+            ? const EdgeInsets.all(6)
+            : const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+        decoration: BoxDecoration(
+          color: Colors.black.withValues(alpha: 0.6),
+          borderRadius: BorderRadius.circular(6),
+        ),
+        child: AnimatedCrossFade(
+          duration: (widget.displayRank != null) ? Duration.zero : (_hasHoverInteracted ? const Duration(milliseconds: 200) : Duration.zero),
+          crossFadeState: _showDateOnHover
+              ? CrossFadeState.showSecond
+              : CrossFadeState.showFirst,
+          firstChild: iconWidget!,
+          secondChild: dateWidget,
+          sizeCurve: Curves.easeInOut,
+        ),
+      );
+    }
+
+    // Icon only (TBD with no date, or recently released) — just show the icon
+    if (hasIconStatus && iconWidget != null) {
+      return Container(
+        padding: iconWidget is Text
+            ? const EdgeInsets.symmetric(horizontal: 8, vertical: 4)
+            : const EdgeInsets.all(6),
+        decoration: BoxDecoration(
+          color: Colors.black.withValues(alpha: 0.6),
+          borderRadius: BorderRadius.circular(6),
+        ),
+        child: iconWidget,
+      );
+    }
+
+    // No icon, no date to show
+    return null;
+  }
+
+  Widget _textBadge(String text, Color color, ThemeData theme) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      decoration: BoxDecoration(
+        color: Colors.black.withValues(alpha: 0.6),
+        borderRadius: BorderRadius.circular(6),
+      ),
+      child: Text(
+        text,
+        style: theme.textTheme.labelSmall?.copyWith(
+          color: color,
+          fontWeight: FontWeight.w600,
+          fontSize: 10,
+        ),
+      ),
+    );
+  }
+
+  /// Raw icon widget without container (for use inside AnimatedCrossFade)
+  Widget _dateIconBadgeRaw(IconData icon, String tooltip) {
+    return Tooltip(
+      message: tooltip,
+      child: Icon(icon, size: 14, color: Colors.white),
+    );
+  }
+
   void _navigateToCollectionConfig() {
     Navigator.of(context).push(
       MaterialPageRoute(
@@ -90,70 +359,34 @@ class _WatchlistCardState extends ConsumerState<WatchlistCard> {
     );
   }
 
-  /// Navigates to the config screen and shows a "Mark all as X" dialog
-  Future<void> _navigateToConfigWithMarkAll(WatchStatus status) async {
+  /// Navigates to the config screen and shows a "Mark all as X" dialog after navigation
+  void _navigateToConfigWithMarkAll(WatchStatus status, {bool isUnmarking = false}) {
     final entry = widget.entry;
     final isTvShow = entry.type == WorkType.tvShow;
-    final itemLabel = isTvShow ? 'episodes' : 'movies';
     
-    String statusName;
-    switch (status) {
-      case WatchStatus.wantToWatch:
-        statusName = 'Want to watch';
-        break;
-      case WatchStatus.inProgress:
-        statusName = 'In progress';
-        break;
-      case WatchStatus.watched:
-        statusName = 'Watched';
-        break;
-      case WatchStatus.dnf:
-        statusName = 'Did not finish';
-        break;
-    }
-    
-    // Show confirmation dialog
-    final result = await showDialog<bool>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: Text('Mark all as $statusName?'),
-        content: Text('This will mark all $itemLabel in "${entry.title}" as $statusName.'),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context, false),
-            child: const Text('Cancel'),
+    // Navigate to config screen with the status to prompt for
+    if (isTvShow) {
+      Navigator.of(context).push(
+        MaterialPageRoute(
+          builder: (context) => ShowConfigurationScreen(
+            showId: entry.tmdbId,
+            showTitle: entry.title,
+            initialMarkAllStatus: status,
+            isUnmarkingStatus: isUnmarking,
           ),
-          FilledButton(
-            onPressed: () => Navigator.pop(context, true),
-            child: const Text('Yes'),
+        ),
+      );
+    } else {
+      Navigator.of(context).push(
+        MaterialPageRoute(
+          builder: (context) => CollectionConfigurationScreen(
+            collectionId: entry.tmdbId,
+            collectionTitle: entry.title,
+            initialMarkAllStatus: status,
+            isUnmarkingStatus: isUnmarking,
           ),
-        ],
-      ),
-    );
-    
-    if (result == true && mounted) {
-      // Navigate to config screen
-      if (isTvShow) {
-        Navigator.of(context).push(
-          MaterialPageRoute(
-            builder: (context) => ShowConfigurationScreen(
-              showId: entry.tmdbId,
-              showTitle: entry.title,
-              initialMarkAllStatus: status,
-            ),
-          ),
-        );
-      } else {
-        Navigator.of(context).push(
-          MaterialPageRoute(
-            builder: (context) => CollectionConfigurationScreen(
-              collectionId: entry.tmdbId,
-              collectionTitle: entry.title,
-              initialMarkAllStatus: status,
-            ),
-          ),
-        );
-      }
+        ),
+      );
     }
   }
 
@@ -224,7 +457,7 @@ class _WatchlistCardState extends ConsumerState<WatchlistCard> {
               color: theme.colorScheme.surfaceContainerHighest,
               child: Center(
                 child: Icon(
-                  Icons.movie,
+                  Symbols.movie,
                   size: 40,
                   color: theme.colorScheme.onSurfaceVariant,
                 ),
@@ -235,7 +468,7 @@ class _WatchlistCardState extends ConsumerState<WatchlistCard> {
             color: theme.colorScheme.surfaceContainerHighest,
             child: Center(
               child: Icon(
-                Icons.movie,
+                Symbols.movie,
                 size: 40,
                 color: theme.colorScheme.onSurfaceVariant,
               ),
@@ -243,8 +476,32 @@ class _WatchlistCardState extends ConsumerState<WatchlistCard> {
           );
 
     return MouseRegion(
-      onEnter: (_) => setState(() => _isHovered = true),
-      onExit: (_) => setState(() => _isHovered = false),
+      onEnter: (_) {
+        setState(() {
+          _isHovered = true;
+          _hasHoverInteracted = true;
+        });
+        _hoverTimer?.cancel();
+        if (widget.displayRank != null) {
+          // In user rank grid mode: instant, no delay
+          setState(() => _showDateOnHover = true);
+          _dateBadgeAnimController.forward();
+        } else {
+          _hoverTimer = Timer(const Duration(milliseconds: 250), () {
+            if (mounted && _isHovered) {
+              setState(() => _showDateOnHover = true);
+              _dateBadgeAnimController.forward();
+            }
+          });
+        }
+      },
+      onExit: (_) {
+        _hoverTimer?.cancel();
+        _dateBadgeAnimController.reverse().then((_) {
+          if (mounted) setState(() => _showDateOnHover = false);
+        });
+        setState(() => _isHovered = false);
+      },
       child: Opacity(
         opacity: showReducedOpacity ? 0.6 : 1.0,
         child: Card(
@@ -255,6 +512,10 @@ class _WatchlistCardState extends ConsumerState<WatchlistCard> {
           ),
           child: InkWell(
             onTap: () {
+              // Track that the user viewed this entry
+              entry.lastViewedAt = DateTime.now();
+              entry.save();
+
               if (entry.type == WorkType.tvShow) {
                 Navigator.of(context).push(
                   MaterialPageRoute(
@@ -284,7 +545,10 @@ class _WatchlistCardState extends ConsumerState<WatchlistCard> {
             children: [
               // Poster image area - takes remaining space after title and buttons
               Expanded(
-                child: Stack(
+                child: Builder(
+                builder: (context) {
+                final _dateStatusBadge = _buildDateStatusBadge(theme);
+                return Stack(
                 fit: StackFit.expand,
                 children: [
                   // Fallback background for transparent posters
@@ -314,16 +578,18 @@ class _WatchlistCardState extends ConsumerState<WatchlistCard> {
                             case 'snooze':
                               widget.onSnooze?.call();
                               break;
-                            case 'toggle_notifications':
-                              widget.onToggleNotificationSnooze?.call();
-                              break;
                             case 'dnf':
                               // For movies: toggle DNF status
-                              // For TV/collections: navigate to config screen
+                              // For TV/collections: navigate to config screen with mark all
+                              // Check if all items are DNF (for TV/collections)
+                              final allItemsDnf = hasConfigScreen 
+                                  ? (dnfCount > 0 && totalItemCount > 0 && dnfCount >= totalItemCount)
+                                  : hasDnf;
+                              
                               if (entry.type == WorkType.tvShow) {
-                                _navigateToShowConfig();
+                                _navigateToConfigWithMarkAll(WatchStatus.dnf, isUnmarking: allItemsDnf);
                               } else if (_isCollection) {
-                                _navigateToCollectionConfig();
+                                _navigateToConfigWithMarkAll(WatchStatus.dnf, isUnmarking: allItemsDnf);
                               } else {
                                 // Movie - toggle DNF
                                 if (hasDnf) {
@@ -343,11 +609,14 @@ class _WatchlistCardState extends ConsumerState<WatchlistCard> {
                           }
                         },
                         itemBuilder: (context) {
-                          final dnfLabel = entry.type == WorkType.tvShow || _isCollection
-                              ? 'Did not finish...'
-                              : hasDnf 
-                                  ? 'Unmark Did not finish'
-                                  : 'Did not finish';
+                          // For TV/collections: check if ALL items are DNF
+                          // For movies: check work-level DNF status
+                          final allItemsDnf = hasConfigScreen 
+                              ? (dnfCount > 0 && totalItemCount > 0 && dnfCount >= totalItemCount)
+                              : hasDnf;
+                          final dnfLabel = allItemsDnf
+                              ? 'Unmark Did not finish'
+                              : 'Did not finish';
                           
                           if (entry.isSnoozed) {
                             return [
@@ -355,13 +624,13 @@ class _WatchlistCardState extends ConsumerState<WatchlistCard> {
                                 value: 'snooze',
                                 child: Text('Unhide'),
                               ),
+                              const PopupMenuItem(
+                                value: 'release_preferences',
+                                child: Text('Notification Preferences'),
+                              ),
                               PopupMenuItem(
                                 value: 'dnf',
                                 child: Text(dnfLabel),
-                              ),
-                              const PopupMenuItem(
-                                value: 'release_preferences',
-                                child: Text('Release Preferences'),
                               ),
                               const PopupMenuItem(
                                 value: 'delete',
@@ -370,17 +639,13 @@ class _WatchlistCardState extends ConsumerState<WatchlistCard> {
                             ];
                           } else {
                             return [
-                              PopupMenuItem(
-                                value: 'toggle_notifications',
-                                child: Text(entry.notificationsSnoozed ? 'Unpause Notifications' : 'Pause Notifications'),
+                              const PopupMenuItem(
+                                value: 'release_preferences',
+                                child: Text('Notification Preferences'),
                               ),
                               PopupMenuItem(
                                 value: 'dnf',
                                 child: Text(dnfLabel),
-                              ),
-                              const PopupMenuItem(
-                                value: 'release_preferences',
-                                child: Text('Release Preferences'),
                               ),
                               const PopupMenuItem(
                                 value: 'snooze',
@@ -456,23 +721,34 @@ class _WatchlistCardState extends ConsumerState<WatchlistCard> {
                       ),
                     ),
 
-                  // Release date in bottom-left
-                  if (entry.releaseDate != null)
+                  // Date status badge in bottom-left (icon when not hovered, date text on hover)
+                  if (_dateStatusBadge != null)
                     Positioned(
                       bottom: 8,
                       left: 8,
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                        decoration: BoxDecoration(
-                          color: Colors.black.withValues(alpha: 0.6),
-                          borderRadius: BorderRadius.circular(6),
-                        ),
-                        child: Text(
-                          _formatReleaseDate(entry.releaseDate!),
-                          style: theme.textTheme.labelSmall?.copyWith(
-                            color: Colors.white,
-                            fontWeight: FontWeight.w600,
-                            fontSize: 10,
+                      child: _dateStatusBadge!,
+                    ),
+
+                  // Rank badge in top-center (when in User Rank mode)
+                  if (widget.displayRank != null)
+                    Positioned(
+                      top: 8,
+                      left: 0,
+                      right: 0,
+                      child: Center(
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                          decoration: BoxDecoration(
+                            color: Colors.black.withValues(alpha: 0.7),
+                            borderRadius: BorderRadius.circular(6),
+                          ),
+                          child: Text(
+                            '#${widget.displayRank}',
+                            style: theme.textTheme.labelSmall?.copyWith(
+                              color: theme.colorScheme.primary,
+                              fontWeight: FontWeight.bold,
+                              fontSize: 11,
+                            ),
                           ),
                         ),
                       ),
@@ -490,10 +766,10 @@ class _WatchlistCardState extends ConsumerState<WatchlistCard> {
                       ),
                       child: Icon(
                         entry.type == WorkType.tvShow 
-                            ? Icons.tv 
+                            ? Symbols.tv_gen 
                             : _isCollection 
-                                ? Icons.video_library 
-                                : Icons.movie,
+                                ? Symbols.stack 
+                                : Symbols.movie,
                         size: 16,
                         color: Colors.white,
                       ),
@@ -512,7 +788,9 @@ class _WatchlistCardState extends ConsumerState<WatchlistCard> {
                     ),
                   ),
                 ],
-              ),
+              );
+              },
+            ),
             ),
 
             // Work information
@@ -708,6 +986,26 @@ class _WatchlistCardState extends ConsumerState<WatchlistCard> {
     final isCollection = _isCollection;
     final hasConfigScreen = isTvShow || isCollection;
     
+    // For TV/collections, check if ALL items are DNF
+    int dnfCount = 0;
+    int totalItemCount = 0;
+    if (hasConfigScreen) {
+      final statusCounts = isTvShow ? _getEpisodeStatusCounts() : _getMovieStatusCounts();
+      dnfCount = statusCounts[WatchStatus.dnf] ?? 0;
+      if (isTvShow) {
+        final tvDetailRepo = ref.read(tvDetailRepositoryProvider);
+        final showDetail = tvDetailRepo.getTvShowDetail(entry.tmdbId);
+        totalItemCount = showDetail?.numberOfEpisodes ?? 0;
+      } else {
+        final movieStatusRepo = ref.read(movieStatusRepositoryProvider);
+        final movies = movieStatusRepo.getMoviesByCollection(entry.tmdbId);
+        totalItemCount = movies.length;
+      }
+    }
+    final allItemsDnf = hasConfigScreen 
+        ? (dnfCount > 0 && totalItemCount > 0 && dnfCount >= totalItemCount)
+        : hasDnf;
+    
     showModalBottomSheet(
       context: context,
       builder: (context) {
@@ -717,15 +1015,15 @@ class _WatchlistCardState extends ConsumerState<WatchlistCard> {
             children: [
               ListTile(
                 leading: Icon(
-                  hasDnf ? Icons.cancel_outlined : Icons.cancel,
-                  color: hasDnf ? null : StatusColors.getColor(WatchStatus.dnf),
+                  allItemsDnf ? Icons.cancel_outlined : Icons.cancel,
+                  color: allItemsDnf ? null : StatusColors.getColor(WatchStatus.dnf),
                 ),
-                title: Text(hasDnf ? 'Unmark Did not finish' : 'Did not finish'),
+                title: Text(allItemsDnf ? 'Unmark Did not finish' : 'Did not finish'),
                 onTap: () {
                   Navigator.pop(context);
                   if (hasConfigScreen) {
                     // Navigate to config screen with mark all dialog
-                    _navigateToConfigWithMarkAll(WatchStatus.dnf);
+                    _navigateToConfigWithMarkAll(WatchStatus.dnf, isUnmarking: allItemsDnf);
                   } else if (hasDnf) {
                     // Remove DNF status for movies
                     final logic = ref.read(watchlistLogicProvider);
@@ -771,11 +1069,12 @@ class _WatchlistCardState extends ConsumerState<WatchlistCard> {
   Future<void> _showReleasePreferencesDialog() async {
     if (widget.entry.type == WorkType.movie) {
       // Show movie release preferences dialog
-      final result = await showDialog<ReleaseNotificationPreferences>(
+      final result = await showDialog<ReleasePreferencesResult>(
         context: context,
         builder: (context) => ReleasePreferencesDialog(
           workTitle: widget.entry.title,
           initialPreferences: widget.entry.releaseNotificationPrefs ?? ReleaseNotificationPreferences(),
+          initialNotificationsPaused: widget.entry.notificationsSnoozed,
         ),
       );
 
@@ -785,25 +1084,32 @@ class _WatchlistCardState extends ConsumerState<WatchlistCard> {
         await watchlistLogic.updateReleaseNotificationPreferences(
           widget.entry.tmdbId,
           widget.entry.type,
-          result,
+          result.preferences,
+        );
+        // Update notification pause state
+        await watchlistLogic.setNotificationsSnoozed(
+          widget.entry.tmdbId,
+          widget.entry.type,
+          result.notificationsPaused,
         );
         ref.invalidate(watchlistEntriesProvider);
         
         if (mounted) {
           showSimpleSnackBar(
             context,
-            'Release preferences updated for ${widget.entry.title}',
+            'Notification preferences updated for ${widget.entry.title}',
             duration: const Duration(seconds: 2),
           );
         }
       }
     } else if (widget.entry.type == WorkType.tvShow) {
       // Show TV show episode preferences dialog
-      final result = await showDialog<TvNotificationPreferences>(
+      final result = await showDialog<TvPreferencesResult>(
         context: context,
         builder: (context) => TvPreferencesDialog(
           workTitle: widget.entry.title,
           initialPreferences: widget.entry.tvNotificationPrefs ?? TvNotificationPreferences(),
+          initialNotificationsPaused: widget.entry.notificationsSnoozed,
         ),
       );
 
@@ -812,14 +1118,20 @@ class _WatchlistCardState extends ConsumerState<WatchlistCard> {
         final watchlistLogic = ref.read(watchlistLogicProvider);
         await watchlistLogic.updateTvNotificationPreferences(
           widget.entry.tmdbId,
-          result,
+          result.preferences,
+        );
+        // Update notification pause state
+        await watchlistLogic.setNotificationsSnoozed(
+          widget.entry.tmdbId,
+          widget.entry.type,
+          result.notificationsPaused,
         );
         ref.invalidate(watchlistEntriesProvider);
         
         if (mounted) {
           showSimpleSnackBar(
             context,
-            'Episode preferences updated for ${widget.entry.title}',
+            'Notification preferences updated for ${widget.entry.title}',
             duration: const Duration(seconds: 2),
           );
         }
@@ -829,15 +1141,13 @@ class _WatchlistCardState extends ConsumerState<WatchlistCard> {
 
   String _formatReleaseDate(DateTime date) {
     final now = DateTime.now();
-    final threeYearsAgo = now.subtract(const Duration(days: 365 * 3));
+    final sixMonthsFromNow = now.add(const Duration(days: 183));
     
-    if (date.isBefore(threeYearsAgo)) {
-      return date.year.toString();
+    // Show full date if upcoming AND (within current year OR within 6 months)
+    if (date.isAfter(now) && (date.year == now.year || date.isBefore(sixMonthsFromNow))) {
+      return DateFormat('MMM d, yyyy').format(date);
     }
-    if (date.year == now.year) {
-      return DateFormat('MMM d').format(date);
-    }
-    return DateFormat('MMM d, yyyy').format(date);
+    return date.year.toString();
   }
 }
 

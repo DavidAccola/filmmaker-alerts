@@ -212,13 +212,6 @@ class _WatchlistButtonState extends ConsumerState<WatchlistButton> {
               final prefs = entry.releaseNotificationPrefs;
               final selectedTypes = prefs?.selectedTypes ?? [];
               
-              // Debug logging
-              debugPrint('[WatchlistButton] entry.releaseNotificationPrefs: $prefs');
-              debugPrint('[WatchlistButton] selectedTypes: $selectedTypes');
-              if (prefs != null) {
-                debugPrint('[WatchlistButton] theatrical: ${prefs.theatrical}, streaming: ${prefs.streaming}, physical: ${prefs.physical}, tv: ${prefs.tv}');
-              }
-              
               showWatchlistWithPreferencesSnackBar(
                 context,
                 workTitle: widget.workTitle,
@@ -277,7 +270,6 @@ class _WatchlistButtonState extends ConsumerState<WatchlistButton> {
                   }
                 }
               } catch (e) {
-                debugPrint('[WatchlistButton] Error marking episodes: $e');
                 // Continue even if episode marking fails - the show is still added
               }
               

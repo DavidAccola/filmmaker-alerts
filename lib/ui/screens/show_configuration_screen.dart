@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:cached_network_image/cached_network_image.dart';
+import 'package:material_symbols_icons/symbols.dart';
 import '../../data/models/episode_status_entry.dart';
 import '../../data/models/season_status_entry.dart';
 import '../../data/models/status_record.dart';
@@ -19,12 +20,14 @@ class ShowConfigurationScreen extends ConsumerStatefulWidget {
   final int showId;
   final String showTitle;
   final WatchStatus? initialMarkAllStatus;
+  final bool isUnmarkingStatus;
 
   const ShowConfigurationScreen({
     super.key,
     required this.showId,
     required this.showTitle,
     this.initialMarkAllStatus,
+    this.isUnmarkingStatus = false,
   });
 
   @override
@@ -220,21 +223,64 @@ class _ShowConfigurationScreenState
           // Use a post-frame callback to ensure the UI is built first
           WidgetsBinding.instance.addPostFrameCallback((_) {
             if (mounted) {
-              _applyInitialMarkAll(widget.initialMarkAllStatus!);
+              _applyInitialMarkAll(widget.initialMarkAllStatus!, isUnmarking: widget.isUnmarkingStatus);
             }
           });
         }
       }
     } catch (e) {
-      debugPrint('[ShowConfigurationScreen] Error fetching episodes: $e');
     }
   }
 
-  /// Applies the initial mark all status to all episodes
-  void _applyInitialMarkAll(WatchStatus status) {
+  /// Shows a dialog to confirm marking all episodes with a status, then applies it
+  Future<void> _applyInitialMarkAll(WatchStatus status, {bool isUnmarking = false}) async {
     final tvDetailRepo = ref.read(tvDetailRepositoryProvider);
     final showDetail = tvDetailRepo.getTvShowDetail(widget.showId);
     if (showDetail == null) return;
+    
+    String statusName;
+    switch (status) {
+      case WatchStatus.wantToWatch:
+        statusName = 'Want to watch';
+        break;
+      case WatchStatus.inProgress:
+        statusName = 'In progress';
+        break;
+      case WatchStatus.watched:
+        statusName = 'Watched';
+        break;
+      case WatchStatus.dnf:
+        statusName = 'Did not finish';
+        break;
+    }
+    
+    // Show confirmation dialog
+    final dialogTitle = isUnmarking 
+        ? 'Unmark all $statusName?' 
+        : 'Mark all as $statusName?';
+    final dialogContent = isUnmarking
+        ? 'This will remove $statusName from all episodes in "${widget.showTitle}".'
+        : 'This will mark all episodes in "${widget.showTitle}" as $statusName.';
+    
+    final result = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text(dialogTitle),
+        content: Text(dialogContent),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('Yes'),
+          ),
+        ],
+      ),
+    );
+    
+    if (result != true || !mounted) return;
     
     // Build episodes by season map
     final episodesBySeasonMap = <int, List<EpisodeStatusEntry>>{};
@@ -253,8 +299,12 @@ class _ShowConfigurationScreenState
       }
     }
     
-    // Apply mark all
-    _handleMarkAllStatus(status, episodesBySeasonMap);
+    // Apply mark all or unmark all
+    if (isUnmarking) {
+      _handleUnmarkAllStatus(status, episodesBySeasonMap);
+    } else {
+      _handleMarkAllStatus(status, episodesBySeasonMap);
+    }
   }
 
   void _initializeLocalChanges() {
@@ -586,10 +636,10 @@ class _ShowConfigurationScreenState
                       ? CachedNetworkImage(
                           imageUrl: 'https://image.tmdb.org/t/p/w300${showDetail.posterPath}',
                           fit: BoxFit.cover,
-                          placeholder: (context, url) => const Icon(Icons.tv, size: 40),
-                          errorWidget: (context, url, error) => const Icon(Icons.tv, size: 40),
+                          placeholder: (context, url) => const Icon(Symbols.tv_gen, size: 40),
+                          errorWidget: (context, url, error) => const Icon(Symbols.tv_gen, size: 40),
                         )
-                      : const Icon(Icons.tv, size: 40),
+                      : const Icon(Symbols.tv_gen, size: 40),
                 ),
               ),
               // Expand poster button
@@ -845,6 +895,40 @@ class _ShowConfigurationScreenState
         ],
       ),
     );
+  }
+
+  /// Handles unmarking all episodes from a specific status.
+  void _handleUnmarkAllStatus(WatchStatus status, Map<int, List<EpisodeStatusEntry>> episodesBySeasonMap) {
+    _saveToUndoStack();
+    
+    setState(() {
+      for (final entry in episodesBySeasonMap.entries) {
+        final seasonNumber = entry.key;
+        final episodes = entry.value;
+        
+        if (!_pendingChanges.containsKey(seasonNumber)) {
+          _pendingChanges[seasonNumber] = {};
+        }
+        
+        for (final episode in episodes) {
+          // Get current statuses or initialize from persisted
+          var currentStatuses = _pendingChanges[seasonNumber]![episode.episodeNumber];
+          if (currentStatuses == null) {
+            currentStatuses = Set<WatchStatus>.from(
+              _getEffectiveEpisodeStatuses(seasonNumber, episode.episodeNumber)
+            );
+          } else {
+            currentStatuses = Set<WatchStatus>.from(currentStatuses);
+          }
+          
+          // Remove this status
+          currentStatuses.remove(status);
+          
+          _pendingChanges[seasonNumber]![episode.episodeNumber] = currentStatuses;
+        }
+      }
+      _isDirty = true;
+    });
   }
 
   /// Handles marking all episodes with a specific status.

@@ -1,5 +1,4 @@
 import 'package:dio/dio.dart';
-import 'package:flutter/foundation.dart';
 import '../models/contributor_detail.dart';
 
 class JustWatchService {
@@ -39,7 +38,6 @@ class JustWatchService {
       }
       return [];
     } catch (e) {
-      debugPrint('[JustWatch] Error fetching movie streaming options: $e');
       return [];
     }
   }
@@ -67,7 +65,6 @@ class JustWatchService {
       }
       return [];
     } catch (e) {
-      debugPrint('[JustWatch] Error fetching TV streaming options: $e');
       return [];
     }
   }
@@ -114,7 +111,6 @@ class JustWatchService {
         ));
       }
     } catch (e) {
-      debugPrint('[JustWatch] Error parsing streaming options: $e');
     }
 
     return options;
@@ -162,7 +158,6 @@ class JustWatchService {
       }
       return {};
     } catch (e) {
-      debugPrint('[JustWatch] Error fetching supported countries: $e');
       return {};
     }
   }

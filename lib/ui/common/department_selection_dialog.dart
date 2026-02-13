@@ -9,6 +9,7 @@ class DepartmentSelectionDialog extends StatefulWidget {
 
   final bool initialAllRolesSelected;
   final bool allowTrueAll;
+  final bool initialNotificationsPaused;
 
   const DepartmentSelectionDialog({
     super.key,
@@ -18,6 +19,7 @@ class DepartmentSelectionDialog extends StatefulWidget {
     this.defaultDepartments = const [],
     this.initialAllRolesSelected = false,
     this.allowTrueAll = true,
+    this.initialNotificationsPaused = false,
   });
 
   @override
@@ -28,12 +30,14 @@ class _DepartmentSelectionDialogState extends State<DepartmentSelectionDialog> {
   late List<String> _selectedDepartments;
   late bool _allRolesSelected;
   late List<String> _sortedDepartments;
+  late bool _notificationsPaused;
 
   @override
   void initState() {
     super.initState();
     _selectedDepartments = List.from(widget.initialSelectedDepartments);
     _allRolesSelected = widget.initialAllRolesSelected;
+    _notificationsPaused = widget.initialNotificationsPaused;
     _sortDepartments();
   }
 
@@ -59,8 +63,10 @@ class _DepartmentSelectionDialogState extends State<DepartmentSelectionDialog> {
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    
     return AlertDialog(
-      title: Text('Roles to follow for ${widget.name}'),
+      title: Text('Notification preferences for ${widget.name}'),
       content: SingleChildScrollView(
         child: SizedBox(
           width: double.maxFinite,
@@ -68,6 +74,36 @@ class _DepartmentSelectionDialogState extends State<DepartmentSelectionDialog> {
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
+              // Pause notifications toggle
+              SwitchListTile(
+                title: const Text('Pause notifications'),
+                subtitle: Text(
+                  _notificationsPaused 
+                      ? 'Notifications are paused' 
+                      : 'Notifications are active',
+                  style: TextStyle(
+                    color: theme.colorScheme.onSurfaceVariant,
+                    fontSize: 12,
+                  ),
+                ),
+                value: _notificationsPaused,
+                onChanged: (value) {
+                  setState(() {
+                    _notificationsPaused = value;
+                  });
+                },
+                contentPadding: EdgeInsets.zero,
+              ),
+              const Divider(),
+              const SizedBox(height: 8),
+              Text(
+                'Roles to follow:',
+                style: TextStyle(
+                  fontSize: 14,
+                  color: theme.colorScheme.onSurfaceVariant,
+                ),
+              ),
+              const SizedBox(height: 12),
               MultiSelectChipGroup<String>(
                 options: _sortedDepartments,
                 selectedValues: _selectedDepartments,
@@ -117,8 +153,9 @@ class _DepartmentSelectionDialogState extends State<DepartmentSelectionDialog> {
               : () => Navigator.pop(context, {
                   'roles': _selectedDepartments,
                   'allRolesSelected': _allRolesSelected,
+                  'notificationsPaused': _notificationsPaused,
                 }),
-          child: const Text('Follow'),
+          child: const Text('Save'),
         ),
       ],
     );

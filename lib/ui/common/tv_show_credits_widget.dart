@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:intl/intl.dart';
+import 'package:material_symbols_icons/symbols.dart';
 import '../../data/models/contributor_detail.dart';
 import 'adaptive_tooltip_text.dart';
 import 'watchlist_button.dart';
@@ -63,14 +64,14 @@ class _TvShowCreditsWidgetState extends State<TvShowCreditsWidget> {
                             errorWidget: (context, url, error) => Container(
                               color: theme.colorScheme.surfaceContainerHighest,
                               child: const Center(
-                                child: Icon(Icons.tv, size: 40),
+                                child: Icon(Symbols.tv_gen, size: 40),
                               ),
                             ),
                           )
                         : Container(
                             color: theme.colorScheme.surfaceContainerHighest,
                             child: const Center(
-                              child: Icon(Icons.tv, size: 40),
+                              child: Icon(Symbols.tv_gen, size: 40),
                             ),
                           ),
                     
@@ -142,7 +143,7 @@ class _TvShowCreditsWidgetState extends State<TvShowCreditsWidget> {
                           borderRadius: BorderRadius.circular(4),
                         ),
                         child: const Icon(
-                          Icons.tv,
+                          Symbols.tv_gen,
                           size: 16,
                           color: Colors.white,
                         ),

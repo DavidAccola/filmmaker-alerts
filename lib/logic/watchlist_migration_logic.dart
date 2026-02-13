@@ -1,4 +1,3 @@
-import 'package:flutter/foundation.dart';
 import '../data/models/contributor.dart';
 import '../data/models/contributor_detail.dart';
 import '../data/models/watchlist_entry.dart';
@@ -18,16 +17,12 @@ class WatchlistMigrationLogic {
   /// Migrates existing movie/TV show/collection contributors to watchlist entries
   /// Returns a map with migration statistics
   Future<Map<String, int>> migrateContributorsToWatchlist() async {
-    debugPrint('[WatchlistMigrationLogic] Starting migration of contributors to watchlist');
-    
     final contributors = _contributorRepository.getContributors();
     final mediaContributors = contributors.where((c) => 
       c.type == ContributorType.movie || 
       c.type == ContributorType.tvShow || 
       c.type == ContributorType.collection
     ).toList();
-
-    debugPrint('[WatchlistMigrationLogic] Found ${mediaContributors.length} media contributors to migrate');
 
     int migrated = 0;
     int skipped = 0;
@@ -43,7 +38,6 @@ class WatchlistMigrationLogic {
         );
 
         if (isAlreadyInWatchlist) {
-          debugPrint('[WatchlistMigrationLogic] ${contributor.name} already in watchlist, skipping');
           skipped++;
           continue;
         }
@@ -69,11 +63,9 @@ class WatchlistMigrationLogic {
           followedContributors: [contributorSnapshot],
         );
 
-        debugPrint('[WatchlistMigrationLogic] Migrated ${contributor.name} to watchlist');
         migrated++;
 
       } catch (e) {
-        debugPrint('[WatchlistMigrationLogic] Error migrating ${contributor.name}: $e');
         errors++;
       }
     }
@@ -85,14 +77,11 @@ class WatchlistMigrationLogic {
       'errors': errors,
     };
 
-    debugPrint('[WatchlistMigrationLogic] Migration complete: $stats');
     return stats;
   }
 
   /// Validates data consistency after migration
   Future<Map<String, dynamic>> validateMigration() async {
-    debugPrint('[WatchlistMigrationLogic] Validating migration consistency');
-
     final contributors = _contributorRepository.getContributors();
     final mediaContributors = contributors.where((c) => 
       c.type == ContributorType.movie || 
@@ -130,15 +119,12 @@ class WatchlistMigrationLogic {
       'isConsistent': orphanedContributors == 0,
     };
 
-    debugPrint('[WatchlistMigrationLogic] Validation results: $validation');
     return validation;
   }
 
   /// Removes movie/TV show/collection contributors after successful migration
   /// WARNING: This is destructive and should only be called after validation
   Future<int> cleanupMigratedContributors() async {
-    debugPrint('[WatchlistMigrationLogic] Starting cleanup of migrated contributors');
-
     final contributors = _contributorRepository.getContributors();
     final mediaContributors = contributors.where((c) => 
       c.type == ContributorType.movie || 
@@ -159,17 +145,13 @@ class WatchlistMigrationLogic {
 
         if (isInWatchlist) {
           await _contributorRepository.removeContributor(contributor.tmdbId);
-          debugPrint('[WatchlistMigrationLogic] Removed contributor ${contributor.name}');
           removed++;
         } else {
-          debugPrint('[WatchlistMigrationLogic] WARNING: ${contributor.name} not in watchlist, skipping removal');
         }
       } catch (e) {
-        debugPrint('[WatchlistMigrationLogic] Error removing contributor ${contributor.name}: $e');
       }
     }
 
-    debugPrint('[WatchlistMigrationLogic] Cleanup complete: removed $removed contributors');
     return removed;
   }
 

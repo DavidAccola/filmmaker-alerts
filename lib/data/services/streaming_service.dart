@@ -1,4 +1,3 @@
-import 'package:flutter/foundation.dart';
 import '../models/contributor_detail.dart';
 import 'tmdb_service.dart';
 
@@ -21,14 +20,10 @@ class StreamingService {
     required String regionCode,
   }) async {
     try {
-      debugPrint('[StreamingService] Fetching movie watch providers for $tmdbId, region: $regionCode');
       final data = await _tmdbService.getMovieWatchProviders(tmdbId);
-      debugPrint('[StreamingService] Raw data keys: ${data.keys}');
       final options = _parseWatchProviders(data, regionCode);
-      debugPrint('[StreamingService] Parsed ${options.length} streaming options for movie $tmdbId');
       return options;
     } catch (e) {
-      debugPrint('[StreamingService] Error fetching movie watch providers: $e');
       return [];
     }
   }
@@ -45,7 +40,6 @@ class StreamingService {
       final data = await _tmdbService.getTvWatchProviders(tmdbId);
       return _parseWatchProviders(data, regionCode);
     } catch (e) {
-      debugPrint('[StreamingService] Error fetching TV watch providers: $e');
       return [];
     }
   }
@@ -72,18 +66,14 @@ class StreamingService {
 
     try {
       final results = data['results'] as Map<String, dynamic>? ?? {};
-      debugPrint('[StreamingService] Available regions: ${results.keys.take(10).toList()}...');
       
       // Get data for the requested region, fallback to US if not available
       final regionData = results[regionCode.toUpperCase()] as Map<String, dynamic>? ??
           results['US'] as Map<String, dynamic>?;
       
       if (regionData == null) {
-        debugPrint('[StreamingService] No watch provider data for region: $regionCode (or US fallback)');
         return options;
       }
-      
-      debugPrint('[StreamingService] Region data keys for $regionCode: ${regionData.keys}');
 
       // Capture the watch link from the response
       watchLink = regionData['link'] as String?;
@@ -95,7 +85,6 @@ class StreamingService {
       _parseProviderType(regionData, 'buy', StreamingType.buy, options, watchLink);
 
     } catch (e) {
-      debugPrint('[StreamingService] Error parsing watch providers: $e');
     }
 
     return options;
@@ -140,7 +129,6 @@ class StreamingService {
         ));
       }
     } catch (e) {
-      debugPrint('[StreamingService] Error parsing provider type $typeKey: $e');
     }
   }
 
@@ -165,7 +153,6 @@ class StreamingService {
 
       return regions;
     } catch (e) {
-      debugPrint('[StreamingService] Error fetching available regions: $e');
       return {};
     }
   }

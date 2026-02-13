@@ -1,6 +1,5 @@
 import '../data/models/contributor.dart';
 import '../data/services/tmdb_service.dart';
-import 'package:flutter/foundation.dart';
 import '../core/tmdb_mapping.dart';
 
 class SearchPageResult {
@@ -104,7 +103,6 @@ class SearchLogic {
           break;
       }
     } catch (e) {
-      debugPrint('Search error: $e');
       return SearchPageResult(results: [], totalPages: 0, currentPage: 0, totalResults: 0);
     }
 
@@ -246,7 +244,6 @@ class SearchLogic {
           return "e.g., Greta Gerwig";
       }
     } catch (e) {
-      debugPrint('Error getting dynamic hint: $e');
       return "e.g., Search...";
     }
   }
@@ -317,7 +314,6 @@ class SearchLogic {
         totalResults: data['total_results'] ?? results.length,
       );
     } catch (e) {
-      debugPrint('Global search error: $e');
       return SearchPageResult(results: [], totalPages: 0, currentPage: 0, totalResults: 0);
     }
   }
@@ -364,6 +360,7 @@ class SearchLogic {
       notifyForDepartments: [], // Set later
       availableDepartments: [], // Set later
       knownFor: knownFor,
+      releaseDateRaw: json['release_date'] as String? ?? json['first_air_date'] as String?,
     );
   }
 

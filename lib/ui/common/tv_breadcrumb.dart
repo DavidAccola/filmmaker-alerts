@@ -225,7 +225,6 @@ class _TvBreadcrumbState extends State<TvBreadcrumb> {
               try {
                 item.onTap!();
               } catch (e) {
-                debugPrint('Error in breadcrumb navigation: $e');
                 if (mounted) {
                   ScaffoldMessenger.of(context).showSnackBar(
                     const SnackBar(content: Text('Navigation error')),

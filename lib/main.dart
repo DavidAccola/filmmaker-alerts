@@ -35,7 +35,6 @@ void main() async {
   // Check for single instance lock
   final canRun = await SingleInstanceManager.acquireLock();
   if (!canRun) {
-    debugPrint('[Main] Another instance is already running. Exiting.');
     exit(1);
   }
 
@@ -50,9 +49,7 @@ void main() async {
 
   // 0. Initialize window manager (Windows only)
   if (Platform.isWindows) {
-    debugPrint('[Main] Initializing window manager for Windows');
     await windowManager.ensureInitialized();
-    debugPrint('[Main] Window manager initialized');
     
     WindowOptions windowOptions = const WindowOptions(
       size: Size(1280, 720),
@@ -63,19 +60,13 @@ void main() async {
       titleBarStyle: TitleBarStyle.normal,
     );
     
-    debugPrint('[Main] Setting up window ready callback');
     windowManager.waitUntilReadyToShow(windowOptions, () async {
-      debugPrint('[Main] Window ready callback - showing and focusing window');
       await windowManager.show();
       await windowManager.focus();
       
       // Set prevent close to true from the start
-      debugPrint('[Main] Setting preventClose to true');
       await windowManager.setPreventClose(true);
-      debugPrint('[Main] Window shown, focused, and preventClose set');
     });
-  } else {
-    debugPrint('[Main] Skipping window manager - not Windows platform');
   }
 
   // 1. Load Environment Variables
@@ -134,7 +125,6 @@ void main() async {
   try {
     await _openHiveBoxes();
   } catch (e) {
-    debugPrint('[Main] ERROR: Failed to open Hive boxes: $e');
     // Continue anyway - the app will show an error dialog when it tries to access data
     // This allows the UI to load and display a helpful error message
   }
@@ -159,13 +149,9 @@ void main() async {
 
   // 8. Initialize System Tray (Windows only)
   if (Platform.isWindows) {
-    debugPrint('[Main] Initializing system tray service for Windows');
     final systemTrayService = container.read(systemTrayServiceProvider);
     systemTrayService.setContainer(container); // Pass the container for release checking
     await systemTrayService.init();
-    debugPrint('[Main] System tray service initialization completed');
-  } else {
-    debugPrint('[Main] Skipping system tray - not Windows platform');
   }
 
   if (!kIsWeb && (Platform.isAndroid || Platform.isIOS)) {
@@ -189,7 +175,6 @@ void main() async {
         scheduleMinute = int.parse(parts[1]);
       }
     } catch (e) {
-      debugPrint('[Main] Error parsing scheduleTime "${prefs.scheduleTime}": $e, using default 9:00');
     }
     
     // Calculate initial delay for the scheduled time
@@ -200,9 +185,6 @@ void main() async {
     }
     final initialDelay = firstRun.difference(now);
 
-    debugPrint('[Main] Scheduling background task for ${scheduleHour.toString().padLeft(2, '0')}:${scheduleMinute.toString().padLeft(2, '0')} daily');
-    debugPrint('[Main] First run scheduled in ${initialDelay.inMinutes} minutes');
-
     await Workmanager().registerPeriodicTask(
       "daily-check-task",
       taskName,
@@ -212,8 +194,6 @@ void main() async {
         networkType: NetworkType.connected,
       ),
     );
-  } else {
-    debugPrint('[Main] Workmanager not supported on this platform. Background tasks skipped.');
   }
 
   // Read initial animation preference (won't change until restart)
@@ -254,8 +234,6 @@ Future<void> _openHiveBoxes() async {
     int retryCount = 0;
     while (retryCount < maxRetries) {
       try {
-        debugPrint('[Main] Opening Hive box: $boxName (attempt ${retryCount + 1}/$maxRetries)');
-        
         // Use dynamic typing to open boxes without needing specific type info
         if (boxName == AppConstants.contributorsBox) {
           await Hive.openBox<Contributor>(boxName);
@@ -287,15 +265,12 @@ Future<void> _openHiveBoxes() async {
           await Hive.openBox<CollectionOrder>(boxName);
         }
         
-        debugPrint('[Main] Successfully opened Hive box: $boxName');
         break; // Success, move to next box
       } catch (e) {
         retryCount++;
         if (retryCount >= maxRetries) {
-          debugPrint('[Main] FAILED to open Hive box after $maxRetries attempts: $boxName - $e');
           rethrow; // Give up after max retries
         }
-        debugPrint('[Main] Retry $retryCount/$maxRetries for box $boxName after delay...');
         await Future.delayed(retryDelay);
       }
     }
@@ -547,11 +522,8 @@ class _AppLifecycleWrapperState extends State<_AppLifecycleWrapper>
   /// Properly close all Hive boxes to release locks
   Future<void> _closeHiveBoxes() async {
     try {
-      debugPrint('[Main] Closing Hive boxes on app exit...');
       await Hive.close();
-      debugPrint('[Main] Hive boxes closed successfully');
     } catch (e) {
-      debugPrint('[Main] Error closing Hive boxes: $e');
     }
   }
 
@@ -559,14 +531,11 @@ class _AppLifecycleWrapperState extends State<_AppLifecycleWrapper>
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state == AppLifecycleState.resumed) {
       // Clear image cache when app resumes to prevent GC pause
-      debugPrint('[Main] App resumed - clearing image cache to prevent GC pause');
       imageCache.clear();
       imageCache.clearLiveImages();
     } else if (state == AppLifecycleState.paused) {
       // Optionally clear on pause too
-      debugPrint('[Main] App paused');
     } else if (state == AppLifecycleState.detached) {
-      debugPrint('[Main] App detached - closing Hive boxes and releasing lock');
       _closeHiveBoxes();
       _releaseSingleInstanceLock();
     }

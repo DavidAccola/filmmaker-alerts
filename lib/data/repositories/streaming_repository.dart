@@ -1,4 +1,3 @@
-import 'package:flutter/foundation.dart';
 import '../models/contributor_detail.dart';
 import '../services/justwatch_service.dart';
 
@@ -21,7 +20,6 @@ class StreamingRepository {
         countryCode: countryCode,
       );
     } catch (e) {
-      debugPrint('[StreamingRepository] Error getting movie streaming options: $e');
       return [];
     }
   }
@@ -39,7 +37,6 @@ class StreamingRepository {
         countryCode: countryCode,
       );
     } catch (e) {
-      debugPrint('[StreamingRepository] Error getting TV streaming options: $e');
       return [];
     }
   }
@@ -65,7 +62,6 @@ class StreamingRepository {
       }
       return [];
     } catch (e) {
-      debugPrint('[StreamingRepository] Error getting work streaming options: $e');
       return [];
     }
   }
@@ -77,7 +73,6 @@ class StreamingRepository {
     try {
       return await _justWatchService.getSupportedCountries();
     } catch (e) {
-      debugPrint('[StreamingRepository] Error getting supported countries: $e');
       return {};
     }
   }

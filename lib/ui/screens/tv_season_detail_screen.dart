@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:intl/intl.dart';
+import 'package:material_symbols_icons/symbols.dart';
 import '../../data/models/tv_detail.dart';
 import '../../data/models/movie_detail.dart';
 import '../../data/models/preferences.dart';
@@ -136,7 +137,7 @@ class _TvSeasonDetailScreenState extends ConsumerState<TvSeasonDetailScreen> {
                                               width: 120,
                                               height: 180,
                                               color: theme.colorScheme.surfaceContainerHighest,
-                                              child: const Icon(Icons.tv, size: 40),
+                                              child: const Icon(Symbols.tv_gen, size: 40),
                                             ),
                                     ),
                                     // Expand poster button
@@ -238,7 +239,7 @@ class _TvSeasonDetailScreenState extends ConsumerState<TvSeasonDetailScreen> {
                                             width: 120,
                                             height: 180,
                                             color: theme.colorScheme.surfaceContainerHighest,
-                                            child: const Icon(Icons.tv, size: 40),
+                                            child: const Icon(Symbols.tv_gen, size: 40),
                                           ),
                                   ),
                                   // Expand poster button
@@ -380,7 +381,7 @@ class _TvSeasonDetailScreenState extends ConsumerState<TvSeasonDetailScreen> {
                           imageUrl: 'https://image.tmdb.org/t/p/w200${episode.stillPath}',
                           fit: BoxFit.cover,
                         )
-                      : const Icon(Icons.movie, size: 40),
+                      : const Icon(Symbols.movie, size: 40),
                 ),
                 Expanded(
                   child: Padding(
@@ -586,7 +587,7 @@ class _TvSeasonDetailScreenState extends ConsumerState<TvSeasonDetailScreen> {
                                     fit: BoxFit.contain,
                                     errorBuilder: (context, error, stackTrace) => Container(
                                       color: Theme.of(context).colorScheme.primaryContainer,
-                                      child: const Icon(Icons.movie),
+                                      child: const Icon(Symbols.movie),
                                     ),
                                   ),
                                 ),

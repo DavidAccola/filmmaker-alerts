@@ -141,6 +141,10 @@ class Contributor extends HiveObject {
   @HiveField(16)
   bool notificationsSnoozed;
 
+  /// Transient field (not persisted in Hive) — raw release date string from TMDB search.
+  /// Used to pass release date through to watchlist entry creation.
+  String? releaseDateRaw;
+
   Contributor({
     required this.tmdbId,
     required this.name,
@@ -159,5 +163,6 @@ class Contributor extends HiveObject {
     this.nextEpisodeDate,
     this.imdbId,
     this.notificationsSnoozed = false,
+    this.releaseDateRaw,
   });
 }

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:intl/intl.dart';
+import 'package:material_symbols_icons/symbols.dart';
 import '../../data/models/tv_detail.dart';
 import '../../data/models/preferences.dart';
 import '../../data/models/movie_detail.dart';
@@ -44,11 +45,6 @@ class _TvEpisodeDetailScreenState extends ConsumerState<TvEpisodeDetailScreen> {
   @override
   void initState() {
     super.initState();
-    debugPrint('[TvEpisodeDetailScreen] === INIT STATE DEBUG ===');
-    debugPrint('[TvEpisodeDetailScreen] showId: ${widget.showId}');
-    debugPrint('[TvEpisodeDetailScreen] seasonNumber: ${widget.seasonNumber}');
-    debugPrint('[TvEpisodeDetailScreen] episodeNumber: ${widget.episodeNumber}');
-    debugPrint('[TvEpisodeDetailScreen] showName: "${widget.showName}"');
   }
   
   @override
@@ -141,7 +137,7 @@ class _TvEpisodeDetailScreenState extends ConsumerState<TvEpisodeDetailScreen> {
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          const Icon(Icons.tv, size: 64, color: Colors.grey),
+          const Icon(Symbols.tv_gen, size: 64, color: Colors.grey),
           const SizedBox(height: 16),
           Text(message),
           const SizedBox(height: 16),
@@ -249,11 +245,11 @@ class _TvEpisodeDetailScreenState extends ConsumerState<TvEpisodeDetailScreen> {
                                   imageUrl: 'https://image.tmdb.org/t/p/w300${episodeDetail.stillPath}',
                                   fit: BoxFit.cover,
                                   placeholder: (context, url) => const Center(child: CircularProgressIndicator()),
-                                  errorWidget: (context, url, error) => const Icon(Icons.tv, size: 32),
+                                  errorWidget: (context, url, error) => const Icon(Symbols.tv_gen, size: 32),
                                 )
                               : Container(
                                   color: Theme.of(context).colorScheme.surfaceContainerHighest,
-                                  child: const Icon(Icons.tv, size: 32),
+                                  child: const Icon(Symbols.tv_gen, size: 32),
                                 ),
                         ),
                       ),
@@ -305,11 +301,11 @@ class _TvEpisodeDetailScreenState extends ConsumerState<TvEpisodeDetailScreen> {
                                 imageUrl: 'https://image.tmdb.org/t/p/w300${episodeDetail.stillPath}',
                                 fit: BoxFit.cover,
                                 placeholder: (context, url) => const Center(child: CircularProgressIndicator()),
-                                errorWidget: (context, url, error) => const Icon(Icons.tv, size: 32),
+                                errorWidget: (context, url, error) => const Icon(Symbols.tv_gen, size: 32),
                               )
                             : Container(
                                 color: Theme.of(context).colorScheme.surfaceContainerHighest,
-                                child: const Icon(Icons.tv, size: 32),
+                                child: const Icon(Symbols.tv_gen, size: 32),
                               ),
                       ),
                     ),
@@ -604,7 +600,7 @@ class _TvEpisodeDetailScreenState extends ConsumerState<TvEpisodeDetailScreen> {
                                     fit: BoxFit.contain,
                                     errorBuilder: (context, error, stackTrace) => Container(
                                       color: Theme.of(context).colorScheme.primaryContainer,
-                                      child: const Icon(Icons.movie),
+                                      child: const Icon(Symbols.movie),
                                     ),
                                   ),
                                 ),
@@ -787,7 +783,6 @@ class _TvEpisodeDetailScreenState extends ConsumerState<TvEpisodeDetailScreen> {
         );
       }
     } catch (e) {
-      debugPrint('Error following person: $e');
       if (mounted) {
         showSimpleSnackBar(context, 'Error: $e');
       }

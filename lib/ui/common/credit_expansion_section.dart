@@ -2,6 +2,7 @@ import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
+import 'package:material_symbols_icons/symbols.dart';
 import '../../data/models/contributor_detail.dart';
 import '../../data/models/status_record.dart';
 import '../../providers/providers.dart';
@@ -56,36 +57,10 @@ class _CreditExpansionSectionState extends State<CreditExpansionSection> {
   }
 
   void _processWorks() {
-    debugPrint('[CreditExpansionSection] Processing ${widget.works.length} works for ${widget.title}');
     if (widget.splitByStage) {
       groupedByDept = TvShowDisplayLogic.groupWorksByDepartmentAndStage(widget.works);
     } else {
       groupedByDept = TvShowDisplayLogic.groupWorksByDepartment(widget.works);
-    }
-
-    debugPrint('[CreditExpansionSection] Grouped into departments: ${groupedByDept.keys.toList()}');
-    
-    // DEBUG: Diagnose Legion Writing credits
-    if (widget.title.contains('Television')) {
-       final writing = groupedByDept['Writing'] ?? [];
-       final legionWorks = writing.where((w) => w.title.contains('Legion')).toList();
-       debugPrint('[DEBUG] Legion works in Writing section: ${legionWorks.length}');
-       for(var w in legionWorks) {
-          debugPrint('   - ${w.title} (${w.type})');
-       }
-       
-       // Also check raw works
-       final rawLegion = widget.works.where((w) => w.title.contains('Legion')).toList();
-       debugPrint('[DEBUG] Total Legion raw works: ${rawLegion.length}');
-       for(var w in rawLegion) {
-          if (w.type == WorkType.tvEpisode) {
-             // Check if it has a writing role
-             final writingRoles = w.contributorRoles.where((r) => r.role.toLowerCase().contains('writer') || r.department == 'Writing').toList();
-             if (writingRoles.isNotEmpty) {
-                // debugPrint('   - Raw Episode has writing: ${w.title}');
-             }
-          }
-       }
     }
   }
 
@@ -572,22 +547,7 @@ class _CreditExpansionSectionState extends State<CreditExpansionSection> {
           final ep = episodes.first;
           final combinedTitle = "$showTitle (S${ep.seasonNumber.toString().padLeft(2, '0')}E${ep.episodeNumber.toString().padLeft(2, '0')} - ${_extractEpisodeTitle(ep.title)})";
           
-          debugPrint('[CreditExpansionSection] === SINGLE EPISODE CASE ===');
-          debugPrint('[CreditExpansionSection] showTitle: "$showTitle"');
-          debugPrint('[CreditExpansionSection] ep.title: "${ep.title}"');
-          debugPrint('[CreditExpansionSection] ep.type: ${ep.type}');
-          debugPrint('[CreditExpansionSection] ep.showId: ${ep.showId}');
-          debugPrint('[CreditExpansionSection] ep.showName: "${ep.showName}"');
-          debugPrint('[CreditExpansionSection] ep.seasonNumber: ${ep.seasonNumber}');
-          debugPrint('[CreditExpansionSection] ep.episodeNumber: ${ep.episodeNumber}');
-          debugPrint('[CreditExpansionSection] combinedTitle: "$combinedTitle"');
-          
           final workToRender = ep.copyWith(title: combinedTitle);
-          debugPrint('[CreditExpansionSection] workToRender.type: ${workToRender.type}');
-          debugPrint('[CreditExpansionSection] workToRender.title: "${workToRender.title}"');
-          debugPrint('[CreditExpansionSection] workToRender.showId: ${workToRender.showId}');
-          debugPrint('[CreditExpansionSection] workToRender.showName: "${workToRender.showName}"');
-          debugPrint('[CreditExpansionSection] Calling _buildWorkItem with isEpisode: false (single episode with combined title)');
           
           // Create a show Work for watchlist targeting
           // Use showId if available, otherwise use the episode's tmdbId as fallback
@@ -696,17 +656,6 @@ class _CreditWorkItemState extends State<_CreditWorkItem> {
     final children = widget.children;
     final currentDepartmentFilter = widget.currentDepartmentFilter;
 
-    if (work.title.contains('Interior Chinatown')) {
-      debugPrint('[_CreditWorkItem] === INTERIOR CHINATOWN RENDER ===');
-      debugPrint('[_CreditWorkItem] work.type: ${work.type}');
-      debugPrint('[_CreditWorkItem] work.title: "${work.title}"');
-      debugPrint('[_CreditWorkItem] isEpisode parameter: $isEpisode');
-      debugPrint('[_CreditWorkItem] work.showId: ${work.showId}');
-      debugPrint('[_CreditWorkItem] work.showName: "${work.showName}"');
-      debugPrint('[_CreditWorkItem] work.seasonNumber: ${work.seasonNumber}');
-      debugPrint('[_CreditWorkItem] work.episodeNumber: ${work.episodeNumber}');
-    }
-
     // Logic to sort and filter roles
     List<String> rawRoles;
     if (currentDepartmentFilter != null) {
@@ -754,16 +703,6 @@ class _CreditWorkItemState extends State<_CreditWorkItem> {
           onExit: (_) => setState(() => _isHovered = false),
           child: InkWell(
             onTap: () {
-              if (work.title.contains('Interior Chinatown')) {
-                debugPrint('[_CreditWorkItem] === INTERIOR CHINATOWN TAP ===');
-                debugPrint('[_CreditWorkItem] work.type: ${work.type}');
-                debugPrint('[_CreditWorkItem] work.title: "${work.title}"');
-                debugPrint('[_CreditWorkItem] isEpisode: $isEpisode');
-                debugPrint('[_CreditWorkItem] work.showId: ${work.showId}');
-                debugPrint('[_CreditWorkItem] work.showName: "${work.showName}"');
-                debugPrint('[_CreditWorkItem] work.seasonNumber: ${work.seasonNumber}');
-                debugPrint('[_CreditWorkItem] work.episodeNumber: ${work.episodeNumber}');
-              }
               widget.onWorkTap?.call(work);
             },
             child: Padding(
@@ -815,7 +754,7 @@ class _CreditWorkItemState extends State<_CreditWorkItem> {
                                 color: theme.colorScheme.surfaceContainerHighest,
                                 borderRadius: BorderRadius.circular(4),
                               ),
-                              child: const Icon(Icons.movie, size: 16),
+                              child: const Icon(Symbols.movie, size: 16),
                             ),
                           
                           // Hover Mask + Center Watchlist Button using WatchlistButton component

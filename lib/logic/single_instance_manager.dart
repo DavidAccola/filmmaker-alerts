@@ -1,5 +1,4 @@
 import 'dart:io';
-import 'package:flutter/foundation.dart';
 import 'package:path_provider/path_provider.dart';
 
 /// Manages single-instance enforcement for the application.
@@ -19,10 +18,8 @@ class SingleInstanceManager {
       if (await _lockFile!.exists()) {
         try {
           await _lockFile!.delete();
-          debugPrint('[SingleInstance] Cleaned up stale lock file');
         } catch (e) {
           // If we can't delete it, another instance likely has it open
-          debugPrint('[SingleInstance] Failed to clean stale lock: $e');
           return false;
         }
       }
@@ -30,10 +27,8 @@ class SingleInstanceManager {
       // Try to create the lock file exclusively
       _lockFile = await _lockFile!.create(exclusive: true);
       
-      debugPrint('[SingleInstance] Lock acquired successfully');
       return true;
     } catch (e) {
-      debugPrint('[SingleInstance] Failed to acquire lock: $e');
       return false;
     }
   }
@@ -43,10 +38,8 @@ class SingleInstanceManager {
     try {
       if (_lockFile != null && await _lockFile!.exists()) {
         await _lockFile!.delete();
-        debugPrint('[SingleInstance] Lock released');
       }
     } catch (e) {
-      debugPrint('[SingleInstance] Error releasing lock: $e');
     }
   }
 }

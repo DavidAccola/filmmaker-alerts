@@ -72,7 +72,6 @@ class _ContributorHoverCardState extends ConsumerState<ContributorHoverCard> {
       orElse: () => widget.isFollowed,
     );
     
-    debugPrint('[ContributorHoverCard] Building for ${widget.name} (${widget.tmdbId}), prop isFollowed: ${widget.isFollowed}, actual isFollowed: $isActuallyFollowed, isHovered: $_isHovered');
     
     return MouseRegion(
       onEnter: (_) => _onHoverChange(true),
@@ -150,7 +149,6 @@ class _ContributorHoverCardState extends ConsumerState<ContributorHoverCard> {
                                 ],
                               ),
                               onPressed: () {
-                                debugPrint('[ContributorHoverCard] Button pressed for ${widget.name}, isActuallyFollowed: $isActuallyFollowed');
                                 widget.onFollow();
                               },
                               padding: EdgeInsets.zero,

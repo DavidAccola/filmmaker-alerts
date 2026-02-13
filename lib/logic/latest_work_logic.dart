@@ -1,6 +1,5 @@
 import '../data/models/contributor.dart';
 import '../data/services/tmdb_service.dart';
-import 'package:flutter/foundation.dart';
 import 'package:intl/intl.dart';
 import '../core/tmdb_mapping.dart';
 
@@ -23,7 +22,6 @@ class LatestWorkLogic {
           return _getLatestForTvShow(contributor);
       }
     } catch (e) {
-      debugPrint('Error calculating latest work for ${contributor.name}: $e');
       return null;
     }
   }

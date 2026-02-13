@@ -25,8 +25,6 @@ class WorkLogic {
 
   Future<MovieDetail?> fetchAndCacheMovieDetail(int tmdbId, {String regionCode = 'US'}) async {
     try {
-      debugPrint('[WorkLogic] Fetching movie detail for $tmdbId with region $regionCode');
-      
       // Fetch movie details, credits, and streaming options in parallel
       final results = await Future.wait([
         _tmdbService.getMovieDetails(tmdbId),
@@ -37,8 +35,6 @@ class WorkLogic {
       final movieData = results[0] as Map<String, dynamic>;
       final creditsData = results[1] as Map<String, dynamic>;
       final streamingOptions = results[2] as List<StreamingOption>;
-      
-      debugPrint('[WorkLogic] Movie $tmdbId: Got ${streamingOptions.length} streaming options');
 
       // Parse cast
       final cast = (creditsData['cast'] as List? ?? []).take(20).map((c) {
@@ -90,7 +86,6 @@ class WorkLogic {
       await _movieDetailRepository.cacheMovieDetail(detail);
       return detail;
     } catch (e) {
-      debugPrint('[WorkLogic] Error fetching movie details for $tmdbId: $e');
       return null;
     }
   }
@@ -168,7 +163,6 @@ class WorkLogic {
       await _tvDetailRepository.cacheTvShowDetail(detail);
       return detail;
     } catch (e) {
-      debugPrint('[WorkLogic] Error fetching TV show details for $tmdbId: $e');
       return null;
     }
   }
@@ -179,9 +173,6 @@ class WorkLogic {
     required int episodeNumber,
   }) async {
     try {
-      debugPrint('[WorkLogic] === FETCH EPISODE DETAIL START ===');
-      debugPrint('[WorkLogic] showId=$showId, season=$seasonNumber, episode=$episodeNumber');
-      
       final results = await Future.wait([
         _tmdbService.getTvEpisodeDetails(showId, seasonNumber, episodeNumber),
         _tmdbService.getTvEpisodeCredits(showId, seasonNumber, episodeNumber),
@@ -191,10 +182,6 @@ class WorkLogic {
       final epData = results[0];
       final creditsData = results[1];
       final showData = results[2];
-
-      debugPrint('[WorkLogic] Episode data received: name="${epData['name']}", id=${epData['id']}');
-      debugPrint('[WorkLogic] Show data received: name="${showData['name']}", id=${showData['id']}');
-      debugPrint('[WorkLogic] Episode fetch successful');
 
       final guestStars = (creditsData['guest_stars'] as List? ?? []).map((c) => CastMember(
         tmdbId: c['id'],
@@ -245,10 +232,8 @@ class WorkLogic {
       );
 
       await _tvDetailRepository.cacheTvEpisodeDetail(detail);
-      debugPrint('[WorkLogic] Episode detail cached successfully');
       return detail;
     } catch (e) {
-      debugPrint('[WorkLogic] Error fetching TV episode details for showId=$showId, season=$seasonNumber, episode=$episodeNumber: $e');
       return null;
     }
   }
@@ -301,7 +286,6 @@ class WorkLogic {
       await _tvDetailRepository.cacheTvSeasonDetail(detail);
       return detail;
     } catch (e) {
-      debugPrint('[WorkLogic] Error fetching TV season details: $e');
       return null;
     }
   }

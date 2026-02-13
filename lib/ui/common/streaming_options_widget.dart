@@ -526,7 +526,6 @@ class _StreamingOptionsWidgetState extends State<StreamingOptionsWidget>
 
   void _launchTmdbWatchPage(BuildContext context, StreamingOption? option) {
     if (widget.tmdbId == null) {
-      debugPrint('[StreamingOptionsWidget] TMDB ID not available');
       return;
     }
 

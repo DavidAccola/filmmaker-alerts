@@ -1,7 +1,6 @@
 import 'dart:async';
 
 import 'package:dio/dio.dart';
-import 'package:flutter/foundation.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 
 class RateLimitEvent {
@@ -49,10 +48,6 @@ class TmdbService {
 
   /// Helper method to log API calls
   void _logApiCall(String endpoint, [Map<String, dynamic>? params]) {
-    final paramsStr = params != null && params.isNotEmpty 
-        ? '?${params.entries.map((e) => '${e.key}=${e.value}').join('&')}'
-        : '';
-    debugPrint('[TMDB API] GET $_baseUrl$endpoint$paramsStr');
   }
 
   // --- Search ---
@@ -375,7 +370,6 @@ class TmdbService {
               }
             }
           } catch (e) {
-            debugPrint('[TMDB] Error fetching season $seasonNumber: $e');
             // Fallback to the original episodes
             final epId = episode['id'] as int?;
             if (epId != null && !seenEpisodeIds.contains(epId)) {
@@ -489,9 +483,6 @@ class _RateLimitInterceptor extends Interceptor {
           waitTime = int.tryParse(retryAfter) ?? 10;
         }
 
-        debugPrint(
-            '[TMDB] Rate limit hit. Waiting $waitTime seconds. Retry ${retries + 1}/$maxRetries');
-            
         // Emit event to UI
         onRateLimit(RateLimitEvent(
           waitTimeSeconds: waitTime,
@@ -514,7 +505,6 @@ class _RateLimitInterceptor extends Interceptor {
           return handler.next(err);
         }
       } else {
-        debugPrint('[TMDB] Max retries reached for rate limiting.');
       }
     }
 

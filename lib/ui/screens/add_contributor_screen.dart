@@ -136,11 +136,6 @@ class _AddContributorScreenState extends ConsumerState<AddContributorScreen> {
         final knownForRole = contributor.knownFor.isNotEmpty 
             ? contributor.knownFor.split('•').first.trim()
             : '';
-        
-        debugPrint('[AddContributor] contributor.knownFor: "${contributor.knownFor}"');
-        debugPrint('[AddContributor] extracted knownForRole: "$knownForRole"');
-        debugPrint('[AddContributor] initialSelection: $initialSelection');
-        debugPrint('[AddContributor] availableDepts: $availableDepts');
 
         // Logic: specific defaults + knownFor -> or known for/first available
         if (initialSelection.isNotEmpty || knownForRole.isNotEmpty) {
@@ -152,8 +147,6 @@ class _AddContributorScreenState extends ConsumerState<AddContributorScreen> {
         } else {
            selectedDepts = [];
         }
-        
-        debugPrint('[AddContributor] final selectedDepts: $selectedDepts');
       } else if (contributor.type == ContributorType.tvShow) {
         // Use default TV notification preferences without showing dialog
         final defaultPrefs = prefs.defaultTvNotificationPrefs ?? TvNotificationPreferences();
@@ -216,12 +209,18 @@ class _AddContributorScreenState extends ConsumerState<AddContributorScreen> {
         }
 
         try {
+          // Parse release date from search result if available
+          DateTime? releaseDate;
+          if (contributor.releaseDateRaw != null && contributor.releaseDateRaw!.isNotEmpty) {
+            releaseDate = DateTime.tryParse(contributor.releaseDateRaw!);
+          }
+
           await watchlistLogic.addWorkToWatchlist(
             tmdbId: contributor.tmdbId,
             type: workType,
             title: contributor.name,
             posterPath: contributor.profilePath,
-            releaseDate: null, // Will be populated from TMDB data if needed
+            releaseDate: releaseDate,
             releaseType: releaseType,
             followedContributors: [contributorSnapshot],
           );

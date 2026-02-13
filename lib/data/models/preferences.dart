@@ -79,6 +79,9 @@ class Preferences extends HiveObject {
   @HiveField(23)
   bool? reduceAnimations;
 
+  @HiveField(24)
+  String? watchlistSortOrder;
+
   Preferences({
     this.notifyTheatre = true,
     this.notifyStreaming = true,
@@ -104,6 +107,7 @@ class Preferences extends HiveObject {
     this.hideRatingsInDetails = false,
     this.streamingCountry = 'US',
     this.reduceAnimations = false,
+    this.watchlistSortOrder,
   });
 
   // Helper getters for "True All" logic

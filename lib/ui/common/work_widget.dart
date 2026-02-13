@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:intl/intl.dart';
+import 'package:material_symbols_icons/symbols.dart';
 import '../../data/models/contributor_detail.dart';
 import '../../logic/work_sorting_logic.dart';
 import 'adaptive_tooltip_text.dart';
@@ -83,14 +84,14 @@ class _WorkWidgetState extends State<WorkWidget> {
             errorWidget: (context, url, error) => Container(
               color: theme.colorScheme.surfaceContainerHighest,
               child: const Center(
-                child: Icon(Icons.movie, size: 40),
+                child: Icon(Symbols.movie, size: 40),
               ),
             ),
           )
         : Container(
             color: theme.colorScheme.surfaceContainerHighest,
             child: const Center(
-              child: Icon(Icons.movie, size: 40),
+              child: Icon(Symbols.movie, size: 40),
             ),
           );
 
@@ -199,7 +200,7 @@ class _WorkWidgetState extends State<WorkWidget> {
                           borderRadius: BorderRadius.circular(4),
                         ),
                         child: Icon(
-                          work.type == WorkType.movie ? Icons.movie : Icons.tv,
+                          work.type == WorkType.movie ? Symbols.movie : Symbols.tv_gen,
                           size: 16,
                           color: Colors.white,
                         ),

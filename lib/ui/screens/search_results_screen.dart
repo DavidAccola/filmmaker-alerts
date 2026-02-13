@@ -179,12 +179,18 @@ class _SearchResultsScreenState extends ConsumerState<SearchResultsScreen> {
         }
 
         try {
+          // Parse release date from search result if available
+          DateTime? releaseDate;
+          if (contributor.releaseDateRaw != null && contributor.releaseDateRaw!.isNotEmpty) {
+            releaseDate = DateTime.tryParse(contributor.releaseDateRaw!);
+          }
+
           await watchlistLogic.addWorkToWatchlist(
             tmdbId: contributor.tmdbId,
             type: workType,
             title: contributor.name,
             posterPath: contributor.profilePath,
-            releaseDate: null, // Will be populated from TMDB data if needed
+            releaseDate: releaseDate,
             releaseType: releaseType,
             followedContributors: [contributorSnapshot],
           );

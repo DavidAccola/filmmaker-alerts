@@ -566,19 +566,23 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with TickerProviderStat
         builder: (context) => _TvNotificationPreferencesDialog(
           showName: contributor.name,
           currentPrefs: contributor.tvNotificationPrefs ?? TvNotificationPreferences(),
+          initialNotificationsPaused: contributor.notificationsSnoozed,
         ),
       );
 
       if (result != null) {
         final newPrefs = result['preferences'] as TvNotificationPreferences;
+        final newNotificationsPaused = result['notificationsPaused'] as bool;
         final oldPrefs = contributor.tvNotificationPrefs ?? TvNotificationPreferences();
         
         // Check if preferences actually changed
-        final hasChanges = oldPrefs.seriesPremiere != newPrefs.seriesPremiere ||
+        final hasPrefsChanges = oldPrefs.seriesPremiere != newPrefs.seriesPremiere ||
                           oldPrefs.seasonPremieres != newPrefs.seasonPremieres ||
                           oldPrefs.seasonFinales != newPrefs.seasonFinales ||
                           oldPrefs.newEpisodes != newPrefs.newEpisodes ||
                           oldPrefs.specials != newPrefs.specials;
+        final hasPauseChanges = contributor.notificationsSnoozed != newNotificationsPaused;
+        final hasChanges = hasPrefsChanges || hasPauseChanges;
         
         if (hasChanges) {
           // Create updated contributor with new TV preferences
@@ -596,6 +600,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with TickerProviderStat
             showStatus: contributor.showStatus,
             totalSeasons: contributor.totalSeasons,
             nextEpisodeDate: contributor.nextEpisodeDate,
+            notificationsSnoozed: newNotificationsPaused,
           );
           
           await logic.updateContributorRoles(updatedContributor, contributor.notifyForDepartments);
@@ -604,7 +609,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with TickerProviderStat
           if (context.mounted) {
             showSimpleSnackBar(
               context,
-              'TV preferences updated.',
+              'Notification preferences updated.',
               onSnackBarVisibilityChanged: (isVisible) {
                 _setFabRaised(isVisible);
               },
@@ -615,7 +620,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with TickerProviderStat
           if (context.mounted) {
             showSimpleSnackBar(
               context,
-              'No changes made to TV preferences.',
+              'No changes made.',
               onSnackBarVisibilityChanged: (isVisible) {
                 _setFabRaised(isVisible);
               },
@@ -628,11 +633,6 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with TickerProviderStat
       final result = await showDialog<dynamic>(
         context: context,
         builder: (context) {
-          debugPrint('[HomeScreen] Opening DepartmentSelectionDialog for ${contributor.name}');
-          debugPrint('[HomeScreen] availableDepartments: ${contributor.availableDepartments}');
-          debugPrint('[HomeScreen] initialSelectedDepartments: ${contributor.notifyForDepartments}');
-          debugPrint('[HomeScreen] initialAllRolesSelected: ${contributor.allRolesSelected ?? false}');
-          
           return DepartmentSelectionDialog(
             name: contributor.name,
             availableDepartments: contributor.availableDepartments,
@@ -640,6 +640,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with TickerProviderStat
             defaultDepartments: prefs.effectiveDefaultDepartments,
             initialAllRolesSelected: contributor.allRolesSelected ?? false,
             allowTrueAll: prefs.autoFollowNewRoles ?? true,
+            initialNotificationsPaused: contributor.notificationsSnoozed,
           );
         },
       );
@@ -647,6 +648,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with TickerProviderStat
       if (result != null && result is Map) {
         final selectedDepts = result['roles'] as List<String>;
         final allSelected = result['allRolesSelected'] as bool;
+        final newNotificationsPaused = result['notificationsPaused'] as bool;
         
         // Check if roles actually changed
         final oldRoles = Set<String>.from(contributor.notifyForDepartments);
@@ -655,8 +657,10 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with TickerProviderStat
         
         const setEquality = SetEquality<String>();
         final hasRoleChanges = !setEquality.equals(oldRoles, newRoles) || oldAllSelected != allSelected;
+        final hasPauseChanges = contributor.notificationsSnoozed != newNotificationsPaused;
+        final hasChanges = hasRoleChanges || hasPauseChanges;
         
-        if (hasRoleChanges) {
+        if (hasChanges) {
           // Create updated contributor with new flags
           final updatedContributor = Contributor(
             tmdbId: contributor.tmdbId,
@@ -673,6 +677,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with TickerProviderStat
             showStatus: contributor.showStatus,
             totalSeasons: contributor.totalSeasons,
             nextEpisodeDate: contributor.nextEpisodeDate,
+            notificationsSnoozed: newNotificationsPaused,
           );
           
           await logic.updateContributorRoles(updatedContributor, selectedDepts);
@@ -681,7 +686,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with TickerProviderStat
           if (context.mounted) {
             showSimpleSnackBar(
               context,
-              'Roles updated.',
+              'Notification preferences updated.',
               onSnackBarVisibilityChanged: (isVisible) {
                 _setFabRaised(isVisible);
               },
@@ -692,7 +697,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with TickerProviderStat
           if (context.mounted) {
             showSimpleSnackBar(
               context,
-              'No changes made to roles.',
+              'No changes made.',
               onSnackBarVisibilityChanged: (isVisible) {
                 _setFabRaised(isVisible);
               },
@@ -707,10 +712,12 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with TickerProviderStat
 class _TvNotificationPreferencesDialog extends StatefulWidget {
   final String showName;
   final TvNotificationPreferences currentPrefs;
+  final bool initialNotificationsPaused;
 
   const _TvNotificationPreferencesDialog({
     required this.showName,
     required this.currentPrefs,
+    this.initialNotificationsPaused = false,
   });
 
   @override
@@ -723,6 +730,7 @@ class _TvNotificationPreferencesDialogState extends State<_TvNotificationPrefere
   late bool seasonFinales;
   late bool newEpisodes;
   late bool specials;
+  late bool notificationsPaused;
 
   @override
   void initState() {
@@ -732,48 +740,75 @@ class _TvNotificationPreferencesDialogState extends State<_TvNotificationPrefere
     seasonFinales = widget.currentPrefs.seasonFinales;
     newEpisodes = widget.currentPrefs.newEpisodes;
     specials = widget.currentPrefs.specials;
+    notificationsPaused = widget.initialNotificationsPaused;
   }
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    
     return AlertDialog(
-      title: Text('${widget.showName} Notifications'),
-      content: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          const Text('Choose which types of notifications you want for this show:'),
-          const SizedBox(height: 16),
-          CheckboxListTile(
-            title: const Text('Series Premiere'),
-            subtitle: const Text('First episode of brand new shows'),
-            value: seriesPremiere,
-            onChanged: (value) => setState(() => seriesPremiere = value ?? false),
-          ),
-          CheckboxListTile(
-            title: const Text('Season Premieres'),
-            subtitle: const Text('First episode of any season'),
-            value: seasonPremieres,
-            onChanged: (value) => setState(() => seasonPremieres = value ?? false),
-          ),
-          CheckboxListTile(
-            title: const Text('Season Finales'),
-            subtitle: const Text('Last episode of any season'),
-            value: seasonFinales,
-            onChanged: (value) => setState(() => seasonFinales = value ?? false),
-          ),
-          CheckboxListTile(
-            title: const Text('New Episodes'),
-            subtitle: const Text('All episodes as they air'),
-            value: newEpisodes,
-            onChanged: (value) => setState(() => newEpisodes = value ?? false),
-          ),
-          CheckboxListTile(
-            title: const Text('Specials'),
-            subtitle: const Text('Holiday specials and one-offs'),
-            value: specials,
-            onChanged: (value) => setState(() => specials = value ?? false),
-          ),
-        ],
+      title: Text('Notification preferences for ${widget.showName}'),
+      content: SingleChildScrollView(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            // Pause notifications toggle
+            SwitchListTile(
+              title: const Text('Pause notifications'),
+              subtitle: Text(
+                notificationsPaused 
+                    ? 'Notifications are paused' 
+                    : 'Notifications are active',
+                style: TextStyle(
+                  color: theme.colorScheme.onSurfaceVariant,
+                  fontSize: 12,
+                ),
+              ),
+              value: notificationsPaused,
+              onChanged: (value) {
+                setState(() {
+                  notificationsPaused = value;
+                });
+              },
+              contentPadding: EdgeInsets.zero,
+            ),
+            const Divider(),
+            const SizedBox(height: 8),
+            const Text('Choose which types of notifications you want for this show:'),
+            const SizedBox(height: 16),
+            CheckboxListTile(
+              title: const Text('Series Premiere'),
+              subtitle: const Text('First episode of brand new shows'),
+              value: seriesPremiere,
+              onChanged: (value) => setState(() => seriesPremiere = value ?? false),
+            ),
+            CheckboxListTile(
+              title: const Text('Season Premieres'),
+              subtitle: const Text('First episode of any season'),
+              value: seasonPremieres,
+              onChanged: (value) => setState(() => seasonPremieres = value ?? false),
+            ),
+            CheckboxListTile(
+              title: const Text('Season Finales'),
+              subtitle: const Text('Last episode of any season'),
+              value: seasonFinales,
+              onChanged: (value) => setState(() => seasonFinales = value ?? false),
+            ),
+            CheckboxListTile(
+              title: const Text('New Episodes'),
+              subtitle: const Text('All episodes as they air'),
+              value: newEpisodes,
+              onChanged: (value) => setState(() => newEpisodes = value ?? false),
+            ),
+            CheckboxListTile(
+              title: const Text('Specials'),
+              subtitle: const Text('Holiday specials and one-offs'),
+              value: specials,
+              onChanged: (value) => setState(() => specials = value ?? false),
+            ),
+          ],
+        ),
       ),
       actions: [
         TextButton(
@@ -792,6 +827,7 @@ class _TvNotificationPreferencesDialogState extends State<_TvNotificationPrefere
             
             Navigator.pop(context, {
               'preferences': preferences,
+              'notificationsPaused': notificationsPaused,
             });
           },
           child: const Text('Save'),

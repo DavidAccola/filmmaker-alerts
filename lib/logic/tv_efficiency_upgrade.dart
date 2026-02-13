@@ -1,5 +1,4 @@
 import '../data/services/tmdb_service.dart';
-import 'package:flutter/foundation.dart';
 
 /// Drop-in replacement for TV processing that follows Copilot's efficiency recommendations
 class TvEfficiencyUpgrade {
@@ -39,11 +38,8 @@ class TvEfficiencyUpgrade {
         .toSet()
         .toList();
     
-    debugPrint('[TvEfficiency] Processing ${showIds.length} unique shows for $contributorName');
-    
     // Step 2: Filter candidate shows efficiently
     final candidates = await _filterShowCandidates(showIds, startDateStr);
-    debugPrint('[TvEfficiency] ${candidates.length} shows passed initial filter');
     
     // Step 3: Process each candidate show
     for (final candidate in candidates) {
@@ -59,7 +55,6 @@ class TvEfficiencyUpgrade {
         );
         notifications.addAll(episodeNotifications);
       } catch (e) {
-        debugPrint('[TvEfficiency] Error processing show ${candidate.showId}: $e');
       }
     }
     
@@ -106,7 +101,6 @@ class TvEfficiencyUpgrade {
       }
       
     } catch (e) {
-      debugPrint('[TvEfficiency] Error processing single show $showId: $e');
     }
     
     return notifications;
@@ -128,7 +122,6 @@ class TvEfficiencyUpgrade {
       final episodes = await _tmdbService.getTvNewEpisodesEfficient(showId, startDateStr, todayStr);
       
       if (episodes.isEmpty) {
-        debugPrint('[TvEfficiency] No episodes found in date range for show $showId');
         return notifications;
       }
       
@@ -148,9 +141,6 @@ class TvEfficiencyUpgrade {
       final isCreatorOfShow = creators.any((creator) => 
         (creator['name'] as String?)?.toLowerCase() == contributorName.toLowerCase()
       );
-      
-      debugPrint('[TvEfficiency] Found ${episodes.length} episodes for $showName using ultra-efficient method');
-      debugPrint('[TvEfficiency] Is $contributorName a creator of $showName? $isCreatorOfShow');
       
       for (final episode in episodes) {
         final seasonNumber = episode['season_number'] as int? ?? 1;
@@ -201,7 +191,6 @@ class TvEfficiencyUpgrade {
       }
       
     } catch (e) {
-      debugPrint('[TvEfficiency] Error in ultra-efficient processing for show $showId: $e');
     }
     
     return notifications;
@@ -233,7 +222,6 @@ class TvEfficiencyUpgrade {
         }
         
       } catch (e) {
-        debugPrint('[TvEfficiency] Failed to fetch show $showId: $e');
       }
     }
     
@@ -287,8 +275,6 @@ class TvEfficiencyUpgrade {
       startDateStr,
       todayStr,
     );
-    
-    debugPrint('[TvEfficiency] Processing ${relevantSeasons.length} relevant seasons for ${candidate.name}');
     
     // Only call season endpoint when we need episode lists
     for (final seasonInfo in relevantSeasons) {

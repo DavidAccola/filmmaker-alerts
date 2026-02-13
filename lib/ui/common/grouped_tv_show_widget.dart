@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:intl/intl.dart';
+import 'package:material_symbols_icons/symbols.dart';
 import '../../data/models/contributor_detail.dart';
 import '../../logic/tv_show_display_logic.dart';
 import '../../logic/work_sorting_logic.dart';
@@ -137,7 +138,7 @@ class _GroupedTvShowWidgetState extends State<GroupedTvShowWidget> {
                           borderRadius: BorderRadius.circular(4),
                         ),
                         child: const Icon(
-                          Icons.tv,
+                          Symbols.tv_gen,
                           size: 16,
                           color: Colors.white,
                         ),
@@ -336,7 +337,7 @@ class _GroupedTvShowWidgetState extends State<GroupedTvShowWidget> {
   Widget _buildPlaceholder(ThemeData theme) {
     return Container(
       color: theme.colorScheme.surfaceContainerHighest,
-      child: const Center(child: Icon(Icons.tv, size: 40)),
+      child: const Center(child: Icon(Symbols.tv_gen, size: 40)),
     );
   }
 }

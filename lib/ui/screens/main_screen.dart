@@ -35,20 +35,14 @@ class _MainScreenState extends ConsumerState<MainScreen> with WindowListener {
   @override
   void initState() {
     super.initState();
-    debugPrint('[MainScreen] initState() called');
     if (Platform.isWindows) {
-      debugPrint('[MainScreen] Adding window listener for Windows');
       windowManager.addListener(this);
-    } else {
-      debugPrint('[MainScreen] Not Windows, skipping window listener');
     }
   }
 
   @override
   void dispose() {
-    debugPrint('[MainScreen] dispose() called');
     if (Platform.isWindows) {
-      debugPrint('[MainScreen] Removing window listener');
       windowManager.removeListener(this);
     }
     super.dispose();
@@ -56,48 +50,37 @@ class _MainScreenState extends ConsumerState<MainScreen> with WindowListener {
 
   @override
   void onWindowClose() async {
-    debugPrint('[MainScreen] onWindowClose() called');
     if (Platform.isWindows) {
       try {
         bool isPreventClose = await windowManager.isPreventClose();
-        debugPrint('[MainScreen] Current preventClose status: $isPreventClose');
         
         if (isPreventClose) {
-          debugPrint('[MainScreen] preventClose is true, minimizing to tray instead of closing');
           final systemTray = ref.read(systemTrayServiceProvider);
           await systemTray.minimizeToTray();
         } else {
-          debugPrint('[MainScreen] preventClose is false, allowing application to close');
           // No action needed, preventClose is already false so window will close
         }
       } catch (e) {
-        debugPrint('[MainScreen] Error in onWindowClose: $e');
         // If error occurs, default to exit as a safety measure
         exit(0);
       }
-    } else {
-      debugPrint('[MainScreen] Not Windows, allowing normal close');
     }
   }
 
   @override
   void onWindowFocus() {
-    debugPrint('[MainScreen] Window gained focus');
   }
 
   @override
   void onWindowBlur() {
-    debugPrint('[MainScreen] Window lost focus');
   }
 
   @override
   void onWindowMinimize() {
-    debugPrint('[MainScreen] Window minimized (not to tray)');
   }
 
   @override
   void onWindowRestore() {
-    debugPrint('[MainScreen] Window restored');
   }
 
   @override
@@ -148,7 +131,6 @@ class _MainScreenState extends ConsumerState<MainScreen> with WindowListener {
         const SingleActivator(LogicalKeyboardKey.keyR, control: true): () {
           if (kDebugMode) {
             // Phoenix.rebirth removed - use hot reload instead
-            debugPrint('[MainScreen] Hot reload with Ctrl+R');
           }
         },
       },

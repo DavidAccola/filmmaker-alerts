@@ -155,15 +155,9 @@ void showWatchlistWithPreferencesSnackBar(
   VoidCallback? onView,
   Function(bool)? onSnackBarVisibilityChanged,
 }) {
-  // Debug logging
-  debugPrint('[WatchlistSnackbar] workTitle: $workTitle');
-  debugPrint('[WatchlistSnackbar] selectedReleaseTypes: $selectedReleaseTypes');
-  
   final releaseTypesString = selectedReleaseTypes.join(', ');
   final releaseDateText = selectedReleaseTypes.length == 1 ? 'release date' : 'release dates';
   final message = "Following $workTitle for $releaseTypesString $releaseDateText";
-  
-  debugPrint('[WatchlistSnackbar] final message: $message');
 
   // Determine if we should show the CHANGE button (similar to person role logic)
   final showChangeButton = selectedReleaseTypes.length < 4; // Show change if not all types selected

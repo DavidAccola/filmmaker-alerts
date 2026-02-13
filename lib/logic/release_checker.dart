@@ -1,4 +1,3 @@
-import 'package:flutter/foundation.dart';
 import 'package:intl/intl.dart';
 import '../data/models/contributor.dart';
 import '../data/models/movie_cache_entry.dart';
@@ -54,18 +53,9 @@ class ReleaseChecker {
     final prefs = _preferencesRepository.getPreferences();
     final contributors = _contributorRepository.getContributors();
     
-    debugPrint('[ReleaseChecker] === DEBUG: Starting findNewReleases ===');
-    debugPrint('[ReleaseChecker] DEBUG: Total contributors: ${contributors.length}');
-    debugPrint('[ReleaseChecker] DEBUG: Using optimized TV processing: $_useOptimizedTvProcessing');
-    
     // Clear TV efficiency caches for this check run
     if (_useOptimizedTvProcessing) {
       _tvEfficiency.clearCaches();
-    }
-    
-    // Debug: Log all contributors and their types
-    for (final contributor in contributors) {
-      debugPrint('[ReleaseChecker] DEBUG: Contributor "${contributor.name}" - Type: ${contributor.type} - ID: ${contributor.tmdbId}');
     }
     
     // In-memory caches for this check run (Phase 1 optimization)
@@ -97,43 +87,35 @@ class ReleaseChecker {
             try {
               start = DateTime.parse(prefs.lastCheckTime!);
             } catch (e) {
-              debugPrint('[ReleaseChecker] Invalid lastCheckTime format: $e, falling back to 7 days');
               start = realToday.subtract(const Duration(days: 7));
             }
           } else {
             start = realToday.subtract(const Duration(days: 7));
           }
           
-          debugPrint('[ReleaseChecker] Debug future mode: checking from $start to pretend date ($pretendDate)');
         } else {
           // Normal pretend mode: pretend date is in past/present
           effectiveToday = pretendDate;
           start = sinceDate ?? pretendDate.subtract(const Duration(days: 7));
-          debugPrint('[ReleaseChecker] Debug past mode: using pretend today ($pretendDate)');
         }
       } catch (e) {
-        debugPrint('[ReleaseChecker] Invalid pretendToday format: $e');
         start = sinceDate ?? realToday.subtract(const Duration(days: 7));
       }
     } else {
       // Normal operation mode
       if (sinceDate != null) {
         start = sinceDate;
-        debugPrint('[ReleaseChecker] Normal mode: checking from provided sinceDate ($sinceDate) to today ($realToday)');
       } else {
         // Check if we have a last check time stored
         if (prefs.lastCheckTime != null && prefs.lastCheckTime!.isNotEmpty) {
           try {
             start = DateTime.parse(prefs.lastCheckTime!);
-            debugPrint('[ReleaseChecker] Normal mode: checking from last check time ($start) to today ($realToday)');
           } catch (e) {
-            debugPrint('[ReleaseChecker] Invalid lastCheckTime format: $e, falling back to 7 days');
             start = realToday.subtract(const Duration(days: 7));
           }
         } else {
           // First time check - go back 7 days
           start = realToday.subtract(const Duration(days: 7));
-          debugPrint('[ReleaseChecker] First time check: checking last 7 days from today ($realToday)');
         }
       }
     }
@@ -144,51 +126,32 @@ class ReleaseChecker {
     final endDate = isDebugFutureMode ? effectiveToday : realToday;
     final todayStr = DateFormat('yyyy-MM-dd').format(endDate);
 
-    debugPrint('[ReleaseChecker] Checking releases from $startDateStr to $todayStr');
-    debugPrint('[ReleaseChecker] DEBUG: isDebugFutureMode = $isDebugFutureMode');
-    debugPrint('[ReleaseChecker] DEBUG: realToday = $realToday');
-    debugPrint('[ReleaseChecker] DEBUG: effectiveToday = $effectiveToday');
-    debugPrint('[ReleaseChecker] DEBUG: endDate = $endDate');
-
     final List<NotificationHistoryEntry> newNotifications = [];
 
     // Track processed IDs to avoid re-fetching details for the same movie
     final Set<int> processedMovieIds = {};
 
     // Check TV shows first
-    debugPrint('[ReleaseChecker] DEBUG: About to check TV releases...');
     final tvNotifications = await _checkTvReleases(startDateStr, todayStr, processedShowDetails, processedSeasonDetails);
-    debugPrint('[ReleaseChecker] DEBUG: TV releases check returned ${tvNotifications.length} notifications');
     newNotifications.addAll(tvNotifications);
 
     // Check watchlist movies for releases
-    debugPrint('[ReleaseChecker] DEBUG: About to check watchlist movie releases...');
     final watchlistMovieNotifications = await _checkWatchlistMovieReleases(startDateStr, todayStr);
-    debugPrint('[ReleaseChecker] DEBUG: Watchlist movie releases check returned ${watchlistMovieNotifications.length} notifications');
     newNotifications.addAll(watchlistMovieNotifications);
 
     // Check watchlist TV shows for new episodes
-    debugPrint('[ReleaseChecker] DEBUG: About to check watchlist TV show episodes...');
     final watchlistTvNotifications = await _checkWatchlistTvReleases(startDateStr, todayStr, processedShowDetails, processedSeasonDetails);
-    debugPrint('[ReleaseChecker] DEBUG: Watchlist TV show check returned ${watchlistTvNotifications.length} notifications');
     newNotifications.addAll(watchlistTvNotifications);
 
     // 2. Iterate Contributors (excluding TV shows, which are handled separately)
-    debugPrint('[ReleaseChecker] DEBUG: Starting main contributor loop...');
     final nonTvContributors = contributors.where((c) => c.type != ContributorType.tvShow).toList();
-    debugPrint('[ReleaseChecker] DEBUG: Processing ${nonTvContributors.length} non-TV contributors (${contributors.length - nonTvContributors.length} TV shows excluded)');
     
     for (final contributor in nonTvContributors) {
-      debugPrint('[ReleaseChecker] DEBUG: Processing contributor "${contributor.name}" (${contributor.type})');
       
       // Only process people and companies
       if (contributor.type != ContributorType.person && contributor.type != ContributorType.company && contributor.type != ContributorType.movie) {
-        debugPrint('[ReleaseChecker] DEBUG: Skipping ${contributor.name} - not a person/company/movie');
         continue;
       }
-      
-      debugPrint('[ReleaseChecker] DEBUG: ${contributor.name} - notifyForDepartments: ${contributor.notifyForDepartments}');
-      debugPrint('[ReleaseChecker] DEBUG: ${contributor.name} - allRolesSelected: ${contributor.allRolesSelected}');
       
       // Throttling (250ms)
       await Future.delayed(const Duration(milliseconds: 250));
@@ -206,22 +169,13 @@ class ReleaseChecker {
           if (imdbId != null && imdbId.isNotEmpty && (contributor.imdbId == null || contributor.imdbId!.isEmpty)) {
             contributor.imdbId = imdbId;
             await _contributorRepository.updateContributor(contributor);
-            debugPrint('[ReleaseChecker] DEBUG: ${contributor.name} - Stored IMDB ID: $imdbId');
           }
           
           final data = await _tmdbService.getPersonCombinedCredits(contributor.tmdbId);
           credits = [...(data['cast'] ?? []), ...(data['crew'] ?? [])];
-          debugPrint('[ReleaseChecker] DEBUG: ${contributor.name} - Fetched ${credits.length} total credits (${(data['cast'] ?? []).length} cast, ${(data['crew'] ?? []).length} crew)');
           
           // Update contributor detail with all fetched credits
           await _updateContributorDetail(contributor, credits);
-          
-          // Debug: Log TV credits
-          final tvCredits = credits.where((c) => c['media_type'] == 'tv').toList();
-          debugPrint('[ReleaseChecker] DEBUG: ${contributor.name} - TV credits: ${tvCredits.length}');
-          for (final tv in tvCredits.take(5)) {
-            debugPrint('[ReleaseChecker] DEBUG: ${contributor.name} - TV: ${tv['name']} (${tv['id']}) - ${tv['job'] ?? tv['character'] ?? 'unknown role'}');
-          }
         } else if (contributor.type == ContributorType.company) {
           // Companies: Fetch movies and TV
           final movies = await _tmdbService.getCompanyCredits(contributor.tmdbId, 'movie', since: startDateStr);
@@ -238,7 +192,6 @@ class ReleaseChecker {
         } else if (contributor.type == ContributorType.movie) {
              // Treat the movie itself as the credit
              credits = [await _tmdbService.getMovieDetails(contributor.tmdbId)];
-             debugPrint('[ReleaseChecker] Movie ${contributor.name} details: ${credits.first}');
              
              // Update detail for the movie itself
              await _updateContributorDetail(contributor, credits);
@@ -254,16 +207,6 @@ class ReleaseChecker {
             moviesMap[id] = [];
           }
           moviesMap[id]!.add(credit);
-        }
-
-        debugPrint('[ReleaseChecker] ${contributor.name} has ${moviesMap.length} movies to check');
-        
-        // Debug: Log TV shows in moviesMap
-        for (final entry in moviesMap.entries) {
-          final credit = entry.value.first;
-          if (credit['media_type'] == 'tv') {
-            debugPrint('[ReleaseChecker] DEBUG: ${contributor.name} - TV show in map: ${credit['name']} (${entry.key})');
-          }
         }
 
         for (final entry in moviesMap.entries) {
@@ -292,12 +235,9 @@ class ReleaseChecker {
           final String? releaseDate = credit['release_date'] ?? credit['first_air_date'];
           final mediaType = credit['media_type'] ?? (contributor.type == ContributorType.movie ? 'movie' : null);
 
-          debugPrint('[ReleaseChecker] DEBUG: ${contributor.name} - movieId: $movieId, mediaType: $mediaType, releaseDate: $releaseDate');
-
           // For TV shows, allow processing even if matchingCredits is empty (to check for creator episodes)
           // For other media types, skip if no relevant roles
           if (matchingCredits.isEmpty && mediaType != 'tv') {
-            debugPrint('[ReleaseChecker] DEBUG: ${contributor.name} - Skipping $movieId (no matching credits and not TV)');
             continue;
           }
 
@@ -305,24 +245,20 @@ class ReleaseChecker {
           // For movies, we need a valid release date
           if (mediaType != 'tv') {
             if (releaseDate == null || releaseDate.isEmpty) {
-              debugPrint('[ReleaseChecker] DEBUG: ${contributor.name} - Skipping $movieId (no release date)');
               continue;
             }
 
             // B. Basic Window Check (Optimization)
             // Check if the release date falls within our search window
             if (releaseDate.compareTo(startDateStr) < 0 || releaseDate.compareTo(todayStr) > 0) {
-              debugPrint('[ReleaseChecker] DEBUG: ${contributor.name} - Skipping $movieId (release date $releaseDate outside window $startDateStr-$todayStr)');
               continue;
             }
           } else {
             // For TV shows, we'll check episode air dates instead of show premiere date
-            debugPrint('[ReleaseChecker] DEBUG: ${contributor.name} - TV show $movieId: skipping show premiere date check, will check episode air dates instead');
           }
 
           // C. Deduplication (If processed, just add reason if we already found it)
           if (processedMovieIds.contains(movieId)) {
-             debugPrint('[ReleaseChecker] DEBUG: ${contributor.name} - Already processed $movieId, adding reason');
              // Check if this movie matches an existing newNotification
              final existing = newNotifications.where((n) => n.tmdbId == movieId).firstOrNull;
              if (existing != null) {
@@ -333,7 +269,6 @@ class ReleaseChecker {
              } else if (mediaType == 'tv') {
                 // For TV shows, if no notification exists yet but we have a creator/director role,
                 // we should still process it to generate notifications for episodes
-                debugPrint('[ReleaseChecker] DEBUG: ${contributor.name} - TV show $movieId already processed but no notification found, will process for creator/director roles');
                 // Fall through to process TV show
              } else {
                 continue; // Don't re-fetch details for non-TV media
@@ -341,7 +276,6 @@ class ReleaseChecker {
           }
 
           if (mediaType == 'tv') {
-             debugPrint('[ReleaseChecker] DEBUG: ${contributor.name} - Processing TV show $movieId');
              // TV Logic - Enhanced for person contributors
              if (prefs.effectiveNotifyTV) {
                // For person contributors, we process TV shows even if already processed by _checkTvReleases
@@ -350,8 +284,6 @@ class ReleaseChecker {
                if (!alreadyProcessedByTvCheck) {
                  processedMovieIds.add(movieId);
                }
-               
-               debugPrint('[ReleaseChecker] DEBUG: Processing TV show ${credit['name']} for person ${contributor.name}');
                
                // Use optimized TV processing if enabled
                if (_useOptimizedTvProcessing) {
@@ -427,32 +359,16 @@ class ReleaseChecker {
             // History Check
             final typeStr = _getReleaseTypeString(type);
             
-            // Debug logging for specific movies we're tracking
-            if (movieId == 1381151) { // Holy Days
-              debugPrint('[ReleaseChecker] DEBUG: *** HOLY DAYS (1381151) *** - Release date: $rDate, Type: $type ($typeStr)');
-            }
-            if (movieId == 1381152) { // Hail Mary (assuming this is the ID)
-              debugPrint('[ReleaseChecker] DEBUG: *** HAIL MARY (1381152) *** - Release date: $rDate, Type: $type ($typeStr)');
-            }
-            
-            debugPrint('[ReleaseChecker] DEBUG: Checking history for movie $movieId, releaseType: $typeStr');
             if (_hasBeenNotified(movieId, typeStr)) {
-              debugPrint('[ReleaseChecker] DEBUG: Already notified for movie $movieId, releaseType: $typeStr - SKIPPING');
               continue;
             }
-            debugPrint('[ReleaseChecker] DEBUG: NOT in history for movie $movieId, releaseType: $typeStr - WILL NOTIFY');
 
             // Add Notification
-            debugPrint('[ReleaseChecker] DEBUG: Adding notification for movie $movieId, releaseType: $typeStr');
-            if (movieId == 1381151) { // Holy Days
-              debugPrint('[ReleaseChecker] DEBUG: *** HOLY DAYS (1381151) *** - ADDING TO NOTIFICATIONS');
-            }
             _addNotification(newNotifications, contributor, matchingCredits, typeStr, todayStr);
           }
         }
 
       } catch (e) {
-        debugPrint('[ReleaseChecker] Error processing ${contributor.name}: $e');
       }
     }
 
@@ -472,25 +388,18 @@ class ReleaseChecker {
   }
 
   bool _isNotificationEnabled(int type, Preferences prefs) {
-    debugPrint('[ReleaseChecker] Checking notification for release type $type (${_getReleaseTypeString(type)})');
-    
     switch (type) {
       case 1: // Premiere
       case 2: // Theatrical Limited
       case 3: // Theatrical
-        debugPrint('[ReleaseChecker] Theatrical release - effectiveNotifyTheatre: ${prefs.effectiveNotifyTheatre}');
         return prefs.effectiveNotifyTheatre;
       case 4: // Digital
-        debugPrint('[ReleaseChecker] Digital release - effectiveNotifyStreaming: ${prefs.effectiveNotifyStreaming}');
         return prefs.effectiveNotifyStreaming;
       case 5: // Physical
-        debugPrint('[ReleaseChecker] Physical release - effectiveNotifyPhysical: ${prefs.effectiveNotifyPhysical}');
         return prefs.effectiveNotifyPhysical;
       case 6: // TV
-        debugPrint('[ReleaseChecker] TV release - effectiveNotifyTV: ${prefs.effectiveNotifyTV}');
         return prefs.effectiveNotifyTV;
       default:
-        debugPrint('[ReleaseChecker] Unknown release type $type - not notifying');
         return false;
     }
   }
@@ -504,18 +413,11 @@ class ReleaseChecker {
     final history = _historyRepository.getHistory();
     final entry = history.where((h) => h.entry.tmdbId == tmdbId).firstOrNull;
     
-    debugPrint('[ReleaseChecker] DEBUG: _hasBeenNotified - tmdbId: $tmdbId, releaseType: $releaseType');
-    
     if (entry == null) {
-      debugPrint('[ReleaseChecker] DEBUG: No history entry found for tmdbId: $tmdbId');
       return false;
     }
     
-    debugPrint('[ReleaseChecker] DEBUG: Found history entry for tmdbId: $tmdbId');
-    debugPrint('[ReleaseChecker] DEBUG: History events: ${entry.entry.notificationEvents.map((e) => e.releaseType).toList()}');
-    
     final hasBeenNotified = entry.entry.notificationEvents.any((e) => e.releaseType == releaseType);
-    debugPrint('[ReleaseChecker] DEBUG: Has been notified for $releaseType: $hasBeenNotified');
     
     return hasBeenNotified;
   }
@@ -592,45 +494,27 @@ class ReleaseChecker {
     final contributors = _contributorRepository.getContributors();
     final prefs = _preferencesRepository.getPreferences();
     
-    debugPrint('[ReleaseChecker] DEBUG: === _checkTvReleases called ===');
-    debugPrint('[ReleaseChecker] DEBUG: TV notifications enabled: ${prefs.effectiveNotifyTV}');
-    
     // Check if TV notifications are enabled globally
     if (!prefs.effectiveNotifyTV) {
-      debugPrint('[ReleaseChecker] TV notifications are disabled globally, skipping TV show checks');
       return tvNotifications;
     }
     
     // Get all followed TV shows
     final tvShows = contributors.where((c) => c.type == ContributorType.tvShow).toList();
     
-    debugPrint('[ReleaseChecker] DEBUG: Found ${tvShows.length} TV shows to check');
     for (final tvShow in tvShows) {
-      debugPrint('[ReleaseChecker] DEBUG: TV Show: "${tvShow.name}" - ID: ${tvShow.tmdbId}');
-    }
-    
-    debugPrint('[ReleaseChecker] Checking ${tvShows.length} followed TV shows for new episodes');
-    
-    for (final tvShow in tvShows) {
-      debugPrint('[ReleaseChecker] DEBUG: Processing TV show "${tvShow.name}"...');
       try {
         // Throttling
         await Future.delayed(const Duration(milliseconds: 250));
         
-        debugPrint('[ReleaseChecker] DEBUG: Getting TV details for "${tvShow.name}" (ID: ${tvShow.tmdbId})');
-        
         // Phase 1 Optimization: Check in-memory cache first
         Map<String, dynamic> showDetails;
         if (processedShowDetails.containsKey(tvShow.tmdbId)) {
-          debugPrint('[ReleaseChecker] DEBUG: Using cached show details for "${tvShow.name}"');
           showDetails = processedShowDetails[tvShow.tmdbId]!;
         } else {
-          debugPrint('[ReleaseChecker] DEBUG: Fetching show details for "${tvShow.name}"');
           showDetails = await _tmdbService.getTvDetails(tvShow.tmdbId);
           processedShowDetails[tvShow.tmdbId] = showDetails;
         }
-        
-        debugPrint('[ReleaseChecker] DEBUG: Got TV details for "${tvShow.name}": ${showDetails.keys.toList()}');
         
         // Update contributor detail for the TV Show itself
         final List<Map<String, dynamic>> showCredits = [];
@@ -670,12 +554,8 @@ class ReleaseChecker {
         ));
         
         // Check for upcoming episodes using TMDB's on-the-air endpoint
-        debugPrint('[ReleaseChecker] DEBUG: Checking on-the-air and airing-today endpoints...');
         final onTheAir = await _tmdbService.getTvOnTheAir();
         final airingToday = await _tmdbService.getTvAiringToday();
-        
-        debugPrint('[ReleaseChecker] DEBUG: On-the-air results: ${onTheAir['results']?.length ?? 0} shows');
-        debugPrint('[ReleaseChecker] DEBUG: Airing-today results: ${airingToday['results']?.length ?? 0} shows');
         
         // Combine both lists and filter for our show
         final allAiringShows = [
@@ -683,14 +563,9 @@ class ReleaseChecker {
           ...(airingToday['results'] as List? ?? [])
         ];
         
-        debugPrint('[ReleaseChecker] DEBUG: Total airing shows: ${allAiringShows.length}');
-        
         final ourShowAiring = allAiringShows.where((show) => show['id'] == tvShow.tmdbId);
         
-        debugPrint('[ReleaseChecker] DEBUG: Found ${ourShowAiring.length} matches for "${tvShow.name}" in airing shows');
-        
         if (ourShowAiring.isNotEmpty) {
-          debugPrint('[ReleaseChecker] DEBUG: "${tvShow.name}" is currently airing, checking seasons...');
           
           // Collect all episodes for this show, grouped by air date
           final Map<String, List<Map<String, dynamic>>> episodesByDate = {};
@@ -698,53 +573,38 @@ class ReleaseChecker {
           // Get detailed season information to find specific episodes
           final seasons = showDetails['seasons'] as List? ?? [];
           
-          debugPrint('[ReleaseChecker] DEBUG: "${tvShow.name}" has ${seasons.length} seasons');
-          
           for (final season in seasons) {
             final seasonNumber = season['season_number'] as int;
-            
-            debugPrint('[ReleaseChecker] DEBUG: Processing season $seasonNumber for "${tvShow.name}"');
             
             try {
               // Phase 1 Optimization: Check in-memory cache first
               final cacheKey = '${tvShow.tmdbId}_$seasonNumber';
               Map<String, dynamic> seasonDetails;
               if (processedSeasonDetails.containsKey(cacheKey)) {
-                debugPrint('[ReleaseChecker] DEBUG: Using cached season details for S$seasonNumber');
                 seasonDetails = processedSeasonDetails[cacheKey]!;
               } else {
-                debugPrint('[ReleaseChecker] DEBUG: Fetching season details for S$seasonNumber');
                 seasonDetails = await _tmdbService.getTvSeasonDetails(tvShow.tmdbId, seasonNumber);
                 processedSeasonDetails[cacheKey] = seasonDetails;
               }
               
               final episodes = seasonDetails['episodes'] as List? ?? [];
               
-              debugPrint('[ReleaseChecker] DEBUG: Season $seasonNumber has ${episodes.length} episodes');
-              
               for (final episode in episodes) {
                 final airDate = episode['air_date'] as String?;
                 if (airDate == null || airDate.isEmpty) {
-                  debugPrint('[ReleaseChecker] DEBUG: Episode ${episode['episode_number']} has no air date, skipping');
                   continue;
                 }
-                
-                debugPrint('[ReleaseChecker] DEBUG: Episode ${episode['episode_number']} airs on $airDate');
                 
                 // Skip rebroadcasts/reruns - TMDB doesn't explicitly mark these,
                 // but we can filter based on episode metadata when available
                 if (_isRebroadcast(episode)) {
-                  debugPrint('[ReleaseChecker] DEBUG: Episode ${episode['episode_number']} is a rebroadcast, skipping');
                   continue;
                 }
                 
                 // Check if episode is in our date range
                 if (airDate.compareTo(startDateStr) < 0 || airDate.compareTo(todayStr) > 0) {
-                  debugPrint('[ReleaseChecker] DEBUG: Episode ${episode['episode_number']} air date $airDate is outside range $startDateStr to $todayStr, skipping');
                   continue;
                 }
-                
-                debugPrint('[ReleaseChecker] DEBUG: Episode ${episode['episode_number']} is in date range, processing...');
                 
                 // TODO: When TMDB provides streaming release dates for TV episodes,
                 // we should also check those dates here. For now, we use air_date
@@ -792,7 +652,6 @@ class ReleaseChecker {
                 episodesByDate[airDate]!.add(episodeWithType);
               }
             } catch (e) {
-              debugPrint('[ReleaseChecker] Error fetching season $seasonNumber for ${tvShow.name}: $e');
             }
           }
           
@@ -829,7 +688,6 @@ class ReleaseChecker {
         await _checkPersonTvWork(tvShow, showDetails, startDateStr, todayStr, tvNotifications);
         
       } catch (e) {
-        debugPrint('[ReleaseChecker] Error checking TV show ${tvShow.name}: $e');
       }
     }
     
@@ -1080,7 +938,6 @@ class ReleaseChecker {
           }
         }
       } catch (e) {
-        debugPrint('[ReleaseChecker] Error fetching episode credits for S${notification.seasonNumber}E${notification.episodeNumber}: $e');
       }
     }
   }
@@ -1217,8 +1074,6 @@ class ReleaseChecker {
     String todayStr,
   ) async {
     try {
-      debugPrint('[ReleaseChecker] DEBUG: Using optimized TV processing for ${contributor.name} - Show $showId');
-      
       // Use the ultra-efficient TV efficiency processor for single show
       final notifications = await _tvEfficiency.processSingleTvShowUltraEfficient(
         showId: showId,
@@ -1228,8 +1083,6 @@ class ReleaseChecker {
         startDateStr: startDateStr,
         todayStr: todayStr,
       );
-      
-      debugPrint('[ReleaseChecker] DEBUG: Optimized processing found ${notifications.length} notifications for ${contributor.name}');
       
       // Group episodes by air date to match original behavior
       final Map<String, List<Map<String, dynamic>>> episodesByDate = {};
@@ -1244,7 +1097,6 @@ class ReleaseChecker {
           notification.episodeNumber, 
           episodeType
         )) {
-          debugPrint('[ReleaseChecker] DEBUG: Already notified for S${notification.seasonNumber}E${notification.episodeNumber}');
           continue;
         }
         
@@ -1311,9 +1163,7 @@ class ReleaseChecker {
       }
       
     } catch (e) {
-      debugPrint('[ReleaseChecker] Error in optimized TV processing for ${contributor.name}: $e');
       // Fall back to original processing on error
-      debugPrint('[ReleaseChecker] Falling back to original TV processing');
       await _processPersonTvShowOriginal(
         newNotifications,
         contributor,
@@ -1341,16 +1191,12 @@ class ReleaseChecker {
     Map<String, Map<String, dynamic>> processedSeasonDetails,
   ) async {
     try {
-      debugPrint('[ReleaseChecker] DEBUG: Using original TV processing for ${contributor.name} - Show $movieId');
-      
       // Get TV show details and check for new episodes
       // Phase 1 Optimization: Check in-memory cache first
       Map<String, dynamic> showDetails;
       if (processedShowDetails.containsKey(movieId)) {
-        debugPrint('[ReleaseChecker] DEBUG: ${contributor.name} - Using cached show details for $movieId');
         showDetails = processedShowDetails[movieId]!;
       } else {
-        debugPrint('[ReleaseChecker] DEBUG: ${contributor.name} - Fetching show details for $movieId');
         showDetails = await _tmdbService.getTvDetails(movieId);
         processedShowDetails[movieId] = showDetails;
       }
@@ -1358,12 +1204,9 @@ class ReleaseChecker {
       final showStatus = showDetails['status'] as String? ?? '';
       final lastAirDate = showDetails['last_air_date'] as String?;
       
-      debugPrint('[ReleaseChecker] DEBUG: ${contributor.name} - Show status: $showStatus, last air date: $lastAirDate');
-      
       // Optimization: Skip shows that have ended and their last episode aired before our window
       if (showStatus.toLowerCase() == 'ended' && lastAirDate != null) {
         if (lastAirDate.compareTo(startDateStr) < 0) {
-          debugPrint('[ReleaseChecker] DEBUG: ${contributor.name} - Skipping $movieId (show ended on $lastAirDate, before window $startDateStr)');
           return;
         }
       }
@@ -1388,16 +1231,11 @@ class ReleaseChecker {
         (creator['name'] as String?)?.toLowerCase() == contributor.name.toLowerCase()
       );
       
-      debugPrint('[ReleaseChecker] DEBUG: ${contributor.name} - isCreator of show: $isCreator');
-      debugPrint('[ReleaseChecker] DEBUG: ${contributor.name} - Show creators: ${creators.map((c) => c['name']).toList()}');
-      
       // Collect all episodes for this show in our date range
       final Map<String, List<Map<String, dynamic>>> episodesByDate = {};
       
       // Get detailed season information to find specific episodes
       final seasons = showDetails['seasons'] as List? ?? [];
-      
-      debugPrint('[ReleaseChecker] DEBUG: TV show ${showDetails['name']} has ${seasons.length} seasons');
       
       // Optimization: Only check recent seasons (last 3 seasons or those with air dates in our window)
       final recentSeasons = seasons.where((season) {
@@ -1414,8 +1252,6 @@ class ReleaseChecker {
         return isInWindow || isRecent;
       }).toList();
       
-      debugPrint('[ReleaseChecker] DEBUG: ${contributor.name} - Checking ${recentSeasons.length} recent seasons out of ${seasons.length}');
-      
       for (final season in recentSeasons) {
         final seasonNumber = season['season_number'] as int;
         final seasonAirDate = season['air_date'] as String?;
@@ -1423,7 +1259,6 @@ class ReleaseChecker {
         // Optimization: Skip seasons that haven't aired yet or aired before our window
         if (seasonAirDate != null) {
           if (seasonAirDate.compareTo(todayStr) > 0) {
-            debugPrint('[ReleaseChecker] DEBUG: ${contributor.name} - Skipping season $seasonNumber (airs in future on $seasonAirDate, after window $todayStr)');
             continue;
           }
         }
@@ -1433,17 +1268,13 @@ class ReleaseChecker {
           final cacheKey = '${movieId}_$seasonNumber';
           Map<String, dynamic> seasonDetails;
           if (processedSeasonDetails.containsKey(cacheKey)) {
-            debugPrint('[ReleaseChecker] DEBUG: ${contributor.name} - Using cached season details for S$seasonNumber');
             seasonDetails = processedSeasonDetails[cacheKey]!;
           } else {
-            debugPrint('[ReleaseChecker] DEBUG: ${contributor.name} - Fetching season details for S$seasonNumber');
             seasonDetails = await _tmdbService.getTvSeasonDetails(movieId, seasonNumber);
             processedSeasonDetails[cacheKey] = seasonDetails;
           }
           
           final episodes = seasonDetails['episodes'] as List? ?? [];
-          
-          debugPrint('[ReleaseChecker] DEBUG: Season $seasonNumber has ${episodes.length} episodes');
           
           for (final episode in episodes) {
             final airDate = episode['air_date'] as String?;
@@ -1454,11 +1285,8 @@ class ReleaseChecker {
               continue;
             }
             
-            debugPrint('[ReleaseChecker] DEBUG: ${contributor.name} - Episode ${episode['episode_number']} airs on $airDate (in range)');
-            
             // Skip rebroadcasts
             if (_isRebroadcast(episode)) {
-              debugPrint('[ReleaseChecker] DEBUG: ${contributor.name} - Skipping episode ${episode['episode_number']} (rebroadcast)');
               continue;
             }
             
@@ -1486,7 +1314,6 @@ class ReleaseChecker {
             
             // Check if we've already notified for this episode
             if (_hasBeenNotifiedForTvEpisode(movieId, seasonNum, episodeNumber, episodeType)) {
-              debugPrint('[ReleaseChecker] DEBUG: ${contributor.name} - Already notified for S${seasonNum}E$episodeNumber');
               continue;
             }
             
@@ -1500,14 +1327,11 @@ class ReleaseChecker {
               final interestedDepartments = contributor.notifyForDepartments;
               final isTrueAll = contributor.allRolesSelected ?? false;
               
-              debugPrint('[ReleaseChecker] DEBUG: ${contributor.name} - Checking creator notification: isTrueAll=$isTrueAll, hasCreator=${interestedDepartments.contains('Creator')}, notifyPersonTvEpisodes=${prefs.notifyPersonTvEpisodes}');
-              
               // Notify if: True All is enabled, Creator is in departments, or TV episode notifications are globally enabled
               if (isTrueAll || interestedDepartments.contains('Creator') || (prefs.notifyPersonTvEpisodes ?? true)) {
                 shouldNotify = true;
                 jobTitle = 'Creator';
                 department = 'Creator';
-                debugPrint('[ReleaseChecker] DEBUG: ${contributor.name} should be notified as Creator for S${seasonNum}E$episodeNumber');
               }
             }
             
@@ -1530,11 +1354,9 @@ class ReleaseChecker {
                     shouldNotify = true;
                     jobTitle = 'Director';
                     department = 'Directing';
-                    debugPrint('[ReleaseChecker] DEBUG: ${contributor.name} should be notified as Director');
                   }
                 }
               } catch (e) {
-                debugPrint('[ReleaseChecker] Error fetching episode credits: $e');
               }
             }
             
@@ -1553,7 +1375,6 @@ class ReleaseChecker {
             }
           }
         } catch (e) {
-          debugPrint('[ReleaseChecker] Error fetching season $seasonNumber: $e');
         }
       }
       
@@ -1588,7 +1409,6 @@ class ReleaseChecker {
       }
       
     } catch (e) {
-      debugPrint('[ReleaseChecker] Error in original TV processing for ${contributor.name}: $e');
     }
   }
 
@@ -1607,11 +1427,8 @@ class ReleaseChecker {
   /// Private helper to update cached contributor details
   Future<void> _updateContributorDetail(Contributor contributor, List<dynamic> allCredits) async {
     if (_contributorDetailRepository == null) {
-      debugPrint('[ReleaseChecker] ContributorDetailRepository is null, skipping detail update for ${contributor.name}');
       return;
     }
-
-    debugPrint('[ReleaseChecker] Updating contributor detail for ${contributor.name} (${contributor.tmdbId}) with ${allCredits.length} credits');
 
     final now = DateTime.now();
     final List<Work> allWorks = [];
@@ -1711,8 +1528,6 @@ class ReleaseChecker {
       }.take(10).toList();
 
       if (relevantTvShows.isNotEmpty) {
-        debugPrint('[ReleaseChecker] Enriched detail: Fetching episodes for ${relevantTvShows.length} shows');
-        
         // First, identify which seasons have the person's credits
         final Map<int, Set<int>> showSeasons = {}; // showId -> set of season numbers
         
@@ -1752,12 +1567,10 @@ class ReleaseChecker {
                     _addEpisodeToWorks(allWorks, show, ep);
                   }
                 } catch (e) {
-                  debugPrint('[ReleaseChecker] Error fetching season $seasonNum for show ${show.title}: $e');
                 }
               }
             }
           } catch (e) {
-            debugPrint('[ReleaseChecker] Error fetching episodes for show ${show.title}: $e');
           }
         }
 
@@ -1807,7 +1620,6 @@ class ReleaseChecker {
     );
 
     await _contributorDetailRepository.cacheContributorDetail(detail);
-    debugPrint('[ReleaseChecker] Successfully cached contributor detail for ${contributor.name}');
   }
 
   /// Check for new releases of movies in the watchlist
@@ -1817,19 +1629,14 @@ class ReleaseChecker {
   ) async {
     final List<NotificationHistoryEntry> watchlistNotifications = [];
     
-    debugPrint('[ReleaseChecker] DEBUG: === _checkWatchlistMovieReleases called ===');
-    
     // Get all watchlist entries
     final watchlistEntries = _watchlistRepository.getWorks();
     
     // Filter for movies only - TV shows are handled by _checkTvReleases
     final movieEntries = watchlistEntries.where((entry) => entry.type == WorkType.movie).toList();
     
-    debugPrint('[ReleaseChecker] DEBUG: Found ${movieEntries.length} movies in watchlist');
-    
     for (final entry in movieEntries) {
       try {
-        debugPrint('[ReleaseChecker] DEBUG: Checking watchlist movie: ${entry.title} (ID: ${entry.tmdbId})');
         
         // Throttling
         await Future.delayed(const Duration(milliseconds: 250));
@@ -1840,7 +1647,6 @@ class ReleaseChecker {
         final releaseDatesResults = details['release_dates']?['results'] as List?;
         
         if (releaseDatesResults == null) {
-          debugPrint('[ReleaseChecker] DEBUG: No release dates found for ${entry.title}');
           continue;
         }
         
@@ -1868,17 +1674,12 @@ class ReleaseChecker {
           }
         }
         
-        debugPrint('[ReleaseChecker] DEBUG: Found ${releases.length} release dates for ${entry.title}');
-        
         for (final release in releases) {
           final String rDate = (release['release_date'] as String).substring(0, 10);
           final int type = release['type'];
           
-          debugPrint('[ReleaseChecker] DEBUG: Checking release: date=$rDate, type=$type (${_getReleaseTypeString(type)})');
-          
           // Window Check for specific release
           if (rDate.compareTo(startDateStr) < 0 || rDate.compareTo(todayStr) > 0) {
-            debugPrint('[ReleaseChecker] DEBUG: Release date $rDate is outside window $startDateStr-$todayStr, skipping');
             continue;
           }
           
@@ -1887,23 +1688,17 @@ class ReleaseChecker {
           
           // Check if user wants notifications for this release type
           if (!_isNotificationEnabledForWatchlistEntry(type, effectivePrefs)) {
-            debugPrint('[ReleaseChecker] DEBUG: User does not want notifications for ${_getReleaseTypeString(type)}');
             continue;
           }
           
           // History Check
           final typeStr = _getReleaseTypeString(type);
           
-          debugPrint('[ReleaseChecker] DEBUG: Checking history for watchlist movie ${entry.tmdbId}, releaseType: $typeStr');
           if (_hasBeenNotified(entry.tmdbId, typeStr)) {
-            debugPrint('[ReleaseChecker] DEBUG: Already notified for watchlist movie ${entry.tmdbId}, releaseType: $typeStr - SKIPPING');
             continue;
           }
-          debugPrint('[ReleaseChecker] DEBUG: NOT in history for watchlist movie ${entry.tmdbId}, releaseType: $typeStr - WILL NOTIFY');
           
           // Add Notification
-          debugPrint('[ReleaseChecker] DEBUG: Adding notification for watchlist movie ${entry.tmdbId}, releaseType: $typeStr');
-          
           final now = DateTime.now();
           final notificationTime = now.add(Duration(milliseconds: watchlistNotifications.length)).toIso8601String();
           
@@ -1929,11 +1724,9 @@ class ReleaseChecker {
         }
         
       } catch (e) {
-        debugPrint('[ReleaseChecker] Error checking watchlist movie ${entry.title}: $e');
       }
     }
     
-    debugPrint('[ReleaseChecker] DEBUG: Watchlist movie check complete, found ${watchlistNotifications.length} notifications');
     return watchlistNotifications;
   }
 
@@ -1946,30 +1739,22 @@ class ReleaseChecker {
   ) async {
     final List<NotificationHistoryEntry> watchlistTvNotifications = [];
     
-    debugPrint('[ReleaseChecker] DEBUG: === _checkWatchlistTvReleases called ===');
-    
     // Get all watchlist entries
     final watchlistEntries = _watchlistRepository.getWorks();
     
     // Filter for TV shows only
     final tvShowEntries = watchlistEntries.where((entry) => entry.type == WorkType.tvShow).toList();
     
-    debugPrint('[ReleaseChecker] DEBUG: Found ${tvShowEntries.length} TV shows in watchlist');
-    
     for (final entry in tvShowEntries) {
       try {
-        debugPrint('[ReleaseChecker] DEBUG: Checking watchlist TV show: ${entry.title} (ID: ${entry.tmdbId})');
-        
         // Throttling
         await Future.delayed(const Duration(milliseconds: 250));
         
         // Get TV show details
         Map<String, dynamic> showDetails;
         if (processedShowDetails.containsKey(entry.tmdbId)) {
-          debugPrint('[ReleaseChecker] DEBUG: Using cached show details for "${entry.title}"');
           showDetails = processedShowDetails[entry.tmdbId]!;
         } else {
-          debugPrint('[ReleaseChecker] DEBUG: Fetching show details for "${entry.title}"');
           showDetails = await _tmdbService.getTvDetails(entry.tmdbId);
           processedShowDetails[entry.tmdbId] = showDetails;
         }
@@ -1977,15 +1762,11 @@ class ReleaseChecker {
         // Get the watchlist entry's TV notification preferences (or use global defaults)
         final tvPrefs = entry.tvNotificationPrefs ?? TvNotificationPreferences();
         
-        debugPrint('[ReleaseChecker] DEBUG: TV Prefs for ${entry.title}: seriesPremiere=${tvPrefs.seriesPremiere}, seasonPremieres=${tvPrefs.seasonPremieres}, seasonFinales=${tvPrefs.seasonFinales}, newEpisodes=${tvPrefs.newEpisodes}, specials=${tvPrefs.specials}');
-        
         // Collect all episodes for this show in our date range
         final Map<String, List<Map<String, dynamic>>> episodesByDate = {};
         
         // Get detailed season information
         final seasons = showDetails['seasons'] as List? ?? [];
-        
-        debugPrint('[ReleaseChecker] DEBUG: TV show ${showDetails['name']} has ${seasons.length} seasons');
         
         for (final season in seasons) {
           final seasonNumber = season['season_number'] as int;
@@ -1995,34 +1776,27 @@ class ReleaseChecker {
             final cacheKey = '${entry.tmdbId}_$seasonNumber';
             Map<String, dynamic> seasonDetails;
             if (processedSeasonDetails.containsKey(cacheKey)) {
-              debugPrint('[ReleaseChecker] DEBUG: Using cached season details for S$seasonNumber');
               seasonDetails = processedSeasonDetails[cacheKey]!;
             } else {
-              debugPrint('[ReleaseChecker] DEBUG: Fetching season details for S$seasonNumber');
               seasonDetails = await _tmdbService.getTvSeasonDetails(entry.tmdbId, seasonNumber);
               processedSeasonDetails[cacheKey] = seasonDetails;
             }
             
             final episodes = seasonDetails['episodes'] as List? ?? [];
             
-            debugPrint('[ReleaseChecker] DEBUG: Season $seasonNumber has ${episodes.length} episodes');
-            
             for (final episode in episodes) {
               final airDate = episode['air_date'] as String?;
               if (airDate == null || airDate.isEmpty) {
-                debugPrint('[ReleaseChecker] DEBUG: Episode ${episode['episode_number']} has no air date, skipping');
                 continue;
               }
               
               // Check if episode is in our date range
               if (airDate.compareTo(startDateStr) < 0 || airDate.compareTo(todayStr) > 0) {
-                debugPrint('[ReleaseChecker] DEBUG: Episode ${episode['episode_number']} air date $airDate is outside range $startDateStr to $todayStr, skipping');
                 continue;
               }
               
               // Skip rebroadcasts
               if (_isRebroadcast(episode)) {
-                debugPrint('[ReleaseChecker] DEBUG: Episode ${episode['episode_number']} is a rebroadcast, skipping');
                 continue;
               }
               
@@ -2034,13 +1808,11 @@ class ReleaseChecker {
               
               // Check if user wants notifications for this episode type
               if (!_shouldNotifyForEpisodeType(episodeType, tvPrefs, null)) {
-                debugPrint('[ReleaseChecker] DEBUG: User does not want notifications for $episodeType');
                 continue;
               }
               
               // Check if we've already notified for this episode
               if (_hasBeenNotifiedForTvEpisode(entry.tmdbId, seasonNum, episodeNumber, episodeType)) {
-                debugPrint('[ReleaseChecker] DEBUG: Already notified for S${seasonNum}E$episodeNumber');
                 continue;
               }
               
@@ -2055,7 +1827,6 @@ class ReleaseChecker {
               episodesByDate[airDate]!.add(episodeWithType);
             }
           } catch (e) {
-            debugPrint('[ReleaseChecker] Error fetching season $seasonNumber for ${entry.title}: $e');
           }
         }
         
@@ -2090,11 +1861,9 @@ class ReleaseChecker {
         }
         
       } catch (e) {
-        debugPrint('[ReleaseChecker] Error checking watchlist TV show ${entry.title}: $e');
       }
     }
     
-    debugPrint('[ReleaseChecker] DEBUG: Watchlist TV show check complete, found ${watchlistTvNotifications.length} notifications');
     return watchlistTvNotifications;
   }
 
@@ -2197,25 +1966,18 @@ class ReleaseChecker {
 
   /// Check if notification is enabled for a specific release type based on watchlist entry preferences
   bool _isNotificationEnabledForWatchlistEntry(int type, ReleaseNotificationPreferences prefs) {
-    debugPrint('[ReleaseChecker] Checking watchlist notification for release type $type (${_getReleaseTypeString(type)})');
-    
     switch (type) {
       case 1: // Premiere
       case 2: // Theatrical Limited
       case 3: // Theatrical
-        debugPrint('[ReleaseChecker] Theatrical release - watchlist pref: ${prefs.theatrical}');
         return prefs.theatrical;
       case 4: // Digital
-        debugPrint('[ReleaseChecker] Digital release - watchlist pref: ${prefs.streaming}');
         return prefs.streaming;
       case 5: // Physical
-        debugPrint('[ReleaseChecker] Physical release - watchlist pref: ${prefs.physical}');
         return prefs.physical;
       case 6: // TV
-        debugPrint('[ReleaseChecker] TV release - watchlist pref: ${prefs.tv}');
         return prefs.tv;
       default:
-        debugPrint('[ReleaseChecker] Unknown release type $type - not notifying');
         return false;
     }
   }

@@ -1,4 +1,3 @@
-import 'package:flutter/foundation.dart';
 import '../data/models/contributor.dart';
 import '../data/models/contributor_detail.dart';
 import '../data/models/watchlist_entry.dart';
@@ -31,7 +30,6 @@ class ContributorLogic {
   Future<void> clearAllContributorDetails() async {
     if (_contributorDetailRepository != null) {
       await _contributorDetailRepository.clearAllCache();
-      debugPrint('[ContributorLogic] All contributor details cleared from cache.');
     }
   }
 
@@ -74,7 +72,6 @@ class ContributorLogic {
 
   /// Forces a refresh of the detailed credit information for a single contributor
   Future<void> refreshContributorDetail(Contributor contributor) async {
-    debugPrint('[ContributorLogic] Forcing refresh of details for ${contributor.name}');
     List<dynamic> credits = [];
     if (contributor.type == ContributorType.person) {
       final data = await _tmdbService.getPersonCombinedCredits(contributor.tmdbId);
@@ -126,16 +123,10 @@ class ContributorLogic {
     if (sparseContributor.type == ContributorType.movie || 
         sparseContributor.type == ContributorType.tvShow ||
         sparseContributor.type == ContributorType.collection) {
-      debugPrint('[ContributorLogic] ERROR: Movies/TV shows/collections should be added to watchlist, not contributors');
       throw ArgumentError('Movies/TV shows/collections should be added to watchlist, not contributors. Use WatchlistLogic.addWorkToWatchlist() instead.');
     }
 
     final prefs = _preferencesRepository.getPreferences();
-
-    debugPrint('[ContributorLogic] addEnrichedContributor called for ${sparseContributor.name}');
-    debugPrint('[ContributorLogic] sparseContributor.knownFor: "${sparseContributor.knownFor}"');
-    debugPrint('[ContributorLogic] overrideNotifyDepts: $overrideNotifyDepts');
-    debugPrint('[ContributorLogic] overrideAvailableDepts: $overrideAvailableDepts');
 
     // 1. Fetch Credits & Determine Available Departments (unless provided)
     final availableDepts = overrideAvailableDepts ?? await getAvailableDepartments(sparseContributor);
@@ -144,7 +135,6 @@ class ContributorLogic {
     List<String> notifyDepts = [];
     if (overrideNotifyDepts != null) {
       notifyDepts = overrideNotifyDepts;
-      debugPrint('[ContributorLogic] Using overrideNotifyDepts: $notifyDepts');
     } else if (sparseContributor.type == ContributorType.person) {
       // Include both default departments AND the person's knownFor category
       final defaultDepts = availableDepts.where((d) => prefs.effectiveDefaultDepartments.contains(d)).toList();
@@ -152,10 +142,8 @@ class ContributorLogic {
       final knownForRole = sparseContributor.knownFor.isNotEmpty 
           ? sparseContributor.knownFor.split('•').first.trim()
           : '';
-      debugPrint('[ContributorLogic] extracted knownForRole: "$knownForRole"');
       final knownForDept = knownForRole.isNotEmpty ? [knownForRole] : <String>[];
       notifyDepts = <String>{...defaultDepts, ...knownForDept}.toList();
-      debugPrint('[ContributorLogic] Computed notifyDepts: $notifyDepts');
     } else {
       notifyDepts = List.from(availableDepts);
     }
@@ -203,10 +191,6 @@ class ContributorLogic {
       nextEpisodeDate: sparseContributor.nextEpisodeDate,
     );
 
-    debugPrint('[ContributorLogic] Final enrichedContributor.notifyForDepartments: ${enrichedContributor.notifyForDepartments}');
-    debugPrint('[ContributorLogic] Final enrichedContributor.availableDepartments: ${enrichedContributor.availableDepartments}');
-    debugPrint('[ContributorLogic] Final enrichedContributor.allRolesSelected: ${enrichedContributor.allRolesSelected}');
-
     // Update contributor detail if repository is available
     if (sparseContributor.type == ContributorType.person) {
       try {
@@ -214,7 +198,6 @@ class ContributorLogic {
         final credits = [...(creditData['cast'] ?? []), ...(creditData['crew'] ?? [])];
         await updateContributorDetail(enrichedContributor, credits);
       } catch (e) {
-        debugPrint('[ContributorLogic] Error updating detail during addition: $e');
       }
     } else if (sparseContributor.type == ContributorType.company) {
        try {
@@ -222,7 +205,6 @@ class ContributorLogic {
          final topWorks = topWorksResponse['results'] as List? ?? [];
          await updateContributorDetail(enrichedContributor, topWorks);
        } catch (e) {
-         debugPrint('[ContributorLogic] Error updating company detail during addition: $e');
        }
     }
 
@@ -239,8 +221,6 @@ class ContributorLogic {
     bool allRolesSelected = false,
     required WatchlistLogic watchlistLogic,
   }) async {
-    debugPrint('[ContributorLogic] WARNING: addEnrichedContributorWithWatchlist is deprecated');
-    debugPrint('[ContributorLogic] Movies/shows/collections should be added directly to watchlist');
     
     // For now, just add to watchlist only (not to contributors)
     if (sparseContributor.type == ContributorType.movie || 
@@ -271,20 +251,24 @@ class ContributorLogic {
       }
 
       try {
+        // Parse release date from search result if available
+        DateTime? releaseDate;
+        if (sparseContributor.releaseDateRaw != null && sparseContributor.releaseDateRaw!.isNotEmpty) {
+          releaseDate = DateTime.tryParse(sparseContributor.releaseDateRaw!);
+        }
+
         await watchlistLogic.addWorkToWatchlist(
           tmdbId: sparseContributor.tmdbId,
           type: workType,
           title: sparseContributor.name,
           posterPath: sparseContributor.profilePath,
-          releaseDate: null, // Will be populated from TMDB data if needed
+          releaseDate: releaseDate,
           releaseType: releaseType,
           followedContributors: [contributorSnapshot],
         );
         
-        debugPrint('[ContributorLogic] Added ${sparseContributor.name} to watchlist only');
         return true;
       } catch (e) {
-        debugPrint('[ContributorLogic] Error adding ${sparseContributor.name} to watchlist: $e');
         return false;
       }
     }
@@ -430,7 +414,6 @@ class ContributorLogic {
             final allWorks = [...upcomingWorks, ...topWorks];
             await updateContributorDetail(updated, allWorks);
           } catch (e) {
-            debugPrint('[ContributorLogic] Error refreshing company detail: $e');
           }
         } else {
            // For others, just update latestWork
@@ -457,7 +440,6 @@ class ContributorLogic {
           await _contributorRepository.updateContributor(updated);
         }
       } catch (e) {
-        debugPrint('Error refreshing ${contributor.name}: $e');
       }
     }
   }
@@ -465,11 +447,8 @@ class ContributorLogic {
   /// Private helper to update cached contributor details
   Future<void> updateContributorDetail(Contributor contributor, List<dynamic> allCredits) async {
     if (_contributorDetailRepository == null) {
-      debugPrint('[ContributorLogic] ContributorDetailRepository is null, skipping detail update for ${contributor.name}');
       return;
     }
-
-    debugPrint('[ContributorLogic] Updating contributor detail for ${contributor.name} (${contributor.tmdbId}) with ${allCredits.length} credits');
 
     final now = DateTime.now();
     final Set<Work> allWorksSet = {};
@@ -515,8 +494,6 @@ class ContributorLogic {
         if (character != null && job == null && (department == null || department == 'null' || department.isEmpty)) {
           department = 'Acting';
         }
-        
-        debugPrint('[ContributorLogic] Creating ContributorRole: dept="$department", job="$job", char="$character"');
         
         return ContributorRole(
           contributorId: contributor.tmdbId,
@@ -627,7 +604,6 @@ class ContributorLogic {
       return !isUpcoming && work.tmdbRating != null && work.popularity != null && work.type != WorkType.tvEpisode;
     }).toList();
     
-    debugPrint('[ContributorLogic] Hits Pool: ${worksWithMetrics.length} works (Total allWorks: ${allWorks.length})');
     var sortedHits = WorkSortingLogic.rankBiggestHits(worksWithMetrics);
 
     List<Work> finalAllWorks = allWorks;
@@ -652,15 +628,8 @@ class ContributorLogic {
       }.take(20).toList(); // Increased limit to 20 for more thorough Latest Releases coverage
 
       if (relevantTvShows.isNotEmpty) {
-        debugPrint('[ContributorLogic] Enrichment: Fetching episodes for ${relevantTvShows.length} shows');
         for (final show in relevantTvShows) {
           try {
-            if (show.title.toLowerCase().contains('far cry')) {
-              debugPrint('[DEBUG] Enrichment: Processing "Far Cry" (ID: ${show.tmdbId}). Current Status in Work object: ${show.status}');
-            }
-            if (show.title.toLowerCase().contains('flag means death')) {
-              debugPrint('[DEBUG] Processing "Our Flag Means Death" for episodes');
-            }
             // First get show details to find seasons
             final details = await _tmdbService.getTvDetailsWithEpisodes(show.tmdbId);
             final List<Map<String, dynamic>> episodesToProcess = [];
@@ -684,9 +653,6 @@ class ContributorLogic {
                 endDate: showEndDate,
                 status: showStatus,
               );
-              if (show.title.contains('Legion') || show.title.contains('Fargo')) {
-                debugPrint('[DEBUG] Updated ${show.title} with status=$showStatus, endDate=$showEndDate in allWorks');
-              }
             }
             
             // Check if this person is a "Creator" on the show
@@ -712,11 +678,6 @@ class ContributorLogic {
                r.role.toLowerCase().contains('writer') || r.department?.toLowerCase() == 'writing' || r.role.toLowerCase().contains('screenplay')
             );
             
-            if (show.title.contains('Legion')) {
-              debugPrint('[DEBUG Legion] isDirectorOnShow: $isDirectorOnShow, isWriterOnShow: $isWriterOnShow');
-              debugPrint('[DEBUG Legion] Show roles: ${show.contributorRoles.map((r) => '${r.role}/${r.department}').toList()}');
-            }
-            
             // If they are EITHER, we should check episodes to be granular
             if ((isDirectorOnShow || isWriterOnShow) && details['seasons'] != null) {
               final seasons = details['seasons'] as List;
@@ -724,14 +685,9 @@ class ContributorLogic {
                 final seasonNum = season['season_number'] as int? ?? 0;
                 if (seasonNum == 0) continue; // Skip specials usually
                 
-                debugPrint('[ContributorLogic] Fetching season $seasonNum for show ${show.title}');
                 try {
                   final seasonDetails = await _tmdbService.getTvSeasonDetails(show.tmdbId, seasonNum);
                   final seasonEpisodes = seasonDetails['episodes'] as List? ?? [];
-                  
-                  if (show.title.contains('Legion')) {
-                    debugPrint('[DEBUG Legion] Season $seasonNum has ${seasonEpisodes.length} episodes');
-                  }
                   
                   for (final epData in seasonEpisodes) {
                     if (!episodesToProcess.any((e) => e['id'] == epData['id'])) {
@@ -747,11 +703,6 @@ class ContributorLogic {
                         if (['writer', 'screenplay', 'teleplay', 'story with', 'story by'].contains(job)) didWrite = true;
                       }
                       
-                      if (show.title.contains('Legion') && (didDirect || didWrite)) {
-                        debugPrint('[DEBUG Legion] Episode ${epData['name']}: didDirect=$didDirect, didWrite=$didWrite');
-                        debugPrint('[DEBUG Legion]   Crew jobs: ${myCrewCredits.map((c) => c['job']).toList()}');
-                      }
-                      
                       if (didDirect || didWrite) {
                          // Attach roles to the raw map so we can read them later
                          final epMap = Map<String, dynamic>.from(epData);
@@ -764,13 +715,8 @@ class ContributorLogic {
                     }
                   }
                 } catch (e) {
-                  debugPrint('[ContributorLogic] Error fetching season $seasonNum: $e');
                 }
               }
-            }
-
-            if (show.title.contains('Legion')) {
-              debugPrint('[DEBUG Legion] Total episodes to process: ${episodesToProcess.length}');
             }
             
             for (final ep in episodesToProcess) {
@@ -787,9 +733,6 @@ class ContributorLogic {
               }
               
               final derivedRoles = ep['__derived_roles'] as List<dynamic>?;
-              if (show.title.contains('Legion') && derivedRoles != null) {
-                debugPrint('[DEBUG Legion] Episode ${ep['name']} __derived_roles: $derivedRoles');
-              }
               
               allWorks.add(Work(
                 tmdbId: epId,
@@ -816,33 +759,18 @@ class ContributorLogic {
               ));
             }
           } catch (e) {
-            debugPrint('[ContributorLogic] Error fetching episodes for show ${show.title}: $e');
           }
           
-          if (show.title.contains('Legion')) {
-            final legionCount = allWorks.where((w) => w.title.contains('Legion')).length;
-            debugPrint('[DEBUG Legion] After episode processing, allWorks has $legionCount Legion entries');
-          }
         }
 
         // Re-sort everything after adding episodes and filter out duplicates
         final allWorksEnriched = List<Work>.from(allWorks);
-        debugPrint('[ContributorLogic] Enrichment: allWorksEnriched count = ${allWorksEnriched.length}');
-        
-        final legionEnrichedCount = allWorksEnriched.where((w) => w.title.contains('Legion')).length;
-        debugPrint('[DEBUG Legion] allWorksEnriched has $legionEnrichedCount Legion entries');
-        final legionEpisodes = allWorksEnriched.where((w) => w.title.contains('Legion') && w.type == WorkType.tvEpisode).toList();
-        debugPrint('[DEBUG Legion] Legion episodes: ${legionEpisodes.length}');
-        for (var ep in legionEpisodes.take(3)) {
-          debugPrint('[DEBUG Legion]   - ${ep.title}, roles: ${ep.contributorRoles.map((r) => r.role).toList()}');
-        }
         
         // Logical de-duplication: If we have episodes for a show, remove the generic show entry from history/hits
         final Set<String> showsWithEpisodes = allWorksEnriched
             .where((w) => w.type == WorkType.tvEpisode)
             .map((w) => TvShowDisplayLogic.extractShowTitle(w.title))
             .toSet();
-        debugPrint('[ContributorLogic] Enrichment: showsWithEpisodes = $showsWithEpisodes');
         
         final filteredWorks = allWorksEnriched.where((w) {
           if (w.type == WorkType.tvShow) {
@@ -851,20 +779,17 @@ class ContributorLogic {
               role.department?.toLowerCase() == 'creator'
             );
             if (isCreator) {
-              debugPrint('[ContributorLogic] Keeping creator show: ${w.title}');
               return true;
             }
 
             final hasEps = showsWithEpisodes.contains(w.title);
             if (hasEps) {
-              debugPrint('[ContributorLogic] Filtering out show with episodes: ${w.title}');
               return false;
             }
             return true;
           }
           return true;
         }).toList();
-        debugPrint('[ContributorLogic] Enrichment: filteredWorks count = ${filteredWorks.length}');
         
         finalAllWorks = filteredWorks;
 
@@ -877,15 +802,12 @@ class ContributorLogic {
           
           final status = w.status?.toLowerCase() ?? '';
           if (upcomingPoolStatuses.contains(status)) {
-            if (w.title.toLowerCase().contains('far cry')) debugPrint('[DEBUG] Far Cry flagged as upcoming via Status: $status');
             return true;
           }
           if (w.releaseDate == null && w.type != WorkType.tvEpisode) {
-            if (w.title.toLowerCase().contains('far cry')) debugPrint('[DEBUG] Far Cry flagged as upcoming via Null Date');
             return true;
           }
           final isFuture = w.releaseDate != null && w.releaseDate!.isAfter(now);
-          if (isFuture && w.title.toLowerCase().contains('far cry')) debugPrint('[DEBUG] Far Cry flagged as upcoming via Future Date');
           return isFuture;
         }).toList();
 
@@ -901,16 +823,6 @@ class ContributorLogic {
         sortedUpcoming = WorkSortingLogic.sortUpcomingWorksChronologically(upcomingEnriched);
         sortedLatest = WorkSortingLogic.sortLatestReleasesReverseChronologically(pastEnriched);
         
-        debugPrint('[DEBUG] Enrichment Complete for ${contributor.name}: upcoming=${upcomingEnriched.length}, past=${pastEnriched.length}');
-        for (var w in filteredWorks) {
-          if (w.title.toLowerCase().contains('far cry')) {
-             debugPrint('[DEBUG] AFTER Enrichment "Far Cry": Status=${w.status}, Date=${w.releaseDate}, Type=${w.type}');
-             final isUp = upcomingEnriched.contains(w);
-             final isPast = pastEnriched.contains(w);
-             debugPrint('[DEBUG] "Far Cry" classification: IsUpcoming=$isUp, IsPast=$isPast');
-          }
-        }
-        
         // For hits: Get top 100 hits. Sort by date for display.
         // For hits: Get top 100 hits. Sort by date for display.
         // Must exclude upcoming works from hits and creator shows fallback
@@ -924,7 +836,6 @@ class ContributorLogic {
           final isCreator = w.type == WorkType.tvShow && w.contributorRoles.any((r) {
             final matches = r.role.toLowerCase() == 'creator' || r.department?.toLowerCase() == 'creator';
             if (matches) {
-              debugPrint('[DEBUG] Creator check matched for "${w.title}". Role: "${r.role}", Dept: "${r.department}"');
             }
             return matches;
           });
@@ -933,7 +844,6 @@ class ContributorLogic {
 
         // Merge hits and creator shows, uniquely
         final mergedHits = <Work>{...topHits, ...creatorShows}.toList();
-        debugPrint('[ContributorLogic] Enrichment: Final mergedHits count = ${mergedHits.length}');
 
         sortedHits = List<Work>.from(mergedHits)..sort((a, b) {
           if (a.releaseDate == null && b.releaseDate == null) return 0;
@@ -943,11 +853,6 @@ class ContributorLogic {
         });
 
       }
-    }
-
-    debugPrint('[ContributorLogic] Final Detail Construction: allWorks=${finalAllWorks.length}, upcoming=${sortedUpcoming.length}, hits=${sortedHits.length}');
-    if (finalAllWorks.isEmpty) {
-      debugPrint('[DEBUG] WARNING: finalAllWorks is EMPTY for ${contributor.name}');
     }
 
     final detail = ContributorDetail(
@@ -964,7 +869,6 @@ class ContributorLogic {
     );
 
     await _contributorDetailRepository.cacheContributorDetail(detail);
-    debugPrint('[ContributorLogic] Successfully cached contributor detail for ${contributor.name}');
   }
 
   DateTime? _parseDate(dynamic dateStr) {

@@ -44,6 +44,10 @@ dependencies:
   url_launcher: ^6.3.2
   collection: ^1.18.0
 
+  # Icons
+  material_symbols_icons: ^4.2719.3
+  reorderable_grid_view: ^2.2.8
+
 dev_dependencies:
   flutter_test:
     sdk: flutter

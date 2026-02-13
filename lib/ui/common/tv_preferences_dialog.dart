@@ -2,14 +2,27 @@ import 'package:flutter/material.dart';
 import '../../data/models/contributor.dart';
 import 'multi_select_chip_group.dart';
 
+/// Result from the TvPreferencesDialog containing both preferences and pause state
+class TvPreferencesResult {
+  final TvNotificationPreferences preferences;
+  final bool notificationsPaused;
+
+  TvPreferencesResult({
+    required this.preferences,
+    required this.notificationsPaused,
+  });
+}
+
 class TvPreferencesDialog extends StatefulWidget {
   final String workTitle;
   final TvNotificationPreferences initialPreferences;
+  final bool initialNotificationsPaused;
 
   const TvPreferencesDialog({
     super.key,
     required this.workTitle,
     required this.initialPreferences,
+    this.initialNotificationsPaused = false,
   });
 
   @override
@@ -18,6 +31,7 @@ class TvPreferencesDialog extends StatefulWidget {
 
 class _TvPreferencesDialogState extends State<TvPreferencesDialog> {
   late List<String> _selectedTypes;
+  late bool _notificationsPaused;
   final List<String> _availableTypes = [
     'Series Premiere',
     'Season Premieres', 
@@ -30,12 +44,15 @@ class _TvPreferencesDialogState extends State<TvPreferencesDialog> {
   void initState() {
     super.initState();
     _selectedTypes = widget.initialPreferences.selectedTypes;
+    _notificationsPaused = widget.initialNotificationsPaused;
   }
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    
     return AlertDialog(
-      title: Text('Episode notifications for ${widget.workTitle}'),
+      title: Text('Notification preferences for ${widget.workTitle}'),
       content: SingleChildScrollView(
         child: SizedBox(
           width: double.maxFinite,
@@ -43,6 +60,28 @@ class _TvPreferencesDialogState extends State<TvPreferencesDialog> {
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
+              // Pause notifications toggle
+              SwitchListTile(
+                title: const Text('Pause notifications'),
+                subtitle: Text(
+                  _notificationsPaused 
+                      ? 'Notifications are paused' 
+                      : 'Notifications are active',
+                  style: TextStyle(
+                    color: theme.colorScheme.onSurfaceVariant,
+                    fontSize: 12,
+                  ),
+                ),
+                value: _notificationsPaused,
+                onChanged: (value) {
+                  setState(() {
+                    _notificationsPaused = value;
+                  });
+                },
+                contentPadding: EdgeInsets.zero,
+              ),
+              const Divider(),
+              const SizedBox(height: 8),
               const Text(
                 'Choose which episode types to get notified about:',
                 style: TextStyle(fontSize: 14, color: Colors.grey),
@@ -81,7 +120,10 @@ class _TvPreferencesDialogState extends State<TvPreferencesDialog> {
                     newEpisodes: _selectedTypes.contains('New Episodes'),
                     specials: _selectedTypes.contains('Specials'),
                   );
-                  Navigator.pop(context, preferences);
+                  Navigator.pop(context, TvPreferencesResult(
+                    preferences: preferences,
+                    notificationsPaused: _notificationsPaused,
+                  ));
                 },
           child: const Text('Save'),
         ),

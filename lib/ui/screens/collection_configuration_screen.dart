@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:cached_network_image/cached_network_image.dart';
+import 'package:material_symbols_icons/symbols.dart';
 import '../../data/models/status_record.dart';
 import '../../data/models/contributor_detail.dart';
 import '../../providers/providers.dart';
@@ -16,12 +17,14 @@ class CollectionConfigurationScreen extends ConsumerStatefulWidget {
   final int collectionId;
   final String collectionTitle;
   final WatchStatus? initialMarkAllStatus;
+  final bool isUnmarkingStatus;
 
   const CollectionConfigurationScreen({
     super.key,
     required this.collectionId,
     required this.collectionTitle,
     this.initialMarkAllStatus,
+    this.isUnmarkingStatus = false,
   });
 
   @override
@@ -141,7 +144,7 @@ class _CollectionConfigurationScreenState
       if (widget.initialMarkAllStatus != null) {
         WidgetsBinding.instance.addPostFrameCallback((_) {
           if (mounted) {
-            _handleMarkAllStatus(widget.initialMarkAllStatus!);
+            _showMarkAllDialog(widget.initialMarkAllStatus!, isUnmarking: widget.isUnmarkingStatus);
           }
         });
       }
@@ -350,6 +353,74 @@ class _CollectionConfigurationScreenState
         showSimpleSnackBar(context, 'Error saving: $e');
       }
     }
+  }
+
+  /// Shows a dialog to confirm marking all movies with a status, then applies it
+  Future<void> _showMarkAllDialog(WatchStatus status, {bool isUnmarking = false}) async {
+    String statusName;
+    switch (status) {
+      case WatchStatus.wantToWatch:
+        statusName = 'Want to watch';
+        break;
+      case WatchStatus.inProgress:
+        statusName = 'In progress';
+        break;
+      case WatchStatus.watched:
+        statusName = 'Watched';
+        break;
+      case WatchStatus.dnf:
+        statusName = 'Did not finish';
+        break;
+    }
+    
+    // Show confirmation dialog
+    final dialogTitle = isUnmarking 
+        ? 'Unmark all $statusName?' 
+        : 'Mark all as $statusName?';
+    final dialogContent = isUnmarking
+        ? 'This will remove $statusName from all movies in "${widget.collectionTitle}".'
+        : 'This will mark all movies in "${widget.collectionTitle}" as $statusName.';
+    
+    final result = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text(dialogTitle),
+        content: Text(dialogContent),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('Yes'),
+          ),
+        ],
+      ),
+    );
+    
+    if (result == true && mounted) {
+      if (isUnmarking) {
+        _handleUnmarkAllStatus(status);
+      } else {
+        _handleMarkAllStatus(status);
+      }
+    }
+  }
+
+  void _handleUnmarkAllStatus(WatchStatus status) {
+    _saveToUndoStack();
+
+    setState(() {
+      for (final movie in _movies) {
+        final movieId = movie['id'] as int;
+        var currentStatuses = Set<WatchStatus>.from(_getEffectiveMovieStatuses(movieId));
+        currentStatuses.remove(status);
+        _pendingChanges[movieId] = currentStatuses;
+      }
+
+      _isDirty = true;
+    });
   }
 
   void _handleMarkAllStatus(WatchStatus status) {
@@ -618,10 +689,10 @@ class _CollectionConfigurationScreenState
                     ? CachedNetworkImage(
                         imageUrl: 'https://image.tmdb.org/t/p/w300$posterPath',
                         fit: BoxFit.cover,
-                        placeholder: (context, url) => const Icon(Icons.video_library, size: 40),
-                        errorWidget: (context, url, error) => const Icon(Icons.video_library, size: 40),
+                        placeholder: (context, url) => const Icon(Symbols.stack, size: 40),
+                        errorWidget: (context, url, error) => const Icon(Symbols.stack, size: 40),
                       )
-                    : const Icon(Icons.video_library, size: 40),
+                    : const Icon(Symbols.stack, size: 40),
               ),
             ),
             // Expand poster button
@@ -932,6 +1003,7 @@ class _CollectionConfigurationScreenState
         builder: (context) => MovieDetailScreen(
           movieId: movieId,
           movieTitle: title,
+          scrollToWhereToWatch: true,
         ),
       ),
     );
@@ -1068,10 +1140,10 @@ class _MovieRowState extends ConsumerState<_MovieRow> {
                         ? CachedNetworkImage(
                             imageUrl: 'https://image.tmdb.org/t/p/w92${widget.posterPath}',
                             fit: BoxFit.cover,
-                            placeholder: (context, url) => const Icon(Icons.movie, size: 16),
-                            errorWidget: (context, url, error) => const Icon(Icons.movie, size: 16),
+                            placeholder: (context, url) => const Icon(Symbols.movie, size: 16),
+                            errorWidget: (context, url, error) => const Icon(Symbols.movie, size: 16),
                           )
-                        : const Icon(Icons.movie, size: 16),
+                        : const Icon(Symbols.movie, size: 16),
                   ),
                 ),
               ),

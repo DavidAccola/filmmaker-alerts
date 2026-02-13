@@ -2,6 +2,7 @@ import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter/foundation.dart';
+import 'package:material_symbols_icons/symbols.dart';
 import '../../data/models/preferences.dart';
 import '../../data/models/notification_history.dart';
 import '../../data/models/contributor_detail.dart';
@@ -105,7 +106,6 @@ class _HistoryScreenState extends ConsumerState<HistoryScreen> {
                 mostRecentNotificationTime = DateTime.parse(firstEntry.notificationEvents.last.notifiedAt);
               } catch (e) {
                 // If parsing fails, fall back to string comparison
-                debugPrint('[HistoryScreen] Failed to parse notification time: $e');
               }
             }
           }
@@ -260,13 +260,13 @@ class _HistoryScreenState extends ConsumerState<HistoryScreen> {
                                               errorWidget: (ctx, url, err) => const SizedBox(
                                                 width: 60,
                                                 height: 90,
-                                                child: Icon(Icons.movie, color: Colors.grey),
+                                                child: Icon(Symbols.movie, color: Colors.grey),
                                               ),
                                             )
                                           : const SizedBox(
                                               width: 60,
                                               height: 90,
-                                              child: Icon(Icons.movie, color: Colors.grey),
+                                              child: Icon(Symbols.movie, color: Colors.grey),
                                             ),
                                     ),
                                   ),
@@ -659,7 +659,6 @@ class _HistoryScreenState extends ConsumerState<HistoryScreen> {
       
       await prefsRepo.savePreferences(updatedPrefs);
     } catch (e) {
-      debugPrint('[HistoryScreen] Failed to mark history as viewed: $e');
     }
   }
 

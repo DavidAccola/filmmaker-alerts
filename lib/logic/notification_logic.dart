@@ -1,5 +1,4 @@
 import '../data/models/notification_history.dart';
-import 'package:flutter/foundation.dart';
 
 class NotificationLogic {
   static String formatTitle(List<String> movieTitles, {List<NotificationHistoryEntry>? entries}) {
@@ -355,12 +354,6 @@ class NotificationLogic {
   static String formatTvTitle(List<String> showTitles, List<NotificationHistoryEntry> entries) {
     if (showTitles.isEmpty) return '';
     
-    debugPrint('[NotificationLogic] formatTvTitle called with ${showTitles.length} shows, ${entries.length} entries');
-    for (int i = 0; i < entries.length; i++) {
-      final entry = entries[i];
-      debugPrint('[NotificationLogic] Entry $i: tmdbId=${entry.tmdbId}, episodeNumber=${entry.episodeNumber}, notificationEvents.length=${entry.notificationEvents.length}, tvNotificationType=${entry.tvNotificationType}');
-    }
-    
     if (showTitles.length == 1) {
       final entry = entries.first;
       final showTitle = showTitles.first;
@@ -370,15 +363,12 @@ class NotificationLogic {
       if (entry.tvNotificationType == 'grouped_episodes' && entry.notificationEvents.length > 1) {
         // Multiple events = multiple episodes
         totalEpisodes = entry.notificationEvents.length;
-        debugPrint('[NotificationLogic] Using notificationEvents.length: $totalEpisodes');
       } else if (entry.tvNotificationType == 'grouped_episodes' && entry.episodeNumber != null && entry.episodeNumber! > 1) {
         // Grouped episodes where episodeNumber represents the count
         totalEpisodes = entry.episodeNumber!;
-        debugPrint('[NotificationLogic] Using episodeNumber for grouped: $totalEpisodes');
       } else {
         // Single episode (episodeNumber here is the actual episode number, not count)
         totalEpisodes = 1;
-        debugPrint('[NotificationLogic] Using default: 1 episode (episodeNumber=${entry.episodeNumber} is episode number, not count)');
       }
       
       // Format: "New Release/Releases" + show name + episode count
@@ -396,20 +386,16 @@ class NotificationLogic {
       if (entry.tvNotificationType == 'grouped_episodes' && entry.notificationEvents.length > 1) {
         // For grouped episodes, use the number of notification events (each represents one episode)
         entryEpisodes = entry.notificationEvents.length;
-        debugPrint('[NotificationLogic] Entry ${entry.tmdbId}: grouped_episodes, adding $entryEpisodes episodes (from notificationEvents)');
       } else if (entry.tvNotificationType == 'grouped_episodes' && entry.episodeNumber != null && entry.episodeNumber! > 1) {
         // For grouped episodes where episodeNumber represents the count
         entryEpisodes = entry.episodeNumber!;
-        debugPrint('[NotificationLogic] Entry ${entry.tmdbId}: grouped_episodes, adding $entryEpisodes episodes (from episodeNumber)');
       } else {
         // Single episode (episodeNumber here is the actual episode number, not count)
         entryEpisodes = 1;
-        debugPrint('[NotificationLogic] Entry ${entry.tmdbId}: single episode, adding 1 episode (episodeNumber=${entry.episodeNumber} is episode number, not count)');
       }
       totalEpisodes += entryEpisodes;
     }
     
-    debugPrint('[NotificationLogic] Total episodes calculated: $totalEpisodes');
     return '🎬 $totalEpisodes New TV Episodes';
   }
 

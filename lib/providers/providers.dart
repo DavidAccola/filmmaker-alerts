@@ -228,7 +228,6 @@ final contributorSnapshotUpdaterProvider = Provider<void>((ref) {
 final preferencesProvider = FutureProvider<Preferences>((ref) async {
   final repo = ref.watch(preferencesRepositoryProvider);
   final prefs = repo.getPreferences();
-  debugPrint('[PreferencesProvider] Loaded preferences with notifyTV: ${prefs.notifyTV}');
   return prefs;
 });
 
@@ -288,7 +287,6 @@ final contributorDetailProvider = FutureProvider.autoDispose.family<ContributorD
     await logic.updateContributorDetail(contributor, credits);
     return repo.getContributorDetail(tmdbId);
   } catch (e) {
-    debugPrint('[ContributorDetailProvider] Error fetching details on demand: $e');
     return null;
   }
 });

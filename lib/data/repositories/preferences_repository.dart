@@ -1,4 +1,3 @@
-import 'package:flutter/foundation.dart';
 import 'package:hive_flutter/hive_flutter.dart';
 import '../../core/constants.dart';
 import '../models/preferences.dart';
@@ -15,32 +14,22 @@ class PreferencesRepository {
       // We don't necessarily need to save them immediately, 
       // but saving ensures the box isn't empty next time.
       _box.add(defaults); 
-      debugPrint('[PreferencesRepository] Created default preferences with notifyTV: ${defaults.notifyTV}');
       return defaults;
     }
     final prefs = _box.getAt(0)!;
-    debugPrint('[PreferencesRepository] Loaded preferences - useDarkMode: ${prefs.useDarkMode}, reduceAnimations: ${prefs.reduceAnimations}');
     return prefs;
   }
 
   /// Save updated preferences.
   Future<void> savePreferences(Preferences prefs) async {
-    debugPrint('[PreferencesRepository] Saving preferences - useDarkMode: ${prefs.useDarkMode}, reduceAnimations: ${prefs.reduceAnimations}');
-    
     if (_box.isEmpty) {
       await _box.add(prefs);
-      debugPrint('[PreferencesRepository] Added new preferences to empty box');
     } else {
       // Always update the first entry (singleton pattern for prefs)
       await _box.putAt(0, prefs);
-      debugPrint('[PreferencesRepository] Updated preferences at index 0');
     }
     
     // Force flush to disk - ensures data survives hot restart
     await _box.flush();
-    
-    // Verify the save
-    final savedPrefs = _box.getAt(0)!;
-    debugPrint('[PreferencesRepository] Verified saved - useDarkMode: ${savedPrefs.useDarkMode}, reduceAnimations: ${savedPrefs.reduceAnimations}');
   }
 }

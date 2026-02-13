@@ -1,4 +1,3 @@
-import 'package:flutter/foundation.dart';
 import 'package:hive/hive.dart';
 import '../models/movie_status_entry.dart';
 import '../models/status_record.dart';
@@ -31,7 +30,6 @@ class MovieStatusRepository {
     );
 
     await _box.put(key, newEntry);
-    debugPrint('[MovieStatusRepository] Created movie status entry: $movieTitle');
     return newEntry;
   }
 
@@ -69,8 +67,6 @@ class MovieStatusRepository {
     // Add the new status record
     movie.statusRecords.add(statusRecord);
     await movie.save();
-
-    debugPrint('[MovieStatusRepository] Added ${statusRecord.status} status to $movieTitle');
   }
 
   /// Removes a specific status from a movie
@@ -84,8 +80,6 @@ class MovieStatusRepository {
 
     movie.statusRecords.removeWhere((record) => record.status == status);
     await movie.save();
-
-    debugPrint('[MovieStatusRepository] Removed $status status from ${movie.movieTitle}');
   }
 
   /// Clears all status records for a movie
@@ -95,15 +89,12 @@ class MovieStatusRepository {
 
     movie.statusRecords.clear();
     await movie.save();
-
-    debugPrint('[MovieStatusRepository] Cleared all statuses for ${movie.movieTitle}');
   }
 
   /// Removes a movie status entry entirely
   Future<void> removeMovie(int collectionId, int movieId) async {
     final key = '${collectionId}_$movieId';
     await _box.delete(key);
-    debugPrint('[MovieStatusRepository] Removed movie status entry: $key');
   }
 
   /// Gets all movie status entries
@@ -114,7 +105,6 @@ class MovieStatusRepository {
   /// Clears all movie status entries
   Future<void> clearAll() async {
     await _box.clear();
-    debugPrint('[MovieStatusRepository] Cleared all movie status entries');
   }
 
   /// Private helper to clear conflicting statuses based on hierarchy

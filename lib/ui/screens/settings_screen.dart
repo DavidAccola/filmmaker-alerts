@@ -178,10 +178,6 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
               }
             },
             onChanged: (newValues) {
-              debugPrint('[SettingsScreen] Release types changed: $newValues');
-              debugPrint('[SettingsScreen] TV Airings selected: ${newValues.contains('TV Airings')}');
-              debugPrint('[SettingsScreen] Current notifyTV before update: ${prefs.notifyTV}');
-              
               _updatePrefs(
                 ref, 
                 prefs,
@@ -755,9 +751,6 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     String? streamingCountry,
     bool? reduceAnimations,
   }) async {
-    debugPrint('[SettingsScreen] _updatePrefs called with notifyTV: $notifyTV');
-    debugPrint('[SettingsScreen] Current preferences notifyTV: ${current.notifyTV}');
-    
     // Create new object with updates
     final newPrefs = Preferences(
       scheduleTime: scheduleTime ?? current.scheduleTime,
@@ -784,16 +777,11 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
       reduceAnimations: reduceAnimations ?? current.reduceAnimations,
     );
 
-    debugPrint('[SettingsScreen] New preferences notifyTV: ${newPrefs.notifyTV}');
-    debugPrint('[SettingsScreen] Saving preferences...');
-    
     await ref.read(preferencesRepositoryProvider).savePreferences(newPrefs);
     
-    debugPrint('[SettingsScreen] Preferences saved, invalidating provider...');
     ref.invalidate(preferencesProvider);
     
     // Verify the save worked
     final savedPrefs = ref.read(preferencesRepositoryProvider).getPreferences();
-    debugPrint('[SettingsScreen] Verified saved notifyTV: ${savedPrefs.notifyTV}');
   }
 }

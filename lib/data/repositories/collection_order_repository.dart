@@ -1,4 +1,3 @@
-import 'package:flutter/foundation.dart';
 import 'package:hive/hive.dart';
 import '../models/collection_order.dart';
 
@@ -34,19 +33,15 @@ class CollectionOrderRepository {
       );
       await _box.put(collectionId.toString(), newOrder);
     }
-    
-    debugPrint('[CollectionOrderRepository] Saved order for collection $collectionId: ${movieIds.length} movies');
   }
 
   /// Clears the custom order for a collection (reverts to default)
   Future<void> clearOrder(int collectionId) async {
     await _box.delete(collectionId.toString());
-    debugPrint('[CollectionOrderRepository] Cleared order for collection $collectionId');
   }
 
   /// Clears all collection orders
   Future<void> clearAll() async {
     await _box.clear();
-    debugPrint('[CollectionOrderRepository] Cleared all collection orders');
   }
 }

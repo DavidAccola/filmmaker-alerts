@@ -121,6 +121,9 @@ class ExternalNavigationUtils {
       final uri = Uri.parse(urlString);
       if (await canLaunchUrl(uri)) {
         await launchUrl(uri, mode: LaunchMode.externalApplication);
+        if (context.mounted) {
+          showSimpleSnackBar(context, 'Opening $provider');
+        }
       } else {
         if (context.mounted) {
           showSimpleSnackBar(context, 'Could not open $provider page');

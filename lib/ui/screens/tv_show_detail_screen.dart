@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:cached_network_image/cached_network_image.dart';
+import 'package:material_symbols_icons/symbols.dart';
 import '../../data/models/tv_detail.dart';
 import '../../data/models/contributor_detail.dart';
 import '../../data/models/preferences.dart';
@@ -68,7 +69,7 @@ class _TvShowDetailScreenState extends ConsumerState<TvShowDetailScreen> {
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          const Icon(Icons.tv, size: 64, color: Colors.grey),
+          const Icon(Symbols.tv_gen, size: 64, color: Colors.grey),
           const SizedBox(height: 16),
           Text(message),
           const SizedBox(height: 16),
@@ -145,17 +146,15 @@ class _TvShowDetailScreenState extends ConsumerState<TvShowDetailScreen> {
                       // Poster with watchlist button
                       MouseRegion(
                         onEnter: (_) {
-                          debugPrint('[TvShowDetailScreen] Poster hovered: true');
-                          setState(() => _isPosterHovered = true);
-                        },
-                        onExit: (_) {
-                          debugPrint('[TvShowDetailScreen] Poster hovered: false');
-                          setState(() => _isPosterHovered = false);
-                        },
-                        child: SizedBox(
-                          width: 100,
-                          height: 150,
-                          child: Stack(
+                        setState(() => _isPosterHovered = true);
+                      },
+                      onExit: (_) {
+                        setState(() => _isPosterHovered = false);
+                      },
+                      child: SizedBox(
+                        width: 100,
+                        height: 150,
+                        child: Stack(
                             children: [
                               Container(
                                 width: 100,
@@ -170,10 +169,10 @@ class _TvShowDetailScreenState extends ConsumerState<TvShowDetailScreen> {
                                       ? CachedNetworkImage(
                                           imageUrl: 'https://image.tmdb.org/t/p/w300${showDetail.posterPath}',
                                           fit: BoxFit.cover,
-                                          placeholder: (context, url) => const Icon(Icons.tv, size: 40),
-                                          errorWidget: (context, url, error) => const Icon(Icons.tv, size: 40),
+                                          placeholder: (context, url) => const Icon(Symbols.tv_gen, size: 40),
+                                          errorWidget: (context, url, error) => const Icon(Symbols.tv_gen, size: 40),
                                         )
-                                      : const Icon(Icons.tv, size: 40),
+                                      : const Icon(Symbols.tv_gen, size: 40),
                                 ),
                               ),
                               Positioned(
@@ -246,11 +245,9 @@ class _TvShowDetailScreenState extends ConsumerState<TvShowDetailScreen> {
                     // Poster with watchlist button
                     MouseRegion(
                       onEnter: (_) {
-                        debugPrint('[TvShowDetailScreen] Poster hovered: true');
                         setState(() => _isPosterHovered = true);
                       },
                       onExit: (_) {
-                        debugPrint('[TvShowDetailScreen] Poster hovered: false');
                         setState(() => _isPosterHovered = false);
                       },
                       child: SizedBox(
@@ -271,10 +268,10 @@ class _TvShowDetailScreenState extends ConsumerState<TvShowDetailScreen> {
                                     ? CachedNetworkImage(
                                         imageUrl: 'https://image.tmdb.org/t/p/w300${showDetail.posterPath}',
                                         fit: BoxFit.cover,
-                                        placeholder: (context, url) => const Icon(Icons.tv, size: 40),
-                                        errorWidget: (context, url, error) => const Icon(Icons.tv, size: 40),
+                                        placeholder: (context, url) => const Icon(Symbols.tv_gen, size: 40),
+                                        errorWidget: (context, url, error) => const Icon(Symbols.tv_gen, size: 40),
                                       )
-                                    : const Icon(Icons.tv, size: 40),
+                                    : const Icon(Symbols.tv_gen, size: 40),
                               ),
                             ),
                             Positioned(
@@ -539,7 +536,7 @@ class _TvShowDetailScreenState extends ConsumerState<TvShowDetailScreen> {
                     height: 120,
                     width: 100,
                     color: theme.colorScheme.surfaceContainerHighest,
-                    child: const Icon(Icons.tv),
+                    child: const Icon(Symbols.tv_gen),
                   ),
           ),
           const SizedBox(height: 4),
@@ -747,7 +744,7 @@ class _TvShowDetailScreenState extends ConsumerState<TvShowDetailScreen> {
                                     fit: BoxFit.contain,
                                     errorBuilder: (context, error, stackTrace) => Container(
                                       color: Theme.of(context).colorScheme.primaryContainer,
-                                      child: const Icon(Icons.movie),
+                                      child: const Icon(Symbols.movie),
                                     ),
                                   ),
                                 ),
@@ -930,7 +927,6 @@ class _TvShowDetailScreenState extends ConsumerState<TvShowDetailScreen> {
         );
       }
     } catch (e) {
-      debugPrint('Error following person: $e');
       if (mounted) {
         showSimpleSnackBar(context, 'Error: $e');
       }

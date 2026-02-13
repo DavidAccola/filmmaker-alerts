@@ -19,12 +19,9 @@ class NotificationService {
     if (_isInitialized) return;
     
     try {
-      debugPrint('[NotificationService] Starting initialization...');
-      
       this.onAction = onAction;
       
       if (Platform.isWindows) {
-        debugPrint('[NotificationService] Initializing for Windows using windows_notification...');
         
         // Create Windows notification instance
         // For development/debug mode, we can use an applicationId
@@ -36,29 +33,23 @@ class NotificationService {
         // Initialize callback for handling notification actions
         dynamic notificationCallback(NotificationCallBackDetails message, [dynamic eventType, dynamic arguments]) {
           try {
-            debugPrint('[NotificationService] Notification callback: $eventType, args: $arguments');
             if (arguments == 'app://history') {
               // In debug mode, we can't use app:// protocol, so we'll handle it through the callback
               onAction?.call('app://history');
             }
             return null;
           } catch (e) {
-            debugPrint('[NotificationService] Callback error: $e');
             return null;
           }
         }
         
         try {
           _windowsNotification!.initNotificationCallBack(notificationCallback);
-          debugPrint('[NotificationService] Notification callback initialized successfully');
         } catch (e) {
-          debugPrint('[NotificationService] Failed to initialize callback: $e');
           // Continue without callback - notifications will still work
         }
         
-        debugPrint('[NotificationService] Windows notification setup completed');
       } else {
-        debugPrint('[NotificationService] Initializing for non-Windows platform...');
         
         // Only create the plugin instance for supported platforms
         _flutterLocalNotificationsPlugin = FlutterLocalNotificationsPlugin();
@@ -77,11 +68,9 @@ class NotificationService {
           // iOS settings can be added here
         );
 
-        debugPrint('[NotificationService] Calling plugin initialize...');
         final result = await _flutterLocalNotificationsPlugin!.initialize(
           settings: initializationSettings,
           onDidReceiveNotificationResponse: (NotificationResponse response) async {
-            debugPrint('[NotificationService] Received notification response: ${response.payload}');
             final String? payload = response.payload;
             if (payload != null) {
               if (payload.startsWith('http')) {
@@ -96,14 +85,10 @@ class NotificationService {
           },
         );
         
-        debugPrint('[NotificationService] Plugin initialize result: $result');
       }
       
       _isInitialized = true;
-      debugPrint('[NotificationService] Initialization completed successfully');
     } catch (e, stackTrace) {
-      debugPrint('[NotificationService] Initialization failed: $e');
-      debugPrint('[NotificationService] Stack trace: $stackTrace');
       rethrow;
     }
   }
@@ -315,11 +300,8 @@ class NotificationService {
   }
 
   Future<void> showTestNotification() async {
-    debugPrint('[NotificationService] showTestNotification called');
-    
     // Check if we're on Windows and handle accordingly
     if (Platform.isWindows) {
-      debugPrint('[NotificationService] Detected Windows platform');
       // Windows platform detected
       try {
         await showNotification(
@@ -330,7 +312,6 @@ class NotificationService {
           imagePath: 'https://image.tmdb.org/t/p/w200/8cdWjvZQUExUUTzyp4t6EDMubfO.jpg', // Sample movie poster
         );
       } catch (e) {
-        debugPrint('[NotificationService] Windows notification failed, trying fallback: $e');
         // Fallback notification failed
         rethrow;
       }
@@ -365,13 +346,10 @@ class NotificationService {
     
     // Download if not already cached
     if (!await file.exists()) {
-      debugPrint('[NotificationService] Downloading image: $imageUrl');
       final response = await _dio.download(imageUrl, localPath);
       if (response.statusCode != 200) {
         throw Exception('Failed to download image: ${response.statusCode}');
       }
-    } else {
-      debugPrint('[NotificationService] Using cached image: $localPath');
     }
     
     return localPath;

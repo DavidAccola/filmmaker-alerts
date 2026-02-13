@@ -445,37 +445,18 @@ class _ContributorCardState extends State<ContributorCard> {
                                 icon: const Icon(Icons.more_vert),
                                 padding: EdgeInsets.zero,
                                 onSelected: (value) {
-                                  if (value == 'toggle_notifications') {
-                                    widget.contributor.notificationsSnoozed = !widget.contributor.notificationsSnoozed;
-                                    widget.contributor.save();
-                                    setState(() {});
-                                    
-                                    final message = widget.contributor.notificationsSnoozed
-                                        ? 'Notifications paused for ${widget.contributor.name}'
-                                        : 'Notifications resumed for ${widget.contributor.name}';
-                                    showSimpleSnackBar(context, message);
-                                  } else if (value == 'remove') {
+                                  if (value == 'remove') {
                                     widget.onRemove();
-                                  } else if (value == 'edit_roles') {
-                                    widget.onEditRoles?.call();
-                                  } else if (value == 'edit_tv_prefs') {
+                                  } else if (value == 'notification_prefs') {
                                     widget.onEditRoles?.call();
                                   }
                                 },
                                 itemBuilder: (context) => [
-                                  PopupMenuItem(
-                                    value: 'toggle_notifications',
-                                    child: Text(widget.contributor.notificationsSnoozed ? 'Resume Notifications' : 'Pause Notifications'),
-                                  ),
-                                  if (widget.contributor.type == ContributorType.person)
+                                  if (widget.contributor.type == ContributorType.person ||
+                                      widget.contributor.type == ContributorType.tvShow)
                                     const PopupMenuItem(
-                                      value: 'edit_roles',
-                                      child: Text('Edit Roles'),
-                                    ),
-                                  if (widget.contributor.type == ContributorType.tvShow)
-                                    const PopupMenuItem(
-                                      value: 'edit_tv_prefs',
-                                      child: Text('Edit TV Preferences'),
+                                      value: 'notification_prefs',
+                                      child: Text('Notification Preferences'),
                                     ),
                                   const PopupMenuItem(
                                     value: 'remove',
@@ -490,8 +471,7 @@ class _ContributorCardState extends State<ContributorCard> {
                               padding: EdgeInsets.symmetric(vertical: 4.0),
                               child: Divider(height: 1),
                             ),
-                            ConstrainedBox(
-                              constraints: const BoxConstraints(minHeight: 40),
+                            Expanded(
                               child: MouseRegion(
                                 onEnter: (_) {
                                   // Only enable poster switching for people, not movies/TV shows

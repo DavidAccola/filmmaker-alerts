@@ -1,4 +1,3 @@
-import 'package:flutter/foundation.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:hive_flutter/hive_flutter.dart';
 import 'package:workmanager/workmanager.dart';
@@ -27,8 +26,6 @@ const String taskName = 'checkNewReleases';
 void callbackDispatcher() {
   Workmanager().executeTask((task, inputData) async {
     try {
-      debugPrint('[BackgroundService] Starting background task: $task');
-
       // 1. Init Environment
       await dotenv.load(fileName: ".env");
 
@@ -75,7 +72,6 @@ void callbackDispatcher() {
 
       return await processor.process();
     } catch (e) {
-      debugPrint('[BackgroundService] Task failed: $e');
       return Future.value(false);
     }
   });
@@ -113,7 +109,6 @@ class BackgroundTaskProcessor {
       
       // Check if we should run based on scheduled time
       if (!_shouldRunCheck(currentPrefs)) {
-        debugPrint('[BackgroundService] Scheduled time has not passed since last check, skipping');
         return true;
       }
       
@@ -155,11 +150,8 @@ class BackgroundTaskProcessor {
       await prefsRepo.savePreferences(updatedPrefs);
 
       if (newReleases.isEmpty) {
-        debugPrint('[BackgroundService] No new releases found.');
         return true;
       }
-
-      debugPrint('[BackgroundService] Found ${newReleases.length} new releases.');
 
       // 5. Process Notifications & Side Effects
       final movieTitles = <String>[];
@@ -380,7 +372,6 @@ class BackgroundTaskProcessor {
         scheduleMinute = int.parse(parts[1]);
       }
     } catch (e) {
-      debugPrint('[BackgroundService] Error parsing scheduleTime: $e');
       return true; // Default to running if we can't parse
     }
 
@@ -389,7 +380,6 @@ class BackgroundTaskProcessor {
     
     // If we haven't reached today's scheduled time yet, don't run
     if (now.isBefore(todayScheduled)) {
-      debugPrint('[BackgroundService] Current time ($now) is before today\'s scheduled time ($todayScheduled)');
       return false;
     }
 
@@ -400,20 +390,16 @@ class BackgroundTaskProcessor {
         
         // If last check was after today's scheduled time, we already ran today
         if (lastCheck.isAfter(todayScheduled)) {
-          debugPrint('[BackgroundService] Last check ($lastCheck) was after today\'s scheduled time ($todayScheduled), already ran today');
           return false;
         }
         
-        debugPrint('[BackgroundService] Last check ($lastCheck) was before today\'s scheduled time ($todayScheduled), should run');
         return true;
       } catch (e) {
-        debugPrint('[BackgroundService] Error parsing lastCheckTime: $e');
         return true; // Default to running if we can't parse
       }
     }
 
     // No last check time, so we should run
-    debugPrint('[BackgroundService] No last check time recorded, should run');
     return true;
   }
 }

@@ -2,14 +2,27 @@ import 'package:flutter/material.dart';
 import '../../data/models/watchlist_entry.dart';
 import 'multi_select_chip_group.dart';
 
+/// Result from the ReleasePreferencesDialog containing both preferences and pause state
+class ReleasePreferencesResult {
+  final ReleaseNotificationPreferences preferences;
+  final bool notificationsPaused;
+
+  ReleasePreferencesResult({
+    required this.preferences,
+    required this.notificationsPaused,
+  });
+}
+
 class ReleasePreferencesDialog extends StatefulWidget {
   final String workTitle;
   final ReleaseNotificationPreferences initialPreferences;
+  final bool initialNotificationsPaused;
 
   const ReleasePreferencesDialog({
     super.key,
     required this.workTitle,
     required this.initialPreferences,
+    this.initialNotificationsPaused = false,
   });
 
   @override
@@ -18,18 +31,22 @@ class ReleasePreferencesDialog extends StatefulWidget {
 
 class _ReleasePreferencesDialogState extends State<ReleasePreferencesDialog> {
   late List<String> _selectedTypes;
+  late bool _notificationsPaused;
   final List<String> _availableTypes = ['Theatrical', 'Streaming', 'Physical', 'TV'];
 
   @override
   void initState() {
     super.initState();
     _selectedTypes = widget.initialPreferences.selectedTypes;
+    _notificationsPaused = widget.initialNotificationsPaused;
   }
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    
     return AlertDialog(
-      title: Text('Release notifications for ${widget.workTitle}'),
+      title: Text('Notification preferences for ${widget.workTitle}'),
       content: SingleChildScrollView(
         child: SizedBox(
           width: double.maxFinite,
@@ -37,6 +54,28 @@ class _ReleasePreferencesDialogState extends State<ReleasePreferencesDialog> {
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
+              // Pause notifications toggle
+              SwitchListTile(
+                title: const Text('Pause notifications'),
+                subtitle: Text(
+                  _notificationsPaused 
+                      ? 'Notifications are paused' 
+                      : 'Notifications are active',
+                  style: TextStyle(
+                    color: theme.colorScheme.onSurfaceVariant,
+                    fontSize: 12,
+                  ),
+                ),
+                value: _notificationsPaused,
+                onChanged: (value) {
+                  setState(() {
+                    _notificationsPaused = value;
+                  });
+                },
+                contentPadding: EdgeInsets.zero,
+              ),
+              const Divider(),
+              const SizedBox(height: 8),
               const Text(
                 'Choose which release types to get notified about:',
                 style: TextStyle(fontSize: 14, color: Colors.grey),
@@ -74,7 +113,10 @@ class _ReleasePreferencesDialogState extends State<ReleasePreferencesDialog> {
                     physical: _selectedTypes.contains('Physical'),
                     tv: _selectedTypes.contains('TV'),
                   );
-                  Navigator.pop(context, preferences);
+                  Navigator.pop(context, ReleasePreferencesResult(
+                    preferences: preferences,
+                    notificationsPaused: _notificationsPaused,
+                  ));
                 },
           child: const Text('Save'),
         ),

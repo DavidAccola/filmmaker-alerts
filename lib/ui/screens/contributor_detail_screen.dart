@@ -3,6 +3,7 @@ import 'package:collection/collection.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:cached_network_image/cached_network_image.dart';
+import 'package:material_symbols_icons/symbols.dart';
 import '../../data/models/contributor.dart';
 import '../../data/models/contributor_detail.dart';
 import '../../data/models/preferences.dart';
@@ -253,7 +254,7 @@ class _ContributorDetailScreenState extends ConsumerState<ContributorDetailScree
     if (detail == null || detail.allWorks == null) {
       return _buildSection(
         title: 'Television Credits',
-        icon: Icons.tv,
+        icon: Symbols.tv_gen,
         child: _buildLoadingContent(),
       );
     }
@@ -266,7 +267,7 @@ class _ContributorDetailScreenState extends ConsumerState<ContributorDetailScree
 
     return CreditExpansionSection(
       title: 'Television Credits',
-      icon: Icons.tv,
+      icon: Symbols.tv_gen,
       works: tvWorks,
       hideRatings: prefs.hideRatingsInDetails ?? false,
       onWorkTap: (work) => _onWorkTapped(work),
@@ -280,22 +281,20 @@ class _ContributorDetailScreenState extends ConsumerState<ContributorDetailScree
     if (detail == null || detail.allWorks == null) {
       return _buildSection(
         title: 'Movie Credits',
-        icon: Icons.movie,
+        icon: Symbols.movie,
         child: _buildLoadingContent(),
       );
     }
     
     final allWorks = detail.allWorks!;
-    debugPrint('[ContributorDetailScreen] Building Movie Credits. allWorks count: ${allWorks.length}');
     if (allWorks.isEmpty) return const SizedBox.shrink();
 
     final movieWorks = allWorks.where((w) => w.type == WorkType.movie).toList();
-    debugPrint('[ContributorDetailScreen] Found ${movieWorks.length} Movie works');
     if (movieWorks.isEmpty) return const SizedBox.shrink();
 
     return CreditExpansionSection(
       title: 'Movie Credits',
-      icon: Icons.movie,
+      icon: Symbols.movie,
       works: movieWorks,
       hideRatings: prefs.hideRatingsInDetails ?? false,
       onWorkTap: (work) => _onWorkTapped(work),
@@ -582,14 +581,6 @@ class _ContributorDetailScreenState extends ConsumerState<ContributorDetailScree
   }
 
   void _onWorkTapped(Work work) {
-    debugPrint('[ContributorDetailScreen] === _onWorkTapped CALLED ===');
-    debugPrint('[ContributorDetailScreen] work.type: ${work.type}');
-    debugPrint('[ContributorDetailScreen] work.title: "${work.title}"');
-    debugPrint('[ContributorDetailScreen] work.showName: "${work.showName}"');
-    debugPrint('[ContributorDetailScreen] work.showId: ${work.showId}');
-    debugPrint('[ContributorDetailScreen] work.seasonNumber: ${work.seasonNumber}');
-    debugPrint('[ContributorDetailScreen] work.episodeNumber: ${work.episodeNumber}');
-    
     if (work.type == WorkType.movie) {
       Navigator.push(
         context,
@@ -611,14 +602,6 @@ class _ContributorDetailScreenState extends ConsumerState<ContributorDetailScree
         ),
       );
     } else if (work.type == WorkType.tvEpisode) {
-      debugPrint('[ContributorDetailScreen] === EPISODE NAVIGATION DEBUG ===');
-      debugPrint('[ContributorDetailScreen] work.title: "${work.title}"');
-      debugPrint('[ContributorDetailScreen] work.showName: "${work.showName}"');
-      debugPrint('[ContributorDetailScreen] work.showId: ${work.showId}');
-      debugPrint('[ContributorDetailScreen] work.tmdbId: ${work.tmdbId}');
-      debugPrint('[ContributorDetailScreen] work.seasonNumber: ${work.seasonNumber}');
-      debugPrint('[ContributorDetailScreen] work.episodeNumber: ${work.episodeNumber}');
-      
       final finalShowId = work.showId ?? work.tmdbId;
       
       // Extract show name: prefer work.showName, otherwise extract from episode title
@@ -633,10 +616,6 @@ class _ContributorDetailScreenState extends ConsumerState<ContributorDetailScree
           finalShowName = work.title;
         }
       }
-      
-      debugPrint('[ContributorDetailScreen] FINAL showId: $finalShowId');
-      debugPrint('[ContributorDetailScreen] FINAL showName: "$finalShowName"');
-      debugPrint('[ContributorDetailScreen] Navigating to TvEpisodeDetailScreen...');
       
       Navigator.push(
         context,
@@ -809,7 +788,7 @@ class _ContributorDetailScreenState extends ConsumerState<ContributorDetailScree
                                     fit: BoxFit.contain,
                                     errorBuilder: (context, error, stackTrace) => Container(
                                       color: Theme.of(context).colorScheme.primaryContainer,
-                                      child: const Icon(Icons.movie),
+                                      child: const Icon(Symbols.movie),
                                     ),
                                   ),
                                 ),
@@ -887,11 +866,6 @@ class _ContributorDetailScreenState extends ConsumerState<ContributorDetailScree
 
     final roles = widget.contributor.notifyForDepartments;
     final isTrueAll = widget.contributor.allRolesSelected ?? false;
-
-    debugPrint('[ContributorDetail] Building followed roles chips for ${widget.contributor.name}');
-    debugPrint('[ContributorDetail] notifyForDepartments: $roles');
-    debugPrint('[ContributorDetail] allRolesSelected: $isTrueAll');
-    debugPrint('[ContributorDetail] knownFor: ${widget.contributor.knownFor}');
 
     // Build the content widget
     Widget content;
@@ -1009,12 +983,14 @@ class _ContributorDetailScreenState extends ConsumerState<ContributorDetailScree
         defaultDepartments: prefs.effectiveDefaultDepartments,
         initialAllRolesSelected: contributor.allRolesSelected ?? false,
         allowTrueAll: prefs.autoFollowNewRoles ?? true,
+        initialNotificationsPaused: contributor.notificationsSnoozed,
       ),
     );
 
     if (result != null && result is Map) {
       final selectedDepts = result['roles'] as List<String>;
       final allSelected = result['allRolesSelected'] as bool;
+      final newNotificationsPaused = result['notificationsPaused'] as bool;
       
       // Check if roles actually changed
       final oldRoles = Set<String>.from(contributor.notifyForDepartments);
@@ -1023,8 +999,10 @@ class _ContributorDetailScreenState extends ConsumerState<ContributorDetailScree
       
       const setEquality = SetEquality<String>();
       final hasRoleChanges = !setEquality.equals(oldRoles, newRoles) || oldAllSelected != allSelected;
+      final hasPauseChanges = contributor.notificationsSnoozed != newNotificationsPaused;
+      final hasChanges = hasRoleChanges || hasPauseChanges;
       
-      if (hasRoleChanges) {
+      if (hasChanges) {
         // Create updated contributor with new flags
         final updatedContributor = Contributor(
           tmdbId: contributor.tmdbId,
@@ -1041,6 +1019,7 @@ class _ContributorDetailScreenState extends ConsumerState<ContributorDetailScree
           showStatus: contributor.showStatus,
           totalSeasons: contributor.totalSeasons,
           nextEpisodeDate: contributor.nextEpisodeDate,
+          notificationsSnoozed: newNotificationsPaused,
         );
         
         final logic = ref.read(contributorLogicProvider);
@@ -1054,11 +1033,11 @@ class _ContributorDetailScreenState extends ConsumerState<ContributorDetailScree
           setState(() {
             _lastFollowedRoles = selectedDepts.join(',');
           });
-          showSimpleSnackBar(context, 'Roles updated.');
+          showSimpleSnackBar(context, 'Notification preferences updated.');
         }
       } else {
         if (mounted) {
-          showSimpleSnackBar(context, 'No changes made to roles.');
+          showSimpleSnackBar(context, 'No changes made.');
         }
       }
     }

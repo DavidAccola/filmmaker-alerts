@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:dio/dio.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 
 class RateLimitEvent {
@@ -232,6 +233,50 @@ class TmdbService {
     } catch (_) {
       return {'results': []};
     }
+  }
+
+  /// Filters a list of discover results to only include works where [companyId]
+  /// appears in the work's `production_companies`. This distinguishes actual
+  /// production from distribution-only associations.
+  ///
+  /// Movies are verified via `/movie/{id}`, TV shows via `/tv/{id}`.
+  /// Works that fail to fetch details are kept (benefit of the doubt).
+  Future<List<dynamic>> filterToProductionOnly(List<dynamic> discoverResults, int companyId) async {
+    if (discoverResults.isEmpty) return discoverResults;
+
+    final futures = discoverResults.map((work) async {
+      final id = work['id'] as int?;
+      if (id == null) return work; // keep if no id
+
+      try {
+        final mediaType = work['media_type'] as String?;
+        final isTv = mediaType == 'tv' ||
+            (work['first_air_date'] != null && work['release_date'] == null);
+
+        final details = isTv
+            ? await getTvDetailsBasic(id)
+            : await getMovieDetails(id);
+
+        final productionCompanies =
+            details['production_companies'] as List? ?? [];
+        // Only keep works where this company is in the first 2 positions
+        // (primary producer or close co-producer, not a distant distributor/financier)
+        final companyIndex = productionCompanies.indexWhere((c) => c['id'] == companyId);
+        final isTopProducer = companyIndex >= 0 && companyIndex <= 1;
+        
+        // TEMP DEBUG: Log production companies for each work
+        final title = work['title'] ?? work['name'] ?? 'Unknown';
+        final companyNames = productionCompanies.map((c) => '${c['name']}(${c['id']})').toList();
+        debugPrint('[FilterProd] "$title" (id=$id) — production_companies: $companyNames — companyId=$companyId — position=$companyIndex — isTopProducer=$isTopProducer');
+        
+        return isTopProducer ? work : null;
+      } catch (_) {
+        return work; // keep on error
+      }
+    });
+
+    final results = await Future.wait(futures);
+    return results.where((r) => r != null).toList();
   }
 
   Future<Map<String, dynamic>> getMovieDetails(int id) async {

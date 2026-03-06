@@ -78,11 +78,15 @@ class ContributorLogic {
       credits = [...(data['cast'] ?? []), ...(data['crew'] ?? [])];
     } else if (contributor.type == ContributorType.company) {
       final data = await _tmdbService.getCompanyTopWorks(contributor.tmdbId);
-      final topWorks = data['results'] as List? ?? [];
+      var topWorks = data['results'] as List? ?? [];
       
       // Also fetch upcoming works
       final upcomingData = await _tmdbService.getCompanyUpcomingWorks(contributor.tmdbId);
-      final upcomingWorks = upcomingData['results'] as List? ?? [];
+      var upcomingWorks = upcomingData['results'] as List? ?? [];
+      
+      // Filter to only works where this company is a producer (not just distributor)
+      topWorks = await _tmdbService.filterToProductionOnly(topWorks, contributor.tmdbId);
+      upcomingWorks = await _tmdbService.filterToProductionOnly(upcomingWorks, contributor.tmdbId);
       
       credits = [...upcomingWorks, ...topWorks];
     } else if (contributor.type == ContributorType.movie) {
@@ -202,7 +206,8 @@ class ContributorLogic {
     } else if (sparseContributor.type == ContributorType.company) {
        try {
          final topWorksResponse = await _tmdbService.getCompanyTopWorks(sparseContributor.tmdbId);
-         final topWorks = topWorksResponse['results'] as List? ?? [];
+         var topWorks = topWorksResponse['results'] as List? ?? [];
+         topWorks = await _tmdbService.filterToProductionOnly(topWorks, sparseContributor.tmdbId);
          await updateContributorDetail(enrichedContributor, topWorks);
        } catch (e) {
        }
@@ -405,10 +410,14 @@ class ContributorLogic {
           try {
             // Fetch both top works and upcoming works for companies
             final topWorksResponse = await _tmdbService.getCompanyTopWorks(contributor.tmdbId);
-            final topWorks = topWorksResponse['results'] as List? ?? [];
+            var topWorks = topWorksResponse['results'] as List? ?? [];
             
             final upcomingResponse = await _tmdbService.getCompanyUpcomingWorks(contributor.tmdbId);
-            final upcomingWorks = upcomingResponse['results'] as List? ?? [];
+            var upcomingWorks = upcomingResponse['results'] as List? ?? [];
+            
+            // Filter to only works where this company is a producer (not just distributor)
+            topWorks = await _tmdbService.filterToProductionOnly(topWorks, contributor.tmdbId);
+            upcomingWorks = await _tmdbService.filterToProductionOnly(upcomingWorks, contributor.tmdbId);
             
             // Combine both lists for processing
             final allWorks = [...upcomingWorks, ...topWorks];

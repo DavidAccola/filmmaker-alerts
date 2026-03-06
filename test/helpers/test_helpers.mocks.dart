@@ -342,6 +342,22 @@ class MockTmdbService extends _i1.Mock implements _i5.TmdbService {
       ) as _i6.Future<Map<String, dynamic>>);
 
   @override
+  _i6.Future<List<dynamic>> filterToProductionOnly(
+    List<dynamic>? discoverResults,
+    int? companyId,
+  ) =>
+      (super.noSuchMethod(
+        Invocation.method(
+          #filterToProductionOnly,
+          [
+            discoverResults,
+            companyId,
+          ],
+        ),
+        returnValue: _i6.Future<List<dynamic>>.value(<dynamic>[]),
+      ) as _i6.Future<List<dynamic>>);
+
+  @override
   _i6.Future<Map<String, dynamic>> getMovieDetails(int? id) =>
       (super.noSuchMethod(
         Invocation.method(

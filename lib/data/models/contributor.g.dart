@@ -141,7 +141,7 @@ class ContributorAdapter extends TypeAdapter<Contributor> {
       totalSeasons: fields[13] as int?,
       nextEpisodeDate: fields[14] as String?,
       imdbId: fields[15] as String?,
-      notificationsSnoozed: fields[16] as bool? ?? false,
+      notificationsSnoozed: fields[16] as bool,
     );
   }
 

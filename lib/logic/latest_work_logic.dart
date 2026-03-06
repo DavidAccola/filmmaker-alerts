@@ -109,10 +109,16 @@ class LatestWorkLogic {
       }).toList();
       credits = [...cast, ...crew];
     } else {
-      // Company: Fetch movies and TV
+      // Company: Fetch movies and TV, then filter to production-only
       final movies = await _tmdbService.getCompanyCredits(contributor.tmdbId, 'movie');
       final tv = await _tmdbService.getCompanyCredits(contributor.tmdbId, 'tv');
-      credits = [...(movies['results'] ?? []), ...(tv['results'] ?? [])];
+      final movieResults = movies['results'] as List? ?? [];
+      final tvResults = (tv['results'] as List? ?? []).map((t) {
+        if (t is Map<String, dynamic>) t['media_type'] = 'tv';
+        return t;
+      }).toList();
+      final allResults = [...movieResults, ...tvResults];
+      credits = await _tmdbService.filterToProductionOnly(allResults, contributor.tmdbId);
     }
 
     final today = pretendToday ?? DateFormat('yyyy-MM-dd').format(DateTime.now());

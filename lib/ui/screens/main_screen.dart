@@ -109,12 +109,6 @@ class _MainScreenState extends ConsumerState<MainScreen> with WindowListener {
     });
 
     final selectedIndex = ref.watch(selectedTabProvider);
-    final homeTab = ref.watch(homeTabProvider);
-    final isRankEditMode = ref.watch(rankEditModeProvider);
-    
-    // Determine which FAB to show
-    // On Home tab (0), Watchlist sub-tab (1), show rank-related FAB
-    final isOnWatchlist = selectedIndex == 0 && homeTab == 1;
     
     // Show FAB on Home (0) and History (1) tabs
     final showFab = selectedIndex == 0 || selectedIndex == 1;
@@ -164,31 +158,13 @@ class _MainScreenState extends ConsumerState<MainScreen> with WindowListener {
             ),
           ],
           body: _screens[selectedIndex],
-          floatingActionButton: showFab ? _buildFab(context, isOnWatchlist, isRankEditMode) : null,
+          floatingActionButton: showFab ? _buildFab(context) : null,
         ),
       ),
     );
   }
   
-  Widget _buildFab(BuildContext context, bool isOnWatchlist, bool isRankEditMode) {
-    // If on watchlist and in rank edit mode, show "Done" button
-    if (isOnWatchlist && isRankEditMode) {
-      return Tooltip(
-        message: 'Done Ranking',
-        waitDuration: const Duration(milliseconds: 250),
-        child: FloatingActionButton.extended(
-          backgroundColor: Theme.of(context).colorScheme.primary,
-          foregroundColor: Theme.of(context).colorScheme.onPrimary,
-          onPressed: () {
-            ref.read(rankEditModeProvider.notifier).setEditMode(false);
-          },
-          icon: const Icon(Icons.check),
-          label: const Text('Done'),
-        ),
-      );
-    }
-    
-    // Default: show "Add" button
+  Widget _buildFab(BuildContext context) {
     return Tooltip(
       message: 'Find More to Follow',
       waitDuration: const Duration(milliseconds: 250),

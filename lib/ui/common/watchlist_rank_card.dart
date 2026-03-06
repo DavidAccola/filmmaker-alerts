@@ -13,7 +13,7 @@ import 'adaptive_tooltip_text.dart';
 class WatchlistRankCard extends ConsumerStatefulWidget {
   final WatchlistEntry entry;
   final int rank;
-  final int index; // Required for ReorderableDragStartListener
+  final int index; // Used by ReorderableDragStartListener
   final VoidCallback? onTap;
   final VoidCallback? onSendToTop;
   final VoidCallback? onSendToBottom;
@@ -120,11 +120,7 @@ class _WatchlistRankCardState extends ConsumerState<WatchlistRankCard> {
           clipBehavior: Clip.antiAlias,
           child: SizedBox(
             height: 75,
-            child: ReorderableDragStartListener(
-              index: widget.index,
-              child: MouseRegion(
-                cursor: SystemMouseCursors.grab,
-                child: Row(
+            child: Row(
               children: [
                 // Rank number badge
                 Container(
@@ -192,15 +188,15 @@ class _WatchlistRankCardState extends ConsumerState<WatchlistRankCard> {
                 ),
                 ),
 
-                // Title area - tap navigates, drag reorders
-                MouseRegion(
-                  cursor: SystemMouseCursors.click,
-                  child: GestureDetector(
-                  behavior: HitTestBehavior.opaque,
-                  onTap: widget.onTap,
-                  child: Container(
-                    constraints: const BoxConstraints(maxWidth: 200),
-                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                // Title area - tap navigates
+                Expanded(
+                  child: MouseRegion(
+                    cursor: SystemMouseCursors.click,
+                    child: GestureDetector(
+                    behavior: HitTestBehavior.opaque,
+                    onTap: widget.onTap,
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       mainAxisAlignment: MainAxisAlignment.center,
@@ -244,14 +240,7 @@ class _WatchlistRankCardState extends ConsumerState<WatchlistRankCard> {
                       ],
                     ),
                   ),
-                ),
-                ),
-
-                // Empty space fills remaining
-                Expanded(
-                  child: Container(
-                    height: 75,
-                    color: Colors.transparent,
+                  ),
                   ),
                 ),
 
@@ -289,21 +278,22 @@ class _WatchlistRankCardState extends ConsumerState<WatchlistRankCard> {
                     ],
                   ),
 
-                // Drag handle icon
-                Container(
-                  padding: const EdgeInsets.only(left: 8, right: 16),
-                  height: 75,
-                  alignment: Alignment.center,
-                  child: Icon(
-                    Icons.drag_handle,
-                    color: _isHovered
-                        ? theme.colorScheme.primary
-                        : theme.colorScheme.onSurfaceVariant,
+                // Drag handle — visual indicator for drag-to-reorder
+                MouseRegion(
+                  cursor: SystemMouseCursors.grab,
+                  child: Container(
+                    padding: const EdgeInsets.only(left: 8, right: 16),
+                    height: 75,
+                    alignment: Alignment.center,
+                    child: Icon(
+                      Icons.drag_handle,
+                      color: _isHovered
+                          ? theme.colorScheme.primary
+                          : theme.colorScheme.onSurfaceVariant,
+                    ),
                   ),
                 ),
               ],
-            ),
-              ),
             ),
           ),
         ),

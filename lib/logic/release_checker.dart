@@ -177,14 +177,21 @@ class ReleaseChecker {
           // Update contributor detail with all fetched credits
           await _updateContributorDetail(contributor, credits);
         } else if (contributor.type == ContributorType.company) {
-          // Companies: Fetch movies and TV
+          // Companies: Fetch movies and TV, filter to production-only
           final movies = await _tmdbService.getCompanyCredits(contributor.tmdbId, 'movie', since: startDateStr);
           final tv = await _tmdbService.getCompanyCredits(contributor.tmdbId, 'tv', since: startDateStr);
-          credits = [...(movies['results'] ?? []), ...(tv['results'] ?? [])];
+          final movieResults = movies['results'] as List? ?? [];
+          final tvResults = (tv['results'] as List? ?? []).map((t) {
+            if (t is Map<String, dynamic>) t['media_type'] = 'tv';
+            return t;
+          }).toList();
+          credits = await _tmdbService.filterToProductionOnly(
+            [...movieResults, ...tvResults], contributor.tmdbId);
           
           // For companies, also fetch top works to ensure the detail screen is well-populated
           final topWorksResponse = await _tmdbService.getCompanyTopWorks(contributor.tmdbId);
-          final topWorks = topWorksResponse['results'] as List? ?? [];
+          var topWorks = topWorksResponse['results'] as List? ?? [];
+          topWorks = await _tmdbService.filterToProductionOnly(topWorks, contributor.tmdbId);
           
           // Combine check-window credits with top works for the detail update
           final detailCredits = [...credits, ...topWorks];

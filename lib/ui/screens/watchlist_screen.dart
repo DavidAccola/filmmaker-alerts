@@ -62,6 +62,15 @@ class _WatchlistScreenState extends ConsumerState<WatchlistScreen>
   // Show hidden items toggle
   bool _showHidden = false;
 
+  // Type filters (all enabled by default)
+  bool _showMovies = true;
+  bool _showTvShows = true;
+  bool _showCollections = true;
+
+  /// Whether any filter is actively hiding items.
+  bool get _hasActiveFilters =>
+      _selectedFilters.length < 4 || !_showMovies || !_showTvShows || !_showCollections;
+
   // Sort state
   WatchlistSortOption _sortOption = WatchlistSortOption.userRank;
   bool _sortInitialized = false;
@@ -71,15 +80,20 @@ class _WatchlistScreenState extends ConsumerState<WatchlistScreen>
   final List<List<_RankSnapshot>> _rankUndoStack = [];
   final List<List<_RankSnapshot>> _rankRedoStack = [];
 
+  // Guard against concurrent send-to-top/bottom/reorder operations
+  bool _isReorderInProgress = false;
+
+  // Local copy of entries for rank edit mode — avoids provider invalidation
+  // triggering ReorderableListView rebuilds mid-layout.
+  List<WatchlistEntry>? _localRankEntries;
+
   /// Helper to update FAB raised state via provider (shared with HomeScreen)
   void _setFabRaised(bool raised) {
     ref.read(fabRaisedProvider.notifier).setRaised(raised);
   }
   
-  /// Check if we're in rank edit mode
-  bool get _isRankEditMode => ref.read(rankEditModeProvider);
-  
-  /// Toggle rank edit mode
+
+  /// Toggle between grid and list view in Custom Order mode
   void _setRankEditMode(bool editing) {
     ref.read(rankEditModeProvider.notifier).setEditMode(editing);
   }
@@ -103,18 +117,32 @@ class _WatchlistScreenState extends ConsumerState<WatchlistScreen>
     for (final s in snapshot) {
       await logic.updateUserRank(s.tmdbId, s.type, s.rank);
     }
-    ref.invalidate(watchlistEntriesProvider);
+    // If we have a local rank list, reorder it to match the snapshot
+    if (_localRankEntries != null) {
+      final idToRank = {for (final s in snapshot) '${s.tmdbId}_${s.type}': s.rank};
+      _localRankEntries!.sort((a, b) {
+        final aRank = idToRank['${a.tmdbId}_${a.type}'] ?? 999;
+        final bRank = idToRank['${b.tmdbId}_${b.type}'] ?? 999;
+        return aRank.compareTo(bRank);
+      });
+    } else {
+      ref.invalidate(watchlistEntriesProvider);
+    }
   }
 
   /// Undoes the last rank change.
   Future<void> _undoRank() async {
     if (_rankUndoStack.isEmpty) return;
-    // We need current state for redo — get from provider
-    final entries = await ref.read(watchlistEntriesProvider.future);
-    final active = entries.where((e) => !e.isSnoozed).toList();
-    final filtered = _filterEntries(active);
-    final sorted = _sortEntries(filtered);
-    _rankRedoStack.add(_takeRankSnapshot(sorted));
+    // Snapshot current state for redo
+    if (_localRankEntries != null) {
+      _rankRedoStack.add(_takeRankSnapshot(_localRankEntries!));
+    } else {
+      final entries = await ref.read(watchlistEntriesProvider.future);
+      final active = entries.where((e) => !e.isSnoozed).toList();
+      final filtered = _filterEntries(active);
+      final sorted = _sortEntries(filtered);
+      _rankRedoStack.add(_takeRankSnapshot(sorted));
+    }
     final previous = _rankUndoStack.removeLast();
     await _restoreRankSnapshot(previous);
     if (mounted) setState(() {});
@@ -123,11 +151,16 @@ class _WatchlistScreenState extends ConsumerState<WatchlistScreen>
   /// Redoes the last undone rank change.
   Future<void> _redoRank() async {
     if (_rankRedoStack.isEmpty) return;
-    final entries = await ref.read(watchlistEntriesProvider.future);
-    final active = entries.where((e) => !e.isSnoozed).toList();
-    final filtered = _filterEntries(active);
-    final sorted = _sortEntries(filtered);
-    _rankUndoStack.add(_takeRankSnapshot(sorted));
+    // Snapshot current state for undo
+    if (_localRankEntries != null) {
+      _rankUndoStack.add(_takeRankSnapshot(_localRankEntries!));
+    } else {
+      final entries = await ref.read(watchlistEntriesProvider.future);
+      final active = entries.where((e) => !e.isSnoozed).toList();
+      final filtered = _filterEntries(active);
+      final sorted = _sortEntries(filtered);
+      _rankUndoStack.add(_takeRankSnapshot(sorted));
+    }
     final next = _rankRedoStack.removeLast();
     await _restoreRankSnapshot(next);
     if (mounted) setState(() {});
@@ -150,15 +183,8 @@ class _WatchlistScreenState extends ConsumerState<WatchlistScreen>
   void _updateTabController(bool hasHidden) {
     if (_hasHiddenItems != hasHidden && mounted) {
       _hasHiddenItems = hasHidden;
-      try {
-        _tabController.dispose();
-      } catch (_) {
-        // Ignore if already disposed
-      }
-      _tabController = TabController(
-        length: hasHidden ? 2 : 1,
-        vsync: this,
-      );
+      // TabBarView always has exactly 1 child — hidden items are shown inline,
+      // not in a separate tab. Only track the flag for conditional UI.
     }
   }
 
@@ -281,7 +307,24 @@ class _WatchlistScreenState extends ConsumerState<WatchlistScreen>
         
         // Add hidden count if not showing hidden
         final hiddenCount = _showHidden ? 0 : hiddenEntries.length;
-        final filteredOutCount = statusFilteredCount + hiddenCount;
+        // Count items filtered out by type
+        int typeFilteredCount = 0;
+        if (!_showMovies || !_showTvShows || !_showCollections) {
+          typeFilteredCount = activeEntries.where((entry) {
+            // Only count items that pass the status filter but fail the type filter
+            final passesStatus = entry.statusRecords.isEmpty
+                ? _selectedFilters.contains(WatchStatus.wantToWatch)
+                : entry.statusRecords.any((r) => _selectedFilters.contains(r.status));
+            if (!passesStatus) return false;
+            final isCollection = entry.type == WorkType.movie &&
+                entry.followedContributors.any((c) => c.role == 'Collection');
+            if (isCollection) return !_showCollections;
+            if (entry.type == WorkType.movie) return !_showMovies;
+            if (entry.type == WorkType.tvShow) return !_showTvShows;
+            return false;
+          }).length;
+        }
+        final filteredOutCount = statusFilteredCount + typeFilteredCount + hiddenCount;
 
         return Column(
           children: [
@@ -335,6 +378,12 @@ class _WatchlistScreenState extends ConsumerState<WatchlistScreen>
                           }
                         } else if (value == 'showHidden') {
                           _showHidden = !_showHidden;
+                        } else if (value == 'movies') {
+                          _showMovies = !_showMovies;
+                        } else if (value == 'tvShows') {
+                          _showTvShows = !_showTvShows;
+                        } else if (value == 'collections') {
+                          _showCollections = !_showCollections;
                         }
                       });
                     },
@@ -462,6 +511,22 @@ class _WatchlistScreenState extends ConsumerState<WatchlistScreen>
                         ),
                         const PopupMenuDivider(),
                         CheckedPopupMenuItem(
+                          value: 'movies',
+                          checked: _showMovies,
+                          child: const Text('Movies'),
+                        ),
+                        CheckedPopupMenuItem(
+                          value: 'tvShows',
+                          checked: _showTvShows,
+                          child: const Text('TV Shows'),
+                        ),
+                        CheckedPopupMenuItem(
+                          value: 'collections',
+                          checked: _showCollections,
+                          child: const Text('Movie Collections'),
+                        ),
+                        const PopupMenuDivider(),
+                        CheckedPopupMenuItem(
                           value: 'showHidden',
                           checked: _showHidden,
                           child: Row(
@@ -510,7 +575,7 @@ class _WatchlistScreenState extends ConsumerState<WatchlistScreen>
                       ),
                       const PopupMenuItem(
                         value: WatchlistSortOption.userRank,
-                        child: Text('User Rank'),
+                        child: Text('Custom Order'),
                       ),
                       const PopupMenuItem(
                         value: WatchlistSortOption.alphabetical,
@@ -526,8 +591,8 @@ class _WatchlistScreenState extends ConsumerState<WatchlistScreen>
               ),
             ),
             
-            // Edit Ranking banner (shown when in User Rank sort mode and not editing)
-            if (_sortOption == WatchlistSortOption.userRank && !ref.watch(rankEditModeProvider))
+            // Custom Order banner (shown when in Custom Order sort mode)
+            if (_sortOption == WatchlistSortOption.userRank)
               _buildEditRankingBanner(),
             
             // Main content
@@ -535,12 +600,9 @@ class _WatchlistScreenState extends ConsumerState<WatchlistScreen>
               child: TabBarView(
                 controller: _tabController,
                 children: [
-                  // Watchlist tab
-                  watchlistAsync.when(
-                    data: (entries) {
+                  // Watchlist tab — uses data from outer watchlistAsync.when
+                  Builder(builder: (context) {
                       final theme = Theme.of(context);
-                      final activeEntries = entries.where((e) => !e.isSnoozed).toList();
-                      final hiddenEntries = entries.where((e) => e.isSnoozed).toList();
                       final filteredEntries = _filterEntries(activeEntries);
                       final sortedEntries = _sortEntries(filteredEntries);
                       final sortedHiddenEntries = _showHidden ? _sortEntries(hiddenEntries) : <WatchlistEntry>[];
@@ -567,7 +629,7 @@ class _WatchlistScreenState extends ConsumerState<WatchlistScreen>
                                   color: theme.colorScheme.onSurfaceVariant,
                                 ),
                               ),
-                              if (totalItems > 0 && _selectedFilters.length < 4) ...[
+                              if (totalItems > 0 && _hasActiveFilters) ...[
                                 const SizedBox(height: 8),
                                 Text(
                                   'Try adjusting your filters to see more items',
@@ -585,6 +647,9 @@ class _WatchlistScreenState extends ConsumerState<WatchlistScreen>
                                         WatchStatus.watched,
                                         WatchStatus.dnf,
                                       };
+                                      _showMovies = true;
+                                      _showTvShows = true;
+                                      _showCollections = true;
                                     });
                                   },
                                   child: const Text('Show All'),
@@ -626,7 +691,7 @@ class _WatchlistScreenState extends ConsumerState<WatchlistScreen>
                       return Column(
                         children: [
                           // Filtered indicator
-                          if (_selectedFilters.length < 4)
+                          if (_hasActiveFilters)
                             Container(
                               padding: const EdgeInsets.all(8),
                               color: Theme.of(context).colorScheme.secondaryContainer,
@@ -662,16 +727,33 @@ class _WatchlistScreenState extends ConsumerState<WatchlistScreen>
                               ),
                             ),
 
-                          // Grid of cards (or rank edit list when in edit mode)
+                          // Grid of cards (or rank list when in list view mode)
                           Expanded(
                             child: (_sortOption == WatchlistSortOption.userRank && ref.watch(rankEditModeProvider))
-                                ? _buildUserRankList(sortedEntries)
-                                : (_sortOption == WatchlistSortOption.userRank)
+                                ? Builder(builder: (context) {
+                                    // Initialize local rank entries from provider data
+                                    // for list view to avoid provider invalidation during reorder
+                                    _localRankEntries ??= List<WatchlistEntry>.from(sortedEntries);
+                                    return _buildUserRankList(_localRankEntries!);
+                                  })
+                                : Builder(builder: (context) {
+                                    // Clear local rank entries when switching to grid view
+                                    if (_localRankEntries != null) {
+                                      WidgetsBinding.instance.addPostFrameCallback((_) {
+                                        if (mounted) {
+                                          _localRankEntries = null;
+                                          ref.invalidate(watchlistEntriesProvider);
+                                        }
+                                      });
+                                    }
+                                    return (_sortOption == WatchlistSortOption.userRank)
                                     ? _buildUserRankGrid(sortedEntries, sortedHiddenEntries)
-                                    : LayoutBuilder(
-                                    builder: (context, constraints) {
-                                      // Use taller cards on small screens to prevent overflow
-                                      final isSmallScreen = constraints.maxWidth < 400;
+                                    : Builder(
+                                    builder: (context) {
+                                      // Use MediaQuery instead of LayoutBuilder to avoid
+                                      // _RenderLayoutBuilder mutation conflicts with ReorderableListView
+                                      final screenWidth = MediaQuery.sizeOf(context).width - 80;
+                                      final isSmallScreen = screenWidth < 400;
                                       final aspectRatio = isSmallScreen ? 0.38 : 0.43;
                                       
                                       return CustomScrollView(
@@ -759,56 +841,12 @@ class _WatchlistScreenState extends ConsumerState<WatchlistScreen>
                                         ],
                                       );
                                     },
-                                  ),
+                                  );
+                                  }),
                           ),
                         ],
                       );
-                    },
-                    loading: () => const Center(
-                      child: Column(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          CircularProgressIndicator(),
-                          SizedBox(height: 16),
-                          Text('Loading watchlist...'),
-                        ],
-                      ),
-                    ),
-                    error: (error, stack) => Center(
-                      child: Column(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          Icon(
-                            Icons.error_outline,
-                            size: 64,
-                            color: Theme.of(context).colorScheme.error,
-                          ),
-                          const SizedBox(height: 16),
-                          Text(
-                            'Failed to load watchlist',
-                            style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-                              color: Theme.of(context).colorScheme.error,
-                            ),
-                          ),
-                          const SizedBox(height: 8),
-                          Text(
-                            'Please try again later',
-                            style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                              color: Theme.of(context).colorScheme.onSurfaceVariant,
-                            ),
-                          ),
-                          const SizedBox(height: 16),
-                          FilledButton.icon(
-                            onPressed: () {
-                              ref.invalidate(watchlistEntriesProvider);
-                            },
-                            icon: const Icon(Icons.refresh),
-                            label: const Text('Retry'),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
+                    }),
                 ],
               ),
             ),
@@ -824,7 +862,18 @@ class _WatchlistScreenState extends ConsumerState<WatchlistScreen>
 
   List<WatchlistEntry> _filterEntries(List<WatchlistEntry> entries) {
     final filtered = entries.where((entry) {
-      // Items with no status records are treated as "Want to Watch"
+      // Type filter
+      final isCollection = entry.type == WorkType.movie &&
+          entry.followedContributors.any((c) => c.role == 'Collection');
+      if (isCollection) {
+        if (!_showCollections) return false;
+      } else if (entry.type == WorkType.movie) {
+        if (!_showMovies) return false;
+      } else if (entry.type == WorkType.tvShow) {
+        if (!_showTvShows) return false;
+      }
+
+      // Status filter
       if (entry.statusRecords.isEmpty) {
         return _selectedFilters.contains(WatchStatus.wantToWatch);
       }
@@ -836,63 +885,59 @@ class _WatchlistScreenState extends ConsumerState<WatchlistScreen>
     return filtered;
   }
 
-  /// Builds the Edit Ranking banner shown when in User Rank view mode.
+  /// Builds the Custom Order banner with grid/list toggle and undo/redo.
   Widget _buildEditRankingBanner() {
     final theme = Theme.of(context);
+    final isListView = ref.watch(rankEditModeProvider);
     
-    return Material(
-      color: theme.colorScheme.primaryContainer.withValues(alpha: 0.4),
-      child: InkWell(
-        onTap: () => _setRankEditMode(true),
-        child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-          decoration: BoxDecoration(
-            border: Border(
-              bottom: BorderSide(
-                color: theme.colorScheme.primary.withValues(alpha: 0.3),
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      decoration: BoxDecoration(
+        color: theme.colorScheme.primaryContainer.withValues(alpha: 0.4),
+        border: Border(
+          bottom: BorderSide(
+            color: theme.colorScheme.primary.withValues(alpha: 0.3),
+          ),
+        ),
+      ),
+      child: Row(
+        children: [
+          Icon(
+            Icons.format_list_numbered,
+            size: 20,
+            color: theme.colorScheme.primary,
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Text(
+              'Drag to reorder',
+              style: theme.textTheme.bodyMedium?.copyWith(
+                color: theme.colorScheme.onSurface,
               ),
             ),
           ),
-          child: Row(
-            children: [
-              Icon(
-                Icons.format_list_numbered,
-                size: 20,
-                color: theme.colorScheme.primary,
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Text(
-                  'Sorted by User Rank',
-                  style: theme.textTheme.bodyMedium?.copyWith(
-                    color: theme.colorScheme.onSurface,
-                  ),
-                ),
-              ),
-              // Undo button
-              IconButton(
-                icon: const Icon(Icons.undo),
-                onPressed: _rankUndoStack.isNotEmpty ? _undoRank : null,
-                tooltip: 'Undo',
-              ),
-              // Redo button
-              IconButton(
-                icon: const Icon(Icons.redo),
-                onPressed: _rankRedoStack.isNotEmpty ? _redoRank : null,
-                tooltip: 'Redo',
-              ),
-              const SizedBox(width: 8),
-              FilledButton.icon(
-                onPressed: () => _setRankEditMode(true),
-                icon: const Icon(Icons.edit, size: 18),
-                label: const Text('Edit Ranking'),
-                style: FilledButton.styleFrom(
-                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                ),
-              ),
-            ],
+          // Undo button
+          IconButton(
+            icon: const Icon(Icons.undo),
+            onPressed: _rankUndoStack.isNotEmpty ? _undoRank : null,
+            tooltip: 'Undo',
           ),
-        ),
+          // Redo button
+          IconButton(
+            icon: const Icon(Icons.redo),
+            onPressed: _rankRedoStack.isNotEmpty ? _redoRank : null,
+            tooltip: 'Redo',
+          ),
+          const SizedBox(width: 4),
+          // Grid/List toggle
+          IconButton(
+            icon: Icon(isListView ? Icons.grid_view : Icons.view_list),
+            onPressed: () {
+              ref.read(rankEditModeProvider.notifier).toggle();
+            },
+            tooltip: isListView ? 'Grid view' : 'List view',
+          ),
+        ],
       ),
     );
   }
@@ -932,92 +977,52 @@ class _WatchlistScreenState extends ConsumerState<WatchlistScreen>
     
     return Column(
       children: [
-        // Header with instructions and undo/redo
-        Container(
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-          decoration: BoxDecoration(
-            color: theme.colorScheme.primaryContainer.withValues(alpha: 0.3),
-            border: Border(
-              bottom: BorderSide(
-                color: theme.colorScheme.outlineVariant.withValues(alpha: 0.5),
-              ),
-            ),
-          ),
-          child: Row(
-            children: [
-              Icon(
-                Icons.drag_indicator,
-                size: 20,
-                color: theme.colorScheme.primary,
-              ),
-              const SizedBox(width: 8),
-              Expanded(
-                child: Text(
-                  'Drag items to reorder your personal ranking',
-                  style: theme.textTheme.bodySmall?.copyWith(
-                    color: theme.colorScheme.onSurfaceVariant,
-                  ),
-                ),
-              ),
-              // Undo button
-              IconButton(
-                icon: const Icon(Icons.undo),
-                onPressed: _rankUndoStack.isNotEmpty ? _undoRank : null,
-                tooltip: 'Undo',
-              ),
-              // Redo button
-              IconButton(
-                icon: const Icon(Icons.redo),
-                onPressed: _rankRedoStack.isNotEmpty ? _redoRank : null,
-                tooltip: 'Redo',
-              ),
-            ],
-          ),
-        ),
-        
-        // Reorderable list
+        // Reorderable list using ReorderableGridView with crossAxisCount: 1.
+        // Flutter's built-in ReorderableListView uses LayoutBuilder + OverlayPortal
+        // internally, which causes _RenderLayoutBuilder mutation crashes when items
+        // change positions. ReorderableGridView uses a different drag implementation
+        // that doesn't have this issue.
         Expanded(
-          child: ReorderableListView.builder(
+          child: SingleChildScrollView(
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-            itemCount: entries.length,
-            proxyDecorator: (child, index, animation) {
-              // Add elevation and scale effect when dragging
-              return AnimatedBuilder(
-                animation: animation,
-                builder: (context, child) {
-                  final animValue = Curves.easeInOut.transform(animation.value);
-                  final elevation = 8.0 * animValue;
-                  final scale = 1.0 + (0.02 * animValue);
-                  
-                  return Transform.scale(
-                    scale: scale,
-                    child: Material(
-                      elevation: elevation,
-                      color: Colors.transparent,
-                      borderRadius: BorderRadius.circular(12),
-                      child: child,
+            child: ReorderableGridView.count(
+              crossAxisCount: 1,
+              mainAxisSpacing: 8,
+              crossAxisSpacing: 0,
+              childAspectRatio: MediaQuery.sizeOf(context).width / 75,
+              shrinkWrap: true,
+              physics: const NeverScrollableScrollPhysics(),
+              dragStartDelay: Duration.zero,
+              onReorder: (oldIndex, newIndex) {
+                if (oldIndex == newIndex) return;
+                _saveRankToUndoStack(List<WatchlistEntry>.from(entries));
+                final entry = entries.removeAt(oldIndex);
+                entries.insert(newIndex, entry);
+                // Persist in background
+                final logic = ref.read(watchlistLogicProvider);
+                () async {
+                  for (int i = 0; i < entries.length; i++) {
+                    await logic.updateUserRank(entries[i].tmdbId, entries[i].type, i + 1);
+                  }
+                }();
+                setState(() {});
+              },
+              children: [
+                for (int index = 0; index < entries.length; index++)
+                  Padding(
+                    key: ValueKey(entries[index].uniqueKey),
+                    padding: EdgeInsets.zero,
+                    child: WatchlistRankCard(
+                      entry: entries[index],
+                      rank: index + 1,
+                      index: index,
+                      onTap: () => _navigateToDetailFromRank(entries[index]),
+                      onSendToTop: (index > 0 && !_isReorderInProgress) ? () => _handleSendToTop(index, entries) : null,
+                      onSendToBottom: (index < entries.length - 1 && !_isReorderInProgress) ? () => _handleSendToBottom(index, entries) : null,
                     ),
-                  );
-                },
-                child: child,
-              );
-            },
-            onReorder: (oldIndex, newIndex) => _handleReorder(oldIndex, newIndex, entries),
-            itemBuilder: (context, index) {
-              final entry = entries[index];
-              return Padding(
-                key: ValueKey(entry.uniqueKey),
-                padding: const EdgeInsets.symmetric(vertical: 4),
-                child: WatchlistRankCard(
-                  entry: entry,
-                  rank: index + 1,
-                  index: index,
-                  onTap: () => _navigateToDetailFromRank(entry),
-                  onSendToTop: index > 0 ? () => _handleSendToTop(index, entries) : null,
-                  onSendToBottom: index < entries.length - 1 ? () => _handleSendToBottom(index, entries) : null,
-                ),
-              );
-            },
+                  ),
+              ],
+            ),
           ),
         ),
         
@@ -1030,24 +1035,17 @@ class _WatchlistScreenState extends ConsumerState<WatchlistScreen>
   /// Builds the User Rank grid with drag-to-reorder in the main watchlist view.
   Widget _buildUserRankGrid(List<WatchlistEntry> sortedEntries, List<WatchlistEntry> sortedHiddenEntries) {
     final theme = Theme.of(context);
+    // Use the same sizing approach as other sort modes:
+    // maxCrossAxisExtent: 150, crossAxisSpacing: 12, mainAxisSpacing: 6
+    final screenWidth = MediaQuery.sizeOf(context).width - 80;
+    final isSmallScreen = screenWidth < 400;
+    final aspectRatio = isSmallScreen ? 0.38 : 0.43;
 
     return LayoutBuilder(
       builder: (context, constraints) {
-        final isSmallScreen = constraints.maxWidth < 400;
-        final aspectRatio = isSmallScreen ? 0.38 : 0.43;
         final availableWidth = constraints.maxWidth - 32; // 16px padding each side
-        final crossAxisCount = (availableWidth / 150).ceil().clamp(2, 10);
-
-        // Estimate content height to push footer to bottom
-        final itemWidth = (availableWidth - (crossAxisCount - 1) * 12) / crossAxisCount;
-        final itemHeight = itemWidth / aspectRatio;
-        final rows = (sortedEntries.length / crossAxisCount).ceil();
-        final gridHeight = rows * itemHeight + (rows - 1) * 6 + 32; // 32 = padding
-        final hiddenRows = sortedHiddenEntries.isEmpty ? 0 : (sortedHiddenEntries.length / crossAxisCount).ceil();
-        final hiddenHeight = sortedHiddenEntries.isEmpty ? 0.0 : (hiddenRows * itemHeight + (hiddenRows - 1) * 6 + 48 + 16); // header + padding
-        const attributionHeight = 60.0;
-        final contentHeight = gridHeight + hiddenHeight + attributionHeight;
-        final remainingSpace = (constraints.maxHeight - contentHeight).clamp(0.0, double.infinity);
+        // Match SliverGridDelegateWithMaxCrossAxisExtent(maxCrossAxisExtent: 150)
+        final crossAxisCount = (availableWidth / (150 + 12)).ceil().clamp(2, 10);
 
         return SingleChildScrollView(
           controller: _scrollController,
@@ -1129,9 +1127,6 @@ class _WatchlistScreenState extends ConsumerState<WatchlistScreen>
                 ),
               ],
 
-              // Spacer to push attribution to bottom when content is short
-              if (remainingSpace > 0)
-                SizedBox(height: remainingSpace),
               const TmdbAttribution(),
             ],
           ),
@@ -1498,59 +1493,10 @@ class _WatchlistScreenState extends ConsumerState<WatchlistScreen>
     ref.invalidate(watchlistEntriesProvider);
   }
 
-  Future<void> _handleReorder(int oldIndex, int newIndex, List<WatchlistEntry> entries) async {
-    // Check if filters are active
-    if (_selectedFilters.length < 4) {
-      // Show warning snackbar
-      if (mounted) {
-        showDragReorderWarningSnackBar(
-          context,
-          () {
-            // Show all items
-            setState(() {
-              _selectedFilters = {
-                WatchStatus.wantToWatch,
-                WatchStatus.inProgress,
-                WatchStatus.watched,
-                WatchStatus.dnf,
-              };
-            });
-          },
-          onSnackBarVisibilityChanged: (isVisible) => _setFabRaised(isVisible),
-        );
-      }
-      return;
-    }
-
-    // Adjust newIndex if moving down (ReorderableListView convention)
-    if (newIndex > oldIndex) {
-      newIndex -= 1;
-    }
-
-    if (oldIndex == newIndex) return; // No change
-
-    // Save to undo stack before changing
-    _saveRankToUndoStack(entries);
-
-    // Reorder the list
-    final entry = entries.removeAt(oldIndex);
-    entries.insert(newIndex, entry);
-
-    // Update userRank for all affected items
-    final logic = ref.read(watchlistLogicProvider);
-    
-    for (int i = 0; i < entries.length; i++) {
-      await logic.updateUserRank(entries[i].tmdbId, entries[i].type, i + 1);
-    }
-
-    // Refresh the provider
-    ref.invalidate(watchlistEntriesProvider);
-  }
-
   /// Handles reorder from ReorderableGridView (no index adjustment needed).
   Future<void> _handleGridReorder(int oldIndex, int newIndex, List<WatchlistEntry> entries) async {
     // Check if filters are active
-    if (_selectedFilters.length < 4) {
+    if (_hasActiveFilters) {
       if (mounted) {
         showDragReorderWarningSnackBar(
           context,
@@ -1562,6 +1508,9 @@ class _WatchlistScreenState extends ConsumerState<WatchlistScreen>
                 WatchStatus.watched,
                 WatchStatus.dnf,
               };
+              _showMovies = true;
+              _showTvShows = true;
+              _showCollections = true;
             });
           },
           onSnackBarVisibilityChanged: (isVisible) => _setFabRaised(isVisible),
@@ -1588,50 +1537,66 @@ class _WatchlistScreenState extends ConsumerState<WatchlistScreen>
 
   /// Sends an entry to the top of the rank list.
   Future<void> _handleSendToTop(int index, List<WatchlistEntry> entries) async {
+    if (_isReorderInProgress) return;
+    _isReorderInProgress = true;
     debugPrint('[SendToTop] Called with index=$index, entries.length=${entries.length}');
     if (index == 0) {
       debugPrint('[SendToTop] Already at top, skipping');
+      _isReorderInProgress = false;
       return;
     }
     debugPrint('[SendToTop] Entry: "${entries[index].title}" (tmdbId=${entries[index].tmdbId}, type=${entries[index].type})');
     debugPrint('[SendToTop] Current order: ${entries.map((e) => "${e.title}(rank=${e.userRank})").join(", ")}');
     
-    _saveRankToUndoStack(entries);
+    // Snapshot the current order for undo before any mutation
+    _saveRankToUndoStack(List<WatchlistEntry>.from(entries));
 
-    // Work on a copy to avoid mutating the list during layout
-    final reordered = List<WatchlistEntry>.from(entries);
-    final entry = reordered.removeAt(index);
-    reordered.insert(0, entry);
-    debugPrint('[SendToTop] New order: ${reordered.map((e) => e.title).join(", ")}');
+    // Mutate the local list, then defer the rebuild to the next frame so it
+    // never collides with ReorderableListView's internal LayoutBuilder pass.
+    final entry = entries.removeAt(index);
+    entries.insert(0, entry);
+    debugPrint('[SendToTop] New order: ${entries.map((e) => e.title).join(", ")}');
 
+    // Persist ranks to Hive
     final logic = ref.read(watchlistLogicProvider);
-    for (int i = 0; i < reordered.length; i++) {
-      debugPrint('[SendToTop] Saving rank ${i + 1} for "${reordered[i].title}"');
-      await logic.updateUserRank(reordered[i].tmdbId, reordered[i].type, i + 1);
+    for (int i = 0; i < entries.length; i++) {
+      debugPrint('[SendToTop] Saving rank ${i + 1} for "${entries[i].title}"');
+      await logic.updateUserRank(entries[i].tmdbId, entries[i].type, i + 1);
     }
-    debugPrint('[SendToTop] Invalidating watchlistEntriesProvider');
-    ref.invalidate(watchlistEntriesProvider);
     debugPrint('[SendToTop] Done');
+
+    // Rebuild on the next frame — safe from layout collisions
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) setState(() => _isReorderInProgress = false);
+    });
   }
 
   /// Sends an entry to the bottom of the rank list.
   Future<void> _handleSendToBottom(int index, List<WatchlistEntry> entries) async {
+    if (_isReorderInProgress) return;
+    _isReorderInProgress = true;
     if (index == entries.length - 1) {
+      _isReorderInProgress = false;
       return;
     }
 
-    _saveRankToUndoStack(entries);
+    // Snapshot the current order for undo before any mutation
+    _saveRankToUndoStack(List<WatchlistEntry>.from(entries));
 
-    // Work on a copy to avoid mutating the list during layout
-    final reordered = List<WatchlistEntry>.from(entries);
-    final entry = reordered.removeAt(index);
-    reordered.add(entry);
+    // Mutate the local list, defer rebuild to next frame.
+    final entry = entries.removeAt(index);
+    entries.add(entry);
 
+    // Persist ranks to Hive
     final logic = ref.read(watchlistLogicProvider);
-    for (int i = 0; i < reordered.length; i++) {
-      await logic.updateUserRank(reordered[i].tmdbId, reordered[i].type, i + 1);
+    for (int i = 0; i < entries.length; i++) {
+      await logic.updateUserRank(entries[i].tmdbId, entries[i].type, i + 1);
     }
-    ref.invalidate(watchlistEntriesProvider);
+
+    // Rebuild on the next frame
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) setState(() => _isReorderInProgress = false);
+    });
   }
 
   Future<void> _handleStatusChanged(

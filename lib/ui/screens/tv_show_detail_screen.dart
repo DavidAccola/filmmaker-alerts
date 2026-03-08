@@ -98,16 +98,16 @@ class _TvShowDetailScreenState extends ConsumerState<TvShowDetailScreen> {
           if (showDetail.seasons.isNotEmpty)
             const SizedBox(height: 24),
 
-          if (showDetail.cast.isNotEmpty)
-            _buildCastSection(showDetail),
-          
-          if (showDetail.cast.isNotEmpty)
-            const SizedBox(height: 24),
-
           if (showDetail.crew.isNotEmpty)
             _buildCrewSection(showDetail),
           
           if (showDetail.crew.isNotEmpty)
+            const SizedBox(height: 24),
+
+          if (showDetail.cast.isNotEmpty)
+            _buildCastSection(showDetail),
+          
+          if (showDetail.cast.isNotEmpty)
             const SizedBox(height: 24),
           
           _buildExternalLinks(showDetail),

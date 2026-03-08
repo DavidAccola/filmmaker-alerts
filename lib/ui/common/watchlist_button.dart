@@ -353,18 +353,19 @@ class _WatchlistButtonState extends ConsumerState<WatchlistButton> {
   }
 
   Future<void> _showTvPreferencesDialog(WatchlistEntry entry) async {
-    final result = await showDialog<TvNotificationPreferences>(
+    final result = await showDialog<TvPreferencesResult>(
       context: context,
       builder: (context) => TvPreferencesDialog(
         workTitle: entry.title,
         initialPreferences: entry.tvNotificationPrefs ?? TvNotificationPreferences(),
+        initialNotificationsPaused: entry.notificationsSnoozed,
       ),
     );
 
     if (result != null) {
       // Update the entry with new preferences
       final watchlistLogic = ref.read(watchlistLogicProvider);
-      await watchlistLogic.updateTvNotificationPreferences(entry.tmdbId, result);
+      await watchlistLogic.updateTvNotificationPreferences(entry.tmdbId, result.preferences);
       ref.invalidate(watchlistEntriesProvider);
       
       if (mounted) {

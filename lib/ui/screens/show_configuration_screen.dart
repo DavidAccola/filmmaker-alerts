@@ -1438,6 +1438,11 @@ class _ShowConfigurationScreenState
 
     // Invalidate providers to refresh data
     ref.invalidate(episodeStatusRepositoryProvider);
+
+    // Return to previous screen after saving
+    if (mounted) {
+      Navigator.of(context).pop();
+    }
     ref.invalidate(seasonStatusRepositoryProvider);
   }
 

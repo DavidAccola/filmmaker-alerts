@@ -124,18 +124,18 @@ class _MovieDetailScreenState extends ConsumerState<MovieDetailScreen> {
           
           const SizedBox(height: 24),
           
-          // Cast section
-          if (movieDetail.cast.isNotEmpty)
-            _buildCastSection(movieDetail, prefs),
-          
-          if (movieDetail.cast.isNotEmpty)
-            const SizedBox(height: 24),
-          
           // Crew section
           if (movieDetail.crew.isNotEmpty)
             _buildCrewSection(movieDetail, prefs),
           
           if (movieDetail.crew.isNotEmpty)
+            const SizedBox(height: 24),
+          
+          // Cast section
+          if (movieDetail.cast.isNotEmpty)
+            _buildCastSection(movieDetail, prefs),
+          
+          if (movieDetail.cast.isNotEmpty)
             const SizedBox(height: 24),
           
           // External links

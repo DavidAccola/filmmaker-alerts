@@ -347,6 +347,7 @@ class _CollectionConfigurationScreenState
 
       if (mounted) {
         showSimpleSnackBar(context, 'Changes saved');
+        Navigator.of(context).pop();
       }
     } catch (e) {
       if (mounted) {

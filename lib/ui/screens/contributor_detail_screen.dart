@@ -41,6 +41,7 @@ class _ContributorDetailScreenState extends ConsumerState<ContributorDetailScree
   late bool _filterLatestReleases;
   late bool _filterBiggestHits;
   late String _lastFollowedRoles;
+  bool _isPosterHovered = false;
 
   @override
   void initState() {
@@ -194,33 +195,52 @@ class _ContributorDetailScreenState extends ConsumerState<ContributorDetailScree
           // Contributor info
           Row(
             children: [
-              // Profile image
-              Container(
-                width: 60,
-                height: 90,
-                decoration: BoxDecoration(
-                  color: widget.contributor.type == ContributorType.company
-                      ? (Theme.of(context).brightness == Brightness.dark ? Colors.grey[300] : Colors.white)
-                      : Theme.of(context).colorScheme.surfaceContainerHighest,
-                  borderRadius: BorderRadius.circular(8),
-                ),
-                child: widget.contributor.profilePath != null
-                    ? ClipRRect(
-                        borderRadius: BorderRadius.circular(8),
-                        child: Padding(
-                          padding: widget.contributor.type == ContributorType.company
-                              ? const EdgeInsets.symmetric(horizontal: 6)
-                              : EdgeInsets.zero,
-                          child: CachedNetworkImage(
-                            imageUrl: 'https://image.tmdb.org/t/p/w200${widget.contributor.profilePath}',
-                            fit: widget.contributor.type == ContributorType.company
-                                ? BoxFit.contain
-                                : BoxFit.cover,
-                            errorWidget: (ctx, url, err) => const Icon(Icons.person, size: 40),
-                          ),
+              // Profile image with follow button
+              MouseRegion(
+                onEnter: (_) => setState(() => _isPosterHovered = true),
+                onExit: (_) => setState(() => _isPosterHovered = false),
+                child: SizedBox(
+                  width: 60,
+                  height: 90,
+                  child: Stack(
+                    children: [
+                      Container(
+                        width: 60,
+                        height: 90,
+                        decoration: BoxDecoration(
+                          color: widget.contributor.type == ContributorType.company
+                              ? (Theme.of(context).brightness == Brightness.dark ? Colors.grey[300] : Colors.white)
+                              : Theme.of(context).colorScheme.surfaceContainerHighest,
+                          borderRadius: BorderRadius.circular(8),
                         ),
-                      )
-                    : const Icon(Icons.person, size: 40),
+                        child: widget.contributor.profilePath != null
+                            ? ClipRRect(
+                                borderRadius: BorderRadius.circular(8),
+                                child: Padding(
+                                  padding: widget.contributor.type == ContributorType.company
+                                      ? const EdgeInsets.symmetric(horizontal: 6)
+                                      : EdgeInsets.zero,
+                                  child: CachedNetworkImage(
+                                    imageUrl: 'https://image.tmdb.org/t/p/w200${widget.contributor.profilePath}',
+                                    fit: widget.contributor.type == ContributorType.company
+                                        ? BoxFit.contain
+                                        : BoxFit.cover,
+                                    errorWidget: (ctx, url, err) => const Icon(Icons.person, size: 40),
+                                  ),
+                                ),
+                              )
+                            : const Icon(Icons.person, size: 40),
+                      ),
+                      // Follow button overlay
+                      if (widget.contributor.type == ContributorType.person)
+                        Positioned(
+                          top: 0,
+                          right: 0,
+                          child: _buildFollowButton(),
+                        ),
+                    ],
+                  ),
+                ),
               ),
               
               const SizedBox(width: 16),
@@ -856,6 +876,142 @@ class _ContributorDetailScreenState extends ConsumerState<ContributorDetailScree
         );
       },
     );
+  }
+
+  Widget _buildFollowButton() {
+    final contributorsAsync = ref.watch(contributorsProvider);
+    final isFollowed = contributorsAsync.maybeWhen(
+      data: (contributors) => contributors.any((c) => c.tmdbId == widget.contributor.tmdbId),
+      orElse: () => false,
+    );
+
+    return AnimatedOpacity(
+      opacity: _isPosterHovered ? 1.0 : 0.0,
+      duration: const Duration(milliseconds: 200),
+      child: IgnorePointer(
+        ignoring: !_isPosterHovered,
+        child: Tooltip(
+          message: isFollowed ? 'Followed' : 'Follow',
+          waitDuration: Duration.zero,
+          child: IconButton(
+            icon: Icon(
+              isFollowed ? Icons.check_circle : Icons.add_circle,
+              size: 20,
+              color: Colors.white,
+              shadows: [
+                Shadow(
+                  color: Colors.black.withValues(alpha: 0.35),
+                  blurRadius: 8,
+                  offset: const Offset(0, 2),
+                ),
+                Shadow(
+                  color: Colors.black.withValues(alpha: 0.25),
+                  blurRadius: 4,
+                  offset: const Offset(0, 1),
+                ),
+              ],
+            ),
+            onPressed: () => _handleFollowFromPoster(isFollowed),
+            padding: EdgeInsets.zero,
+            constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
+            style: IconButton.styleFrom(backgroundColor: Colors.transparent),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Future<void> _handleFollowFromPoster(bool isCurrentlyFollowed) async {
+    final contributorLogic = ref.read(contributorLogicProvider);
+    final repo = ref.read(contributorRepositoryProvider);
+
+    if (isCurrentlyFollowed) {
+      // Already followed - show snackbar with unfollow option
+      showAlreadyFollowedSnackBar(
+        context,
+        contributorName: widget.contributor.name,
+        onUnfollow: () async {
+          await repo.removeContributor(widget.contributor.tmdbId);
+          ref.invalidate(contributorsProvider);
+          ref.invalidate(contributorDetailProvider(widget.contributor.tmdbId));
+          if (mounted) {
+            showRemovalSnackBar(
+              context,
+              message: 'Unfollowed ${widget.contributor.name}',
+              onUndo: () async {
+                final existing = repo.getContributor(widget.contributor.tmdbId);
+                if (existing != null) {
+                  await repo.addContributor(existing);
+                  ref.invalidate(contributorsProvider);
+                  ref.invalidate(contributorDetailProvider(widget.contributor.tmdbId));
+                }
+              },
+            );
+          }
+        },
+      );
+      return;
+    }
+
+    try {
+      final availableDepts = await contributorLogic.getAvailableDepartments(widget.contributor);
+      if (!mounted) return;
+
+      final success = await contributorLogic.addEnrichedContributor(
+        widget.contributor,
+        overrideAvailableDepts: availableDepts,
+      );
+
+      if (success && mounted) {
+        ref.invalidate(contributorsProvider);
+        ref.invalidate(contributorDetailProvider(widget.contributor.tmdbId));
+
+        final prefs = ref.read(preferencesRepositoryProvider).getPreferences();
+        final selectedDepts = availableDepts
+            .where((d) => prefs.effectiveDefaultDepartments.contains(d) || d == widget.contributor.knownFor)
+            .toList();
+
+        showSuccessSnackBar(
+          context,
+          contributor: widget.contributor,
+          roles: selectedDepts,
+          availableRoles: availableDepts,
+          onChange: () async {
+            if (mounted) {
+              final result = await showDialog<Map<String, dynamic>>(
+                context: context,
+                builder: (context) => DepartmentSelectionDialog(
+                  name: widget.contributor.name,
+                  availableDepartments: availableDepts,
+                  initialSelectedDepartments: selectedDepts,
+                  defaultDepartments: prefs.effectiveDefaultDepartments,
+                  initialAllRolesSelected: false,
+                  allowTrueAll: prefs.autoFollowNewRoles ?? true,
+                ),
+              );
+
+              if (result != null && mounted) {
+                final newRoles = result['roles'] as List<String>;
+                final existingContributor = repo.getContributor(widget.contributor.tmdbId);
+                if (existingContributor != null) {
+                  await contributorLogic.updateContributorRoles(existingContributor, newRoles);
+                  ref.invalidate(contributorsProvider);
+                  ref.invalidate(contributorDetailProvider(widget.contributor.tmdbId));
+                  if (mounted) {
+                    setState(() => _lastFollowedRoles = newRoles.join(','));
+                    showSimpleSnackBar(context, 'Updated ${widget.contributor.name} to follow ${newRoles.join(", ")}', duration: const Duration(seconds: 3));
+                  }
+                }
+              }
+            }
+          },
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        showSimpleSnackBar(context, 'Error: $e');
+      }
+    }
   }
 
   Widget _buildFollowedRolesChips() {

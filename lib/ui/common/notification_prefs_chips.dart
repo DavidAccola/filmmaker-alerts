@@ -174,11 +174,12 @@ class NotificationPrefsChips extends ConsumerWidget {
   }
 
   Future<void> _showTvPrefsDialog(BuildContext context, WidgetRef ref, WatchlistEntry entry) async {
-    final result = await showDialog<TvNotificationPreferences>(
+    final result = await showDialog<TvPreferencesResult>(
       context: context,
       builder: (context) => TvPreferencesDialog(
         initialPreferences: entry.tvNotificationPrefs ?? TvNotificationPreferences(),
         workTitle: entry.title,
+        initialNotificationsPaused: entry.notificationsSnoozed,
       ),
     );
     
@@ -186,7 +187,7 @@ class NotificationPrefsChips extends ConsumerWidget {
       final watchlistRepo = ref.read(watchlistRepositoryProvider);
       await watchlistRepo.updateTvNotificationPreferences(
         entry.tmdbId,
-        result,
+        result.preferences,
       );
       // Invalidate to refresh UI
       ref.invalidate(watchlistRepositoryProvider);

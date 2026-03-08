@@ -93,7 +93,12 @@ class _TvPreferencesDialogState extends State<TvPreferencesDialog> {
                 isAllSelected: false, // No "All" option for TV types
                 allowTrueAll: false,
                 labelBuilder: (type) => type,
-                onAllToggled: () {}, // Not used since allowTrueAll is false
+                onAllToggled: () {
+                  setState(() {
+                    final allSelected = _availableTypes.every((t) => _selectedTypes.contains(t));
+                    _selectedTypes = allSelected ? [] : List.from(_availableTypes);
+                  });
+                },
                 onChanged: (newValues) {
                   setState(() {
                     _selectedTypes = newValues;

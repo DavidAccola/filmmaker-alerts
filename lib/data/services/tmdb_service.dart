@@ -1,7 +1,6 @@
 import 'dart:async';
 
 import 'package:dio/dio.dart';
-import 'package:flutter/foundation.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 
 class RateLimitEvent {
@@ -264,11 +263,6 @@ class TmdbService {
         final companyIndex = productionCompanies.indexWhere((c) => c['id'] == companyId);
         final isTopProducer = companyIndex >= 0 && companyIndex <= 1;
         
-        // TEMP DEBUG: Log production companies for each work
-        final title = work['title'] ?? work['name'] ?? 'Unknown';
-        final companyNames = productionCompanies.map((c) => '${c['name']}(${c['id']})').toList();
-        debugPrint('[FilterProd] "$title" (id=$id) — production_companies: $companyNames — companyId=$companyId — position=$companyIndex — isTopProducer=$isTopProducer');
-        
         return isTopProducer ? work : null;
       } catch (_) {
         return work; // keep on error
@@ -447,6 +441,15 @@ class TmdbService {
 
   Future<Map<String, dynamic>> getTvCredits(int id) async {
     final endpoint = '/tv/$id/credits';
+    _logApiCall(endpoint);
+    final response = await _dio.get(endpoint);
+    return response.data;
+  }
+
+  /// Fetches aggregate credits for a TV show across all episodes.
+  /// Returns crew members with all their jobs across the entire series.
+  Future<Map<String, dynamic>> getTvAggregateCredits(int id) async {
+    final endpoint = '/tv/$id/aggregate_credits';
     _logApiCall(endpoint);
     final response = await _dio.get(endpoint);
     return response.data;

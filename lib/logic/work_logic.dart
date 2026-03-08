@@ -1,4 +1,3 @@
-import 'package:flutter/foundation.dart';
 import '../data/models/movie_detail.dart';
 import '../data/models/tv_detail.dart';
 import '../data/models/contributor_detail.dart';
@@ -96,11 +95,13 @@ class WorkLogic {
         _tmdbService.getTvDetails(tmdbId),
         _tmdbService.getTvCredits(tmdbId),
         _streamingService.getTvStreamingOptions(tmdbId: tmdbId, regionCode: regionCode),
+        _tmdbService.getTvAggregateCredits(tmdbId),
       ]);
 
       final showData = results[0] as Map<String, dynamic>;
       final creditsData = results[1] as Map<String, dynamic>;
       final streamingOptions = results[2] as List<StreamingOption>;
+      final aggregateCreditsData = results[3] as Map<String, dynamic>;
 
       final cast = (creditsData['cast'] as List? ?? []).take(20).map((c) {
         final tmdbId = c['id'] as int;
@@ -115,17 +116,23 @@ class WorkLogic {
         );
       }).toList();
 
-      final crew = (creditsData['crew'] as List? ?? []).map((c) {
+      // Use aggregate credits for crew to capture episode-level roles (Director, Writer)
+      // that don't appear in show-level credits
+      final aggregateCrew = aggregateCreditsData['crew'] as List? ?? [];
+      final crew = aggregateCrew.expand<CrewMember>((c) {
         final tmdbId = c['id'] as int;
         final isFollowed = _contributorRepository.isFollowed(tmdbId);
-        return CrewMember(
+        final jobs = c['jobs'] as List? ?? [];
+        // Each person can have multiple jobs — create a CrewMember per job
+        // so groupAndSortCrew can merge them properly
+        return jobs.map((j) => CrewMember(
           tmdbId: tmdbId,
-          name: c['name'],
+          name: c['name'] ?? '',
           profilePath: c['profile_path'],
-          job: c['job'] ?? '',
+          job: j['job'] ?? '',
           department: c['department'] ?? '',
           isFollowed: isFollowed,
-        );
+        ));
       }).toList();
 
       final seasons = (showData['seasons'] as List? ?? []).map((s) => TvSeason(

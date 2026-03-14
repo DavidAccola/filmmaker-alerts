@@ -1176,6 +1176,7 @@ class _ContributorDetailScreenState extends ConsumerState<ContributorDetailScree
           totalSeasons: contributor.totalSeasons,
           nextEpisodeDate: contributor.nextEpisodeDate,
           notificationsSnoozed: newNotificationsPaused,
+          isHidden: contributor.isHidden,
         );
         
         final logic = ref.read(contributorLogicProvider);

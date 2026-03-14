@@ -8,6 +8,7 @@ import '../../data/models/preferences.dart';
 import '../../data/models/status_record.dart';
 import '../../providers/providers.dart';
 import '../common/watchlist_card.dart';
+import '../common/watchlist_list_card.dart';
 import '../common/watchlist_rank_card.dart';
 import '../common/snackbar_utils.dart';
 import '../common/rewatch_dialog.dart';
@@ -75,6 +76,10 @@ class _WatchlistScreenState extends ConsumerState<WatchlistScreen>
   WatchlistSortOption _sortOption = WatchlistSortOption.userRank;
   bool _sortInitialized = false;
 
+  // List view toggle (persisted)
+  bool _useListView = false;
+  bool _listViewInitialized = false;
+
   // Undo/Redo stacks for rank changes
   // Each entry is a list of (tmdbId, type, rank) tuples representing the full rank order
   final List<List<_RankSnapshot>> _rankUndoStack = [];
@@ -90,12 +95,6 @@ class _WatchlistScreenState extends ConsumerState<WatchlistScreen>
   /// Helper to update FAB raised state via provider (shared with HomeScreen)
   void _setFabRaised(bool raised) {
     ref.read(fabRaisedProvider.notifier).setRaised(raised);
-  }
-  
-
-  /// Toggle between grid and list view in Custom Order mode
-  void _setRankEditMode(bool editing) {
-    ref.read(rankEditModeProvider.notifier).setEditMode(editing);
   }
 
   /// Takes a snapshot of current rank order for undo purposes.
@@ -254,6 +253,12 @@ class _WatchlistScreenState extends ConsumerState<WatchlistScreen>
       if (saved != null) {
         _sortOption = _sortOptionFromString(saved);
       }
+    }
+
+    // Initialize list view toggle from saved preferences (once)
+    if (!_listViewInitialized && prefsAsync.hasValue) {
+      _listViewInitialized = true;
+      _useListView = prefsAsync.value?.watchlistUseListView ?? false;
     }
 
     return watchlistAsync.when(
@@ -549,18 +554,14 @@ class _WatchlistScreenState extends ConsumerState<WatchlistScreen>
                       ];
                     },
                   ),
-                  // Sort button
+                  // Display Options button
                   PopupMenuButton<WatchlistSortOption>(
-                    icon: const Icon(Icons.sort),
-                    tooltip: 'Sort',
+                    icon: const Icon(Icons.tune),
+                    tooltip: 'Display Options',
                     onSelected: (option) {
                       setState(() {
                         _sortOption = option;
                       });
-                      // Exit rank edit mode when changing sort
-                      if (option != WatchlistSortOption.userRank) {
-                        _setRankEditMode(false);
-                      }
                       // Persist the sort choice
                       final repo = ref.read(preferencesRepositoryProvider);
                       final prefs = repo.getPreferences();
@@ -571,7 +572,7 @@ class _WatchlistScreenState extends ConsumerState<WatchlistScreen>
                     itemBuilder: (context) => [
                       const PopupMenuItem(
                         value: WatchlistSortOption.addOrder,
-                        child: Text('Add Order'),
+                        child: Text('Date Added'),
                       ),
                       const PopupMenuItem(
                         value: WatchlistSortOption.userRank,
@@ -586,6 +587,21 @@ class _WatchlistScreenState extends ConsumerState<WatchlistScreen>
                         child: Text('Release Date'),
                       ),
                     ],
+                  ),
+                  // Grid/List view toggle
+                  IconButton(
+                    icon: Icon(_useListView ? Icons.grid_view : Icons.view_list),
+                    tooltip: _useListView ? 'Grid view' : 'List view',
+                    onPressed: () {
+                      setState(() {
+                        _useListView = !_useListView;
+                      });
+                      final repo = ref.read(preferencesRepositoryProvider);
+                      final prefs = repo.getPreferences();
+                      prefs.watchlistUseListView = _useListView;
+                      repo.savePreferences(prefs);
+                      ref.invalidate(preferencesProvider);
+                    },
                   ),
                 ],
               ),
@@ -729,7 +745,7 @@ class _WatchlistScreenState extends ConsumerState<WatchlistScreen>
 
                           // Grid of cards (or rank list when in list view mode)
                           Expanded(
-                            child: (_sortOption == WatchlistSortOption.userRank && ref.watch(rankEditModeProvider))
+                            child: (_sortOption == WatchlistSortOption.userRank && _useListView)
                                 ? Builder(builder: (context) {
                                     // Initialize local rank entries from provider data
                                     // for list view to avoid provider invalidation during reorder
@@ -745,6 +761,70 @@ class _WatchlistScreenState extends ConsumerState<WatchlistScreen>
                                           ref.invalidate(watchlistEntriesProvider);
                                         }
                                       });
+                                    }
+                                    // List view mode (not Custom Order)
+                                    if (_useListView) {
+                                      return CustomScrollView(
+                                        controller: _scrollController,
+                                        slivers: [
+                                          ..._buildActiveItemsListSlivers(sortedEntries),
+                                          if (sortedHiddenEntries.isNotEmpty) ...[
+                                            SliverToBoxAdapter(
+                                              child: Padding(
+                                                padding: const EdgeInsets.fromLTRB(16, 24, 16, 8),
+                                                child: Row(
+                                                  children: [
+                                                    Expanded(child: Divider(color: theme.colorScheme.outlineVariant)),
+                                                    Padding(
+                                                      padding: const EdgeInsets.symmetric(horizontal: 16),
+                                                      child: Text(
+                                                        'HIDDEN',
+                                                        style: theme.textTheme.labelMedium?.copyWith(
+                                                          color: theme.colorScheme.onSurfaceVariant,
+                                                        ),
+                                                      ),
+                                                    ),
+                                                    Expanded(child: Divider(color: theme.colorScheme.outlineVariant)),
+                                                  ],
+                                                ),
+                                              ),
+                                            ),
+                                            SliverPadding(
+                                              padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+                                              sliver: SliverList(
+                                                delegate: SliverChildBuilderDelegate(
+                                                  (context, index) {
+                                                    final entry = sortedHiddenEntries[index];
+                                                    return Opacity(
+                                                      opacity: 0.5,
+                                                      child: Padding(
+                                                        padding: const EdgeInsets.only(bottom: 4),
+                                                        child: WatchlistListCard(
+                                                          key: ValueKey(entry.uniqueKey),
+                                                          entry: entry,
+                                                          showDateAlways: _sortOption == WatchlistSortOption.releaseDate,
+                                                          onTap: () => _navigateToDetailFromRank(entry),
+                                                          onDelete: () => _handleDelete(entry),
+                                                          onSnooze: () => _handleUnhide(entry),
+                                                          onStatusChanged: (status) => _handleStatusChanged(entry, status),
+                                                        ),
+                                                      ),
+                                                    );
+                                                  },
+                                                  childCount: sortedHiddenEntries.length,
+                                                ),
+                                              ),
+                                            ),
+                                          ],
+                                          const SliverFillRemaining(
+                                            hasScrollBody: false,
+                                            child: Column(
+                                              mainAxisAlignment: MainAxisAlignment.end,
+                                              children: [TmdbAttribution()],
+                                            ),
+                                          ),
+                                        ],
+                                      );
                                     }
                                     return (_sortOption == WatchlistSortOption.userRank)
                                     ? _buildUserRankGrid(sortedEntries, sortedHiddenEntries)
@@ -885,10 +965,10 @@ class _WatchlistScreenState extends ConsumerState<WatchlistScreen>
     return filtered;
   }
 
-  /// Builds the Custom Order banner with grid/list toggle and undo/redo.
+  /// Builds the Custom Order banner with undo/redo.
+  /// The grid/list layout is controlled by the global _useListView toggle.
   Widget _buildEditRankingBanner() {
     final theme = Theme.of(context);
-    final isListView = ref.watch(rankEditModeProvider);
     
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
@@ -910,7 +990,7 @@ class _WatchlistScreenState extends ConsumerState<WatchlistScreen>
           const SizedBox(width: 12),
           Expanded(
             child: Text(
-              'Drag to reorder',
+              _useListView ? 'Reorder list' : 'Drag to reorder',
               style: theme.textTheme.bodyMedium?.copyWith(
                 color: theme.colorScheme.onSurface,
               ),
@@ -927,15 +1007,6 @@ class _WatchlistScreenState extends ConsumerState<WatchlistScreen>
             icon: const Icon(Icons.redo),
             onPressed: _rankRedoStack.isNotEmpty ? _redoRank : null,
             tooltip: 'Redo',
-          ),
-          const SizedBox(width: 4),
-          // Grid/List toggle
-          IconButton(
-            icon: Icon(isListView ? Icons.grid_view : Icons.view_list),
-            onPressed: () {
-              ref.read(rankEditModeProvider.notifier).toggle();
-            },
-            tooltip: isListView ? 'Grid view' : 'List view',
           ),
         ],
       ),
@@ -989,7 +1060,7 @@ class _WatchlistScreenState extends ConsumerState<WatchlistScreen>
               crossAxisCount: 1,
               mainAxisSpacing: 8,
               crossAxisSpacing: 0,
-              childAspectRatio: MediaQuery.sizeOf(context).width / 75,
+              childAspectRatio: MediaQuery.sizeOf(context).width / 52,
               shrinkWrap: true,
               physics: const NeverScrollableScrollPhysics(),
               dragStartDelay: Duration.zero,
@@ -1413,6 +1484,99 @@ class _WatchlistScreenState extends ConsumerState<WatchlistScreen>
                   ),
                 );
               },
+              childCount: groupEntries.length,
+            ),
+          ),
+        ),
+      );
+
+      isFirst = false;
+    }
+
+    return slivers;
+  }
+
+  /// Builds list-view slivers for active watchlist items.
+  /// Mirrors _buildActiveItemsSlivers but renders WatchlistListCard instead of grid.
+  List<Widget> _buildActiveItemsListSlivers(List<WatchlistEntry> entries) {
+    final theme = Theme.of(context);
+    final isReleaseDateSort = _sortOption == WatchlistSortOption.releaseDate;
+    final isUserRankSort = _sortOption == WatchlistSortOption.userRank;
+
+    Widget buildListItem(WatchlistEntry entry, {bool showDate = false, int? rank}) {
+      return Padding(
+        padding: const EdgeInsets.only(bottom: 4),
+        child: WatchlistListCard(
+          key: ValueKey(entry.uniqueKey),
+          entry: entry,
+          showDateAlways: showDate,
+          onTap: () => _navigateToDetailFromRank(entry),
+          onDelete: () => _handleDelete(entry),
+          onSnooze: () => _handleHide(entry),
+          onStatusChanged: (status) => _handleStatusChanged(entry, status),
+        ),
+      );
+    }
+
+    if (!isReleaseDateSort || entries.isEmpty) {
+      return [
+        SliverPadding(
+          padding: const EdgeInsets.all(16),
+          sliver: SliverList(
+            delegate: SliverChildBuilderDelegate(
+              (context, index) => buildListItem(entries[index],
+                  rank: isUserRankSort ? index + 1 : null),
+              childCount: entries.length,
+            ),
+          ),
+        ),
+      ];
+    }
+
+    // Grouped by date status
+    final groups = <int, List<WatchlistEntry>>{};
+    for (final entry in entries) {
+      final group = _getDateStatusGroup(entry);
+      groups.putIfAbsent(group, () => []).add(entry);
+    }
+
+    final sortedGroupKeys = groups.keys.toList()..sort();
+    final slivers = <Widget>[];
+    bool isFirst = true;
+
+    for (final groupKey in sortedGroupKeys) {
+      final groupEntries = groups[groupKey]!;
+      final label = _getDateStatusGroupLabel(groupKey);
+
+      slivers.add(
+        SliverToBoxAdapter(
+          child: Padding(
+            padding: EdgeInsets.fromLTRB(16, isFirst ? 16 : 24, 16, 8),
+            child: Row(
+              children: [
+                Expanded(child: Divider(color: theme.colorScheme.outlineVariant)),
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 16),
+                  child: Text(
+                    label,
+                    style: theme.textTheme.labelMedium?.copyWith(
+                      color: theme.colorScheme.onSurfaceVariant,
+                    ),
+                  ),
+                ),
+                Expanded(child: Divider(color: theme.colorScheme.outlineVariant)),
+              ],
+            ),
+          ),
+        ),
+      );
+
+      slivers.add(
+        SliverPadding(
+          padding: const EdgeInsets.symmetric(horizontal: 16),
+          sliver: SliverList(
+            delegate: SliverChildBuilderDelegate(
+              (context, index) => buildListItem(groupEntries[index], showDate: true),
               childCount: groupEntries.length,
             ),
           ),

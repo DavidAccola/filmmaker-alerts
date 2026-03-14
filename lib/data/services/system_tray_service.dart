@@ -203,7 +203,21 @@ class SystemTrayService with TrayListener {
       
       // Check if scheduled time has already passed today
       if (nextCheck.isBefore(now)) {
-        _checkForNewReleases();
+        // Only run catch-up check if we haven't already checked after today's scheduled time
+        bool shouldCatchUp = true;
+        if (prefs.lastCheckTime != null && prefs.lastCheckTime!.isNotEmpty) {
+          try {
+            final lastCheck = DateTime.parse(prefs.lastCheckTime!);
+            if (lastCheck.isAfter(nextCheck)) {
+              // Already ran after today's scheduled time, skip catch-up
+              shouldCatchUp = false;
+            }
+          } catch (_) {}
+        }
+        
+        if (shouldCatchUp) {
+          _checkForNewReleases();
+        }
         
         // Schedule for tomorrow
         nextCheck = nextCheck.add(const Duration(days: 1));

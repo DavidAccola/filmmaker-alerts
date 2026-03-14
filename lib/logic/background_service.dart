@@ -216,6 +216,7 @@ class BackgroundTaskProcessor {
                 latestWork: newLatestWork,
                 followedAt: contributor.followedAt,
                 allRolesSelected: contributor.allRolesSelected,
+                isHidden: contributor.isHidden,
               );
               await contributorRepo.updateContributor(updatedContributor);
             }

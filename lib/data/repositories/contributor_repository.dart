@@ -51,6 +51,7 @@ class ContributorRepository {
     existingContributor.totalSeasons = updatedContributor.totalSeasons;
     existingContributor.nextEpisodeDate = updatedContributor.nextEpisodeDate;
     existingContributor.imdbId = updatedContributor.imdbId;
+    existingContributor.isHidden = updatedContributor.isHidden;
     // Note: We intentionally do NOT update followedAt to preserve the original add time
 
     // Save the updated object (this preserves its position in the box)
@@ -72,5 +73,14 @@ class ContributorRepository {
   /// Check if a contributor is already followed.
   bool isFollowed(int tmdbId) {
     return _box.values.any((c) => c.tmdbId == tmdbId);
+  }
+
+  /// Set hidden status for a contributor.
+  Future<void> setHidden(int tmdbId, bool hidden) async {
+    final contributor = getContributor(tmdbId);
+    if (contributor != null) {
+      contributor.isHidden = hidden;
+      await contributor.save();
+    }
   }
 }

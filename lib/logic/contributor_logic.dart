@@ -305,6 +305,7 @@ class ContributorLogic {
       showStatus: contributor.showStatus,
       totalSeasons: contributor.totalSeasons,
       nextEpisodeDate: contributor.nextEpisodeDate,
+      isHidden: contributor.isHidden,
     );
 
     final latestWork = await _latestWorkLogic.calculateLatestWork(
@@ -327,6 +328,7 @@ class ContributorLogic {
       showStatus: contributor.showStatus,
       totalSeasons: contributor.totalSeasons,
       nextEpisodeDate: contributor.nextEpisodeDate,
+      isHidden: contributor.isHidden,
     );
 
     await _contributorRepository.updateContributor(finalUpdated);
@@ -378,6 +380,7 @@ class ContributorLogic {
             showStatus: contributor.showStatus,
             totalSeasons: contributor.totalSeasons,
             nextEpisodeDate: contributor.nextEpisodeDate,
+            isHidden: contributor.isHidden,
           );
           await _contributorRepository.updateContributor(updated);
           
@@ -404,6 +407,7 @@ class ContributorLogic {
             showStatus: contributor.showStatus,
             totalSeasons: contributor.totalSeasons,
             nextEpisodeDate: contributor.nextEpisodeDate,
+            isHidden: contributor.isHidden,
           );
           await _contributorRepository.updateContributor(updated);
           
@@ -445,6 +449,7 @@ class ContributorLogic {
             showStatus: contributor.showStatus,
             totalSeasons: contributor.totalSeasons,
             nextEpisodeDate: contributor.nextEpisodeDate,
+            isHidden: contributor.isHidden,
           );
           await _contributorRepository.updateContributor(updated);
         }

@@ -249,6 +249,7 @@ class _MainScreenState extends ConsumerState<MainScreen> with WindowListener {
               notifyForDepartments: selectedDepts,
               availableDepartments: availableRoles,
               knownFor: contributor.knownFor,
+              isHidden: contributor.isHidden,
             );
 
             await logic.updateContributorRoles(enrichedForUpdate, selectedDepts);

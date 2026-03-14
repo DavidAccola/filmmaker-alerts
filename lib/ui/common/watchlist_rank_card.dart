@@ -5,15 +5,13 @@ import 'package:material_symbols_icons/symbols.dart';
 import '../../data/models/watchlist_entry.dart';
 import '../../data/models/contributor_detail.dart';
 import '../../providers/providers.dart';
-import 'adaptive_tooltip_text.dart';
 
-/// A compact watchlist card designed for User Rank mode.
-/// Shows poster, title, and rank number without status buttons.
-/// Poster and title are tappable for navigation, rest of card initiates drag.
+/// A compact watchlist card for Custom Order reorder mode.
+/// Layout: [#rank] [poster] [title year / send-to-top send-to-bottom] [drag handle]
 class WatchlistRankCard extends ConsumerStatefulWidget {
   final WatchlistEntry entry;
   final int rank;
-  final int index; // Used by ReorderableDragStartListener
+  final int index;
   final VoidCallback? onTap;
   final VoidCallback? onSendToTop;
   final VoidCallback? onSendToBottom;
@@ -37,28 +35,17 @@ class WatchlistRankCard extends ConsumerStatefulWidget {
 class _WatchlistRankCardState extends ConsumerState<WatchlistRankCard> {
   bool _isHovered = false;
 
-  /// Checks if this entry is a collection (movie with Collection role)
-  bool get _isCollection => widget.entry.type == WorkType.movie && 
+  bool get _isCollection => widget.entry.type == WorkType.movie &&
       widget.entry.followedContributors.any((c) => c.role == 'Collection');
 
-  /// Gets the appropriate icon for this entry type
-  IconData get _typeIcon => widget.entry.type == WorkType.tvShow 
-      ? Symbols.tv_gen 
-      : _isCollection 
-          ? Symbols.stack 
+  IconData get _typeIcon => widget.entry.type == WorkType.tvShow
+      ? Symbols.tv_gen
+      : _isCollection
+          ? Symbols.stack
           : Symbols.movie;
 
-  /// Gets the appropriate label for this entry type
-  String get _typeLabel => widget.entry.type == WorkType.tvShow 
-      ? 'TV' 
-      : _isCollection 
-          ? 'Collection' 
-          : 'Movie';
-
-  /// Gets the most relevant release date for display
   DateTime? _getEffectiveReleaseDate() {
     final entry = widget.entry;
-
     if (entry.type == WorkType.tvShow) {
       final tvDetailRepo = ref.read(tvDetailRepositoryProvider);
       final showDetail = tvDetailRepo.getTvShowDetail(entry.tmdbId);
@@ -67,7 +54,6 @@ class _WatchlistRankCardState extends ConsumerState<WatchlistRankCard> {
       }
       return entry.releaseDate;
     }
-
     if (_isCollection) {
       final movieStatusRepo = ref.read(movieStatusRepositoryProvider);
       final movies = movieStatusRepo.getMoviesByCollection(entry.tmdbId);
@@ -81,221 +67,211 @@ class _WatchlistRankCardState extends ConsumerState<WatchlistRankCard> {
       }
       return mostRecent ?? entry.releaseDate;
     }
-
     return entry.releaseDate;
   }
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final year = _getEffectiveReleaseDate()?.year;
+    final tooltipText = year != null ? '${widget.entry.title} ($year)' : widget.entry.title;
+    final hasSendButtons = widget.onSendToTop != null || widget.onSendToBottom != null;
 
     return MouseRegion(
       onEnter: (_) => setState(() => _isHovered = true),
       onExit: (_) => setState(() => _isHovered = false),
-      child: AnimatedContainer(
-        duration: const Duration(milliseconds: 200),
-        decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(12),
-          boxShadow: widget.isDragging
-              ? [
-                  BoxShadow(
-                    color: theme.colorScheme.shadow.withValues(alpha: 0.3),
-                    blurRadius: 12,
-                    offset: const Offset(0, 6),
-                  ),
-                ]
-              : [
-                  BoxShadow(
-                    color: theme.colorScheme.shadow.withValues(alpha: 0.1),
-                    blurRadius: 4,
-                    offset: const Offset(0, 2),
-                  ),
-                ],
-        ),
-        child: Material(
-          color: widget.isDragging
-              ? theme.colorScheme.surfaceContainerHighest
-              : theme.cardColor,
-          borderRadius: BorderRadius.circular(12),
-          clipBehavior: Clip.antiAlias,
-          child: SizedBox(
-            height: 75,
-            child: Row(
-              children: [
-                // Rank number badge
-                Container(
-                  width: 48,
-                  height: 75,
-                  alignment: Alignment.center,
-                  decoration: BoxDecoration(
-                    color: theme.colorScheme.primaryContainer.withValues(alpha: 0.3),
-                    border: Border(
-                      right: BorderSide(
-                        color: theme.colorScheme.outlineVariant.withValues(alpha: 0.3),
-                      ),
-                    ),
-                  ),
+      child: Material(
+        color: widget.isDragging
+            ? theme.colorScheme.surfaceContainerHighest
+            : theme.cardColor,
+        borderRadius: BorderRadius.circular(8),
+        clipBehavior: Clip.antiAlias,
+        elevation: widget.isDragging ? 4 : 1,
+        child: SizedBox(
+          height: hasSendButtons ? 52 : 36,
+          child: Row(
+            children: [
+              // Rank number
+              SizedBox(
+                width: 36,
+                child: Center(
                   child: Text(
                     '#${widget.rank}',
-                    style: theme.textTheme.titleMedium?.copyWith(
+                    style: theme.textTheme.labelMedium?.copyWith(
                       fontWeight: FontWeight.bold,
                       color: theme.colorScheme.primary,
+                      fontSize: 12,
                     ),
                   ),
                 ),
+              ),
 
-                // Poster thumbnail - tap navigates, drag reorders
-                MouseRegion(
-                  cursor: SystemMouseCursors.click,
-                  child: GestureDetector(
+              // Poster
+              GestureDetector(
+                onTap: widget.onTap,
+                child: SizedBox(
+                  width: 24,
+                  height: hasSendButtons ? 52 : 36,
+                  child: widget.entry.posterPath != null
+                      ? CachedNetworkImage(
+                          imageUrl: 'https://image.tmdb.org/t/p/w200${widget.entry.posterPath}',
+                          fit: BoxFit.cover,
+                          placeholder: (context, url) => Container(
+                            color: theme.colorScheme.surfaceContainerHighest,
+                          ),
+                          errorWidget: (context, url, error) => Container(
+                            color: theme.colorScheme.surfaceContainerHighest,
+                            child: Icon(_typeIcon, size: 14, color: theme.colorScheme.onSurfaceVariant),
+                          ),
+                        )
+                      : Container(
+                          color: theme.colorScheme.surfaceContainerHighest,
+                          child: Icon(_typeIcon, size: 14, color: theme.colorScheme.onSurfaceVariant),
+                        ),
+                ),
+              ),
+
+              const SizedBox(width: 10),
+
+              // Title + year (top line), send-to-top/bottom (bottom line)
+              Expanded(
+                child: GestureDetector(
                   behavior: HitTestBehavior.opaque,
                   onTap: widget.onTap,
-                  child: SizedBox(
-                    width: 50,
-                    height: 75,
-                    child: widget.entry.posterPath != null
-                        ? CachedNetworkImage(
-                            imageUrl: 'https://image.tmdb.org/t/p/w200${widget.entry.posterPath}',
-                            fit: BoxFit.cover,
-                            placeholder: (context, url) => Container(
-                              color: theme.colorScheme.surfaceContainerHighest,
-                              child: const Center(
-                                child: SizedBox(
-                                  width: 16,
-                                  height: 16,
-                                  child: CircularProgressIndicator(strokeWidth: 2),
-                                ),
-                              ),
-                            ),
-                            errorWidget: (context, url, error) => Container(
-                              color: theme.colorScheme.surfaceContainerHighest,
-                              child: Icon(
-                                _typeIcon,
-                                size: 24,
-                                color: theme.colorScheme.onSurfaceVariant,
-                              ),
-                            ),
-                          )
-                        : Container(
-                            color: theme.colorScheme.surfaceContainerHighest,
-                            child: Icon(
-                              _typeIcon,
-                              size: 24,
-                              color: theme.colorScheme.onSurfaceVariant,
-                            ),
-                          ),
-                  ),
-                ),
-                ),
-
-                // Title area - tap navigates
-                Expanded(
-                  child: MouseRegion(
-                    cursor: SystemMouseCursors.click,
-                    child: GestureDetector(
-                    behavior: HitTestBehavior.opaque,
-                    onTap: widget.onTap,
-                    child: Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        AdaptiveTooltipText(
-                          widget.entry.title,
-                          style: theme.textTheme.titleSmall?.copyWith(
-                            fontWeight: FontWeight.w600,
-                          ),
-                          maxLines: 2,
-                        ),
-                        const SizedBox(height: 2),
-                        Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Icon(
-                              _typeIcon,
-                              size: 12,
-                              color: theme.colorScheme.onSurfaceVariant,
-                            ),
-                            const SizedBox(width: 4),
-                            Text(
-                              _typeLabel,
-                              style: theme.textTheme.labelSmall?.copyWith(
-                                color: theme.colorScheme.onSurfaceVariant,
-                                fontSize: 11,
-                              ),
-                            ),
-                            if (_getEffectiveReleaseDate() != null) ...[
-                              const SizedBox(width: 6),
-                              Text(
-                                '${_getEffectiveReleaseDate()!.year}',
-                                style: theme.textTheme.labelSmall?.copyWith(
-                                  color: theme.colorScheme.onSurfaceVariant,
-                                  fontSize: 11,
-                                ),
-                              ),
-                            ],
-                          ],
-                        ),
-                      ],
-                    ),
-                  ),
-                  ),
-                  ),
-                ),
-
-                // Send to top / Send to bottom buttons
-                if (widget.onSendToTop != null || widget.onSendToBottom != null)
-                  Row(
-                    mainAxisSize: MainAxisSize.min,
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      if (widget.onSendToTop != null)
-                        IconButton(
-                          icon: Icon(
-                            Icons.vertical_align_top,
-                            size: 20,
-                            color: theme.colorScheme.onSurfaceVariant,
+                      // Title + year row
+                      LayoutBuilder(
+                        builder: (context, constraints) {
+                          final titleStyle = theme.textTheme.titleSmall?.copyWith(
+                            fontWeight: FontWeight.w600, fontSize: 13,
+                          ) ?? const TextStyle(fontSize: 13);
+                          final yearStyle = theme.textTheme.labelSmall?.copyWith(
+                            color: theme.colorScheme.onSurfaceVariant, fontSize: 11,
+                          ) ?? const TextStyle(fontSize: 11);
+
+                          final yearStr = year != null ? '$year' : null;
+                          final yearWidth = yearStr != null
+                              ? (TextPainter(
+                                  text: TextSpan(text: yearStr, style: yearStyle),
+                                  maxLines: 1,
+                                  textDirection: TextDirection.ltr,
+                                )..layout()).width + 6
+                              : 0.0;
+
+                          final titlePainter = TextPainter(
+                            text: TextSpan(text: widget.entry.title, style: titleStyle),
+                            maxLines: 1,
+                            textDirection: TextDirection.ltr,
+                          )..layout();
+
+                          final showYear = yearStr != null &&
+                              titlePainter.width <= constraints.maxWidth - yearWidth;
+                          final isTruncated = titlePainter.width > (constraints.maxWidth - (showYear ? yearWidth : 0));
+
+                          final row = Row(
+                            children: [
+                              Flexible(
+                                child: Text(
+                                  widget.entry.title,
+                                  style: titleStyle,
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                              ),
+                              if (showYear) ...[
+                                const SizedBox(width: 6),
+                                Text('$year', style: yearStyle),
+                              ],
+                            ],
+                          );
+
+                          if (isTruncated || (!showYear && yearStr != null)) {
+                            return Tooltip(message: tooltipText, child: row);
+                          }
+                          return row;
+                        },
+                      ),
+
+                      // Send to top / bottom buttons
+                      if (hasSendButtons)
+                        Padding(
+                          padding: const EdgeInsets.only(top: 2),
+                          child: Row(
+                            children: [
+                              if (widget.onSendToTop != null)
+                                _SmallActionButton(
+                                  icon: Icons.vertical_align_top,
+                                  label: 'Top',
+                                  onTap: widget.onSendToTop!,
+                                ),
+                              if (widget.onSendToTop != null && widget.onSendToBottom != null)
+                                const SizedBox(width: 8),
+                              if (widget.onSendToBottom != null)
+                                _SmallActionButton(
+                                  icon: Icons.vertical_align_bottom,
+                                  label: 'Bottom',
+                                  onTap: widget.onSendToBottom!,
+                                ),
+                            ],
                           ),
-                          tooltip: 'Send to top',
-                          onPressed: widget.onSendToTop,
-                          visualDensity: VisualDensity.compact,
-                          padding: EdgeInsets.zero,
-                          constraints: const BoxConstraints(minWidth: 36, minHeight: 36),
-                        ),
-                      if (widget.onSendToBottom != null)
-                        IconButton(
-                          icon: Icon(
-                            Icons.vertical_align_bottom,
-                            size: 20,
-                            color: theme.colorScheme.onSurfaceVariant,
-                          ),
-                          tooltip: 'Send to bottom',
-                          onPressed: widget.onSendToBottom,
-                          visualDensity: VisualDensity.compact,
-                          padding: EdgeInsets.zero,
-                          constraints: const BoxConstraints(minWidth: 36, minHeight: 36),
                         ),
                     ],
                   ),
+                ),
+              ),
 
-                // Drag handle — visual indicator for drag-to-reorder
-                MouseRegion(
-                  cursor: SystemMouseCursors.grab,
-                  child: Container(
-                    padding: const EdgeInsets.only(left: 8, right: 16),
-                    height: 75,
-                    alignment: Alignment.center,
-                    child: Icon(
-                      Icons.drag_handle,
-                      color: _isHovered
-                          ? theme.colorScheme.primary
-                          : theme.colorScheme.onSurfaceVariant,
-                    ),
+              // Drag handle
+              MouseRegion(
+                cursor: SystemMouseCursors.grab,
+                child: Padding(
+                  padding: const EdgeInsets.only(left: 4, right: 12),
+                  child: Icon(
+                    Icons.drag_handle,
+                    size: 20,
+                    color: _isHovered
+                        ? theme.colorScheme.primary
+                        : theme.colorScheme.onSurfaceVariant,
                   ),
                 ),
-              ],
-            ),
+              ),
+            ],
           ),
+        ),
+      ),
+    );
+  }
+}
+
+class _SmallActionButton extends StatelessWidget {
+  final IconData icon;
+  final String label;
+  final VoidCallback onTap;
+
+  const _SmallActionButton({
+    required this.icon,
+    required this.label,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final color = theme.colorScheme.onSurfaceVariant;
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(4),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(icon, size: 12, color: color),
+            const SizedBox(width: 2),
+            Text(label, style: TextStyle(fontSize: 10, color: color)),
+          ],
         ),
       ),
     );

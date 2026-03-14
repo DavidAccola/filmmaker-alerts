@@ -12,6 +12,7 @@ class ContributorCard extends StatefulWidget {
   final VoidCallback onTap;
   final VoidCallback onRemove;
   final VoidCallback? onEditRoles;
+  final VoidCallback? onHide;
 
   const ContributorCard({
     super.key,
@@ -19,6 +20,7 @@ class ContributorCard extends StatefulWidget {
     required this.onTap,
     required this.onRemove,
     this.onEditRoles,
+    this.onHide,
   });
 
   @override
@@ -449,6 +451,8 @@ class _ContributorCardState extends State<ContributorCard> {
                                     widget.onRemove();
                                   } else if (value == 'notification_prefs') {
                                     widget.onEditRoles?.call();
+                                  } else if (value == 'hide') {
+                                    widget.onHide?.call();
                                   }
                                 },
                                 itemBuilder: (context) => [
@@ -457,6 +461,13 @@ class _ContributorCardState extends State<ContributorCard> {
                                     const PopupMenuItem(
                                       value: 'notification_prefs',
                                       child: Text('Notification Preferences'),
+                                    ),
+                                  if ((widget.contributor.type == ContributorType.person ||
+                                       widget.contributor.type == ContributorType.company) &&
+                                      widget.onHide != null)
+                                    PopupMenuItem(
+                                      value: 'hide',
+                                      child: Text(widget.contributor.isHidden ? 'Unhide' : 'Hide'),
                                     ),
                                   const PopupMenuItem(
                                     value: 'remove',

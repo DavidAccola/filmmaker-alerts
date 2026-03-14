@@ -28,6 +28,14 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with TickerProviderStat
   TabController? _tabController;
   bool _isInitialized = false;
 
+  // People filter state
+  bool _showFilmmakers = true;
+  bool _showCompanies = true;
+  bool _showHidden = false;
+
+  /// Whether any filter is actively hiding items.
+  bool get _hasActiveFilters => !_showFilmmakers || !_showCompanies;
+
   /// Helper to update FAB raised state via provider
   void _setFabRaised(bool raised) {
     ref.read(fabRaisedProvider.notifier).setRaised(raised);
@@ -201,107 +209,260 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with TickerProviderStat
       );
     }
 
-    final sortedList = _sortContributors(contributors, prefs.homeSortOrder ?? 'dateAdded');
+    // Split into active and hidden
+    final activeContributors = contributors.where((c) => !c.isHidden).toList();
+    final hiddenContributors = contributors.where((c) => c.isHidden).toList();
+
+    // Apply type filters to active contributors
+    final filteredActive = activeContributors.where((c) {
+      if (c.type == ContributorType.person && !_showFilmmakers) return false;
+      if (c.type == ContributorType.company && !_showCompanies) return false;
+      return true;
+    }).toList();
+
+    final sortedList = _sortContributors(filteredActive, prefs.homeSortOrder ?? 'dateAdded');
+    final sortedHidden = _showHidden ? _sortContributors(hiddenContributors, prefs.homeSortOrder ?? 'dateAdded') : <Contributor>[];
+
+    // Calculate filtered-out count for badge
+    int filteredOutCount = 0;
+    if (!_showFilmmakers) filteredOutCount += activeContributors.where((c) => c.type == ContributorType.person).length;
+    if (!_showCompanies) filteredOutCount += activeContributors.where((c) => c.type == ContributorType.company).length;
+    if (!_showHidden) filteredOutCount += hiddenContributors.length;
 
     return Column(
       children: [
-        // Display Settings button in top right
-        Align(
-          alignment: Alignment.topRight,
-          child: Padding(
-            padding: const EdgeInsets.all(8),
-            child: prefsAsync.when(
-              data: (prefs) => PopupMenuButton<String>(
-                icon: const Icon(Icons.tune),
-                tooltip: 'Display Settings',
-                onSelected: (value) async {
-                  final repo = ref.read(preferencesRepositoryProvider);
-                  if (value == 'toggle_group') {
-                    prefs.groupByType = !(prefs.groupByType ?? true);
-                  } else if (value == 'toggle_view') {
-                    prefs.useGridView = !(prefs.useGridView ?? true);
-                  } else {
-                    prefs.homeSortOrder = value;
-                  }
-                  await repo.savePreferences(prefs);
-                  ref.invalidate(preferencesProvider);
+        // Toolbar with filter and display settings
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+          child: Row(
+            children: [
+              const Spacer(),
+              // Filter button
+              PopupMenuButton<String>(
+                icon: Badge(
+                  isLabelVisible: filteredOutCount > 0,
+                  label: Text('$filteredOutCount'),
+                  child: const Icon(Icons.filter_list),
+                ),
+                tooltip: 'Filter',
+                onSelected: (value) {
+                  setState(() {
+                    if (value == 'filmmakers') {
+                      _showFilmmakers = !_showFilmmakers;
+                    } else if (value == 'companies') {
+                      _showCompanies = !_showCompanies;
+                    } else if (value == 'showHidden') {
+                      _showHidden = !_showHidden;
+                    }
+                  });
                 },
                 itemBuilder: (context) {
-                  final currentSort = prefs.homeSortOrder ?? 'dateAdded';
-                  final isGrouped = prefs.groupByType ?? true;
-                  final isGrid = prefs.useGridView ?? true;
+                  final filmmakersCount = _showFilmmakers ? 0 : activeContributors.where((c) => c.type == ContributorType.person).length;
+                  final companiesCount = _showCompanies ? 0 : activeContributors.where((c) => c.type == ContributorType.company).length;
+                  final hiddenCount = _showHidden ? 0 : hiddenContributors.length;
 
                   return [
-                    PopupMenuItem(
-                      value: 'dateAdded',
+                    CheckedPopupMenuItem(
+                      value: 'filmmakers',
+                      checked: _showFilmmakers,
                       child: Row(
                         children: [
-                          if (currentSort == 'dateAdded') const Icon(Icons.check, size: 18),
-                          const SizedBox(width: 8),
-                          const Text('Date Added'),
+                          const Text('Filmmakers'),
+                          if (filmmakersCount > 0) ...[
+                            const Spacer(),
+                            Text(
+                              '+$filmmakersCount',
+                              style: TextStyle(
+                                color: Theme.of(context).colorScheme.primary,
+                                fontWeight: FontWeight.bold,
+                                fontSize: 12,
+                              ),
+                            ),
+                          ],
                         ],
                       ),
                     ),
-                    PopupMenuItem(
-                      value: 'name',
+                    CheckedPopupMenuItem(
+                      value: 'companies',
+                      checked: _showCompanies,
                       child: Row(
                         children: [
-                          if (currentSort == 'name') const Icon(Icons.check, size: 18),
-                          const SizedBox(width: 8),
-                          const Text('Alphabetical'),
-                        ],
-                      ),
-                    ),
-                    PopupMenuItem(
-                      value: 'latestRelease',
-                      child: Row(
-                        children: [
-                          if (currentSort == 'latestRelease') const Icon(Icons.check, size: 18),
-                          const SizedBox(width: 8),
-                          const Text('Latest Release'),
+                          const Text('Companies'),
+                          if (companiesCount > 0) ...[
+                            const Spacer(),
+                            Text(
+                              '+$companiesCount',
+                              style: TextStyle(
+                                color: Theme.of(context).colorScheme.primary,
+                                fontWeight: FontWeight.bold,
+                                fontSize: 12,
+                              ),
+                            ),
+                          ],
                         ],
                       ),
                     ),
                     const PopupMenuDivider(),
                     CheckedPopupMenuItem(
-                      value: 'toggle_group',
-                      checked: isGrouped,
-                      child: const Text('Group by Type'),
-                    ),
-                    const PopupMenuDivider(),
-                    PopupMenuItem(
-                      value: 'toggle_view',
+                      value: 'showHidden',
+                      checked: _showHidden,
                       child: Row(
                         children: [
-                          Icon(isGrid ? Icons.view_list : Icons.grid_view, size: 18),
-                          const SizedBox(width: 8),
-                          Text(isGrid ? 'Switch to Detail View' : 'Switch to Grid View'),
+                          const Text('Show Hidden'),
+                          if (hiddenCount > 0) ...[
+                            const Spacer(),
+                            Text(
+                              '+$hiddenCount',
+                              style: TextStyle(
+                                color: Theme.of(context).colorScheme.primary,
+                                fontWeight: FontWeight.bold,
+                                fontSize: 12,
+                              ),
+                            ),
+                          ],
                         ],
                       ),
                     ),
                   ];
                 },
               ),
-              loading: () => const SizedBox.shrink(),
-              error: (e, s) => const SizedBox.shrink(),
-            ),
+              // Display Settings button
+              prefsAsync.when(
+                data: (prefs) => PopupMenuButton<String>(
+                  icon: const Icon(Icons.tune),
+                  tooltip: 'Display Settings',
+                  onSelected: (value) async {
+                    final repo = ref.read(preferencesRepositoryProvider);
+                    if (value == 'toggle_group') {
+                      prefs.groupByType = !(prefs.groupByType ?? true);
+                    } else if (value == 'toggle_view') {
+                      prefs.useGridView = !(prefs.useGridView ?? true);
+                    } else {
+                      prefs.homeSortOrder = value;
+                    }
+                    await repo.savePreferences(prefs);
+                    ref.invalidate(preferencesProvider);
+                  },
+                  itemBuilder: (context) {
+                    final currentSort = prefs.homeSortOrder ?? 'dateAdded';
+                    final isGrouped = prefs.groupByType ?? true;
+                    final isGrid = prefs.useGridView ?? true;
+
+                    return [
+                      const PopupMenuItem(
+                        enabled: false,
+                        height: 32,
+                        child: Text('Sort by', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
+                      ),
+                      PopupMenuItem(
+                        value: 'dateAdded',
+                        child: Row(
+                          children: [
+                            if (currentSort == 'dateAdded') const Icon(Icons.check, size: 18),
+                            const SizedBox(width: 8),
+                            const Text('Date Added'),
+                          ],
+                        ),
+                      ),
+                      PopupMenuItem(
+                        value: 'name',
+                        child: Row(
+                          children: [
+                            if (currentSort == 'name') const Icon(Icons.check, size: 18),
+                            const SizedBox(width: 8),
+                            const Text('Alphabetical'),
+                          ],
+                        ),
+                      ),
+                      PopupMenuItem(
+                        value: 'latestRelease',
+                        child: Row(
+                          children: [
+                            if (currentSort == 'latestRelease') const Icon(Icons.check, size: 18),
+                            const SizedBox(width: 8),
+                            const Text('Latest Release'),
+                          ],
+                        ),
+                      ),
+                      const PopupMenuDivider(),
+                      const PopupMenuItem(
+                        enabled: false,
+                        height: 32,
+                        child: Text('Group by', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
+                      ),
+                      CheckedPopupMenuItem(
+                        value: 'toggle_group',
+                        checked: isGrouped,
+                        child: const Text('Group by Type'),
+                      ),
+                      const PopupMenuDivider(),
+                      PopupMenuItem(
+                        value: 'toggle_view',
+                        child: Row(
+                          children: [
+                            Icon(isGrid ? Icons.view_list : Icons.grid_view, size: 18),
+                            const SizedBox(width: 8),
+                            Text(isGrid ? 'Switch to Detail View' : 'Switch to Grid View'),
+                          ],
+                        ),
+                      ),
+                    ];
+                  },
+                ),
+                loading: () => const SizedBox.shrink(),
+                error: (e, s) => const SizedBox.shrink(),
+              ),
+            ],
           ),
         ),
+        // Filtered indicator
+        if (_hasActiveFilters)
+          Container(
+            padding: const EdgeInsets.all(8),
+            color: Theme.of(context).colorScheme.secondaryContainer,
+            child: Row(
+              children: [
+                Icon(
+                  Icons.filter_list,
+                  size: 16,
+                  color: Theme.of(context).colorScheme.onSecondaryContainer,
+                ),
+                const SizedBox(width: 8),
+                Text(
+                  'Filtered (${filteredActive.length} of ${activeContributors.length})',
+                  style: TextStyle(
+                    color: Theme.of(context).colorScheme.onSecondaryContainer,
+                  ),
+                ),
+                const Spacer(),
+                TextButton(
+                  onPressed: () {
+                    setState(() {
+                      _showFilmmakers = true;
+                      _showCompanies = true;
+                    });
+                  },
+                  child: const Text('Show All'),
+                ),
+              ],
+            ),
+          ),
         // Contributors list
         Expanded(
-          child: _buildContributorsListContent(sortedList, prefs),
+          child: _buildContributorsListContent(sortedList, prefs, sortedHidden),
         ),
       ],
     );
   }
 
-  Widget _buildContributorsListContent(List<Contributor> sortedList, Preferences prefs) {
+  Widget _buildContributorsListContent(List<Contributor> sortedList, Preferences prefs, List<Contributor> hiddenList) {
 
     return LayoutBuilder(
       builder: (context, constraints) {
         final isLargeScreen = constraints.maxWidth >= 600;
         final useGrid = isLargeScreen && (prefs.useGridView ?? true);
         final isGrouped = prefs.groupByType ?? true; // Default to true
+        final theme = Theme.of(context);
 
         if (isGrouped) {
           // Grouping Logic
@@ -363,6 +524,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with TickerProviderStat
                                 onTap: () => _navigateToDetail(contributor),
                                 onRemove: () => _removeContributor(context, ref, contributor),
                                 onEditRoles: () => _editRoles(context, ref, contributor),
+                                onHide: () => _hideContributor(context, ref, contributor),
                               );
                             },
                             childCount: groups[type]!.length,
@@ -386,6 +548,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with TickerProviderStat
                             onTap: () => _navigateToDetail(contributor),
                             onRemove: () => _removeContributor(context, ref, contributor),
                             onEditRoles: () => _editRoles(context, ref, contributor),
+                            onHide: () => _hideContributor(context, ref, contributor),
                           ),
                         );
                       },
@@ -393,6 +556,8 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with TickerProviderStat
                     ),
                   ),
               ],
+              // Hidden section
+              ..._buildHiddenSlivers(hiddenList, useGrid, theme),
               const SliverToBoxAdapter(child: SizedBox(height: 80)),
               const SliverFillRemaining(
                 hasScrollBody: false,
@@ -430,12 +595,15 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with TickerProviderStat
                         onTap: () => _navigateToDetail(contributor),
                         onRemove: () => _removeContributor(context, ref, contributor),
                         onEditRoles: () => _editRoles(context, ref, contributor),
+                        onHide: () => _hideContributor(context, ref, contributor),
                       );
                     },
                     childCount: sortedList.length,
                   ),
                 ),
               ),
+              // Hidden section
+              ..._buildHiddenSlivers(hiddenList, true, theme),
               const SliverFillRemaining(
                 hasScrollBody: false,
                 child: Column(
@@ -465,6 +633,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with TickerProviderStat
                           onTap: () => _navigateToDetail(contributor),
                           onRemove: () => _removeContributor(context, ref, contributor),
                           onEditRoles: () => _editRoles(context, ref, contributor),
+                          onHide: () => _hideContributor(context, ref, contributor),
                         ),
                       );
                     },
@@ -472,6 +641,8 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with TickerProviderStat
                   ),
                 ),
               ),
+              // Hidden section
+              ..._buildHiddenSlivers(hiddenList, false, theme),
               const SliverFillRemaining(
                 hasScrollBody: false,
                 child: Column(
@@ -484,6 +655,114 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with TickerProviderStat
         }
       },
     );
+  }
+
+  /// Builds sliver widgets for the hidden section (matching watchlist pattern).
+  List<Widget> _buildHiddenSlivers(List<Contributor> hiddenList, bool useGrid, ThemeData theme) {
+    if (hiddenList.isEmpty) return [];
+
+    return [
+      SliverToBoxAdapter(
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(16, 24, 16, 8),
+          child: Row(
+            children: [
+              Expanded(
+                child: Divider(color: theme.colorScheme.outlineVariant),
+              ),
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 16),
+                child: Text(
+                  'HIDDEN',
+                  style: theme.textTheme.labelMedium?.copyWith(
+                    color: theme.colorScheme.onSurfaceVariant,
+                  ),
+                ),
+              ),
+              Expanded(
+                child: Divider(color: theme.colorScheme.outlineVariant),
+              ),
+            ],
+          ),
+        ),
+      ),
+      if (useGrid)
+        SliverPadding(
+          padding: const EdgeInsets.symmetric(horizontal: 16),
+          sliver: SliverGrid(
+            gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
+              maxCrossAxisExtent: 420,
+              childAspectRatio: 2.7,
+              crossAxisSpacing: 10,
+              mainAxisSpacing: 10,
+            ),
+            delegate: SliverChildBuilderDelegate(
+              (context, index) {
+                final contributor = hiddenList[index];
+                return Opacity(
+                  opacity: 0.5,
+                  child: ContributorCard(
+                    key: ValueKey('hidden_${contributor.tmdbId}'),
+                    contributor: contributor,
+                    onTap: () => _navigateToDetail(contributor),
+                    onRemove: () => _removeContributor(context, ref, contributor),
+                    onEditRoles: () => _editRoles(context, ref, contributor),
+                    onHide: () => _unhideContributor(context, ref, contributor),
+                  ),
+                );
+              },
+              childCount: hiddenList.length,
+            ),
+          ),
+        )
+      else
+        SliverList(
+          delegate: SliverChildBuilderDelegate(
+            (context, index) {
+              final contributor = hiddenList[index];
+              return Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+                child: Opacity(
+                  opacity: 0.5,
+                  child: ContributorCard(
+                    key: ValueKey('hidden_${contributor.tmdbId}'),
+                    contributor: contributor,
+                    onTap: () => _navigateToDetail(contributor),
+                    onRemove: () => _removeContributor(context, ref, contributor),
+                    onEditRoles: () => _editRoles(context, ref, contributor),
+                    onHide: () => _unhideContributor(context, ref, contributor),
+                  ),
+                ),
+              );
+            },
+            childCount: hiddenList.length,
+          ),
+        ),
+    ];
+  }
+
+  Future<void> _hideContributor(BuildContext context, WidgetRef ref, Contributor contributor) async {
+    final repo = ref.read(contributorRepositoryProvider);
+    await repo.setHidden(contributor.tmdbId, true);
+    ref.invalidate(contributorsProvider);
+
+    if (context.mounted) {
+      showSnoozedSnackBar(
+        context,
+        contributor.name,
+        () async {
+          await repo.setHidden(contributor.tmdbId, false);
+          ref.invalidate(contributorsProvider);
+        },
+        onSnackBarVisibilityChanged: (isVisible) => _setFabRaised(isVisible),
+      );
+    }
+  }
+
+  Future<void> _unhideContributor(BuildContext context, WidgetRef ref, Contributor contributor) async {
+    final repo = ref.read(contributorRepositoryProvider);
+    await repo.setHidden(contributor.tmdbId, false);
+    ref.invalidate(contributorsProvider);
   }
 
   List<Contributor> _filterPeopleContributors(List<Contributor> contributors) {
@@ -601,6 +880,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with TickerProviderStat
             totalSeasons: contributor.totalSeasons,
             nextEpisodeDate: contributor.nextEpisodeDate,
             notificationsSnoozed: newNotificationsPaused,
+            isHidden: contributor.isHidden,
           );
           
           await logic.updateContributorRoles(updatedContributor, contributor.notifyForDepartments);
@@ -678,6 +958,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with TickerProviderStat
             totalSeasons: contributor.totalSeasons,
             nextEpisodeDate: contributor.nextEpisodeDate,
             notificationsSnoozed: newNotificationsPaused,
+            isHidden: contributor.isHidden,
           );
           
           await logic.updateContributorRoles(updatedContributor, selectedDepts);

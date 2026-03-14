@@ -233,9 +233,10 @@ class ReleaseChecker {
              
              return isTrueAll || 
                     interestedDepartments.contains(role) || 
-                    // 'Movie' type contributors generally don't have department fields in the same way, 
-                    // or we automatically want them.
-                    contributor.type == ContributorType.movie;
+                    // Company and Movie type contributors don't have department/job fields
+                    // in discover results, so bypass the department filter for them.
+                    contributor.type == ContributorType.movie ||
+                    contributor.type == ContributorType.company;
           }).toList();
 
           final credit = groupCredits.first; // Representative credit for metadata

@@ -634,7 +634,7 @@ class _WatchlistCardState extends ConsumerState<WatchlistCard>
                               ),
                               const PopupMenuItem(
                                 value: 'delete',
-                                child: Text('Delete'),
+                                child: Text('Remove'),
                               ),
                             ];
                           } else {
@@ -653,7 +653,7 @@ class _WatchlistCardState extends ConsumerState<WatchlistCard>
                               ),
                               const PopupMenuItem(
                                 value: 'delete',
-                                child: Text('Delete'),
+                                child: Text('Remove'),
                               ),
                             ];
                           }

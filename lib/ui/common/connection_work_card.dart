@@ -593,6 +593,11 @@ class _ConnectionWorkCardState extends ConsumerState<ConnectionWorkCard> {
   }
 
   void _onContributorTap(BuildContext context, MatchedContributor mc) {
+    // If this work has an episode breakdown, toggle it instead of navigating
+    if (work.episodeBreakdown.isNotEmpty) {
+      setState(() => _breakdownExpanded = !_breakdownExpanded);
+      return;
+    }
     final contributorRepo = ref.read(contributorRepositoryProvider);
     final contributor = contributorRepo.getContributor(mc.contributorId);
     if (contributor == null) return;

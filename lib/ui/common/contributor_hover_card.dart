@@ -123,12 +123,12 @@ class _ContributorHoverCardState extends ConsumerState<ContributorHoverCard> {
                       top: 0,
                       right: 0,
                       child: AnimatedOpacity(
-                        opacity: _showButton ? 1.0 : 0.0,
+                        opacity: (_showButton || isActuallyFollowed) ? 1.0 : 0.0,
                         duration: const Duration(milliseconds: 200),
                         child: IgnorePointer(
-                          ignoring: !_showButton,
+                          ignoring: !_showButton && !isActuallyFollowed,
                           child: Tooltip(
-                            message: _showButton ? (isActuallyFollowed ? 'Followed' : 'Follow') : '',
+                            message: (_showButton || isActuallyFollowed) ? (isActuallyFollowed ? 'Followed' : 'Follow') : '',
                             waitDuration: Duration.zero, // Show immediately once button is visible
                             child: IconButton(
                               icon: Icon(

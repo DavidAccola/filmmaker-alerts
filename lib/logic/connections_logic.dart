@@ -92,7 +92,6 @@ class ConnectionsLogic {
         }
 
         final key = _workKey(work.tmdbId, work.type);
-
         workContributorMap.putIfAbsent(key, () => {});
         workContributorMap[key]!.putIfAbsent(contributorId, () => []);
 
@@ -243,9 +242,50 @@ class ConnectionsLogic {
       if (work.type == WorkType.tvShow) {
         // For synthesized shows (no real show-level Work), pass empty set
         // so the episode filter doesn't exclude all episodes.
-        final showLevelIds = synthesizedShowIds.contains(work.tmdbId)
-            ? <int>{}
-            : activeContributorsInWork.toSet();
+        Set<int> showLevelIds;
+        if (synthesizedShowIds.contains(work.tmdbId)) {
+          showLevelIds = <int>{};
+        } else {
+          // Determine which contributors are truly show-level vs episode-level
+          // with a TMDB summary credit. A contributor is truly show-level only
+          // if they have at least one show-level role that does NOT also appear
+          // as an episode role for this show. Directors/Writers who only directed
+          // or wrote specific episodes get a show-level TMDB credit as a summary,
+          // but they're episode-level contributors (e.g., Rian Johnson on BB).
+          showLevelIds = <int>{};
+          for (final cId in activeContributorsInWork) {
+            final showRoles = contributors[cId] ?? [];
+            if (showRoles.isEmpty) continue;
+
+            // Collect this contributor's episode roles for this show
+            final epRolesForShow = <String>{};
+            for (final epEntry in episodeContributorMap.entries) {
+              final epWork = episodeDataMap[epEntry.key];
+              if (epWork == null) continue;
+              final epShowId = epWork.showId ?? epWork.tmdbId;
+              if (epShowId != work.tmdbId) continue;
+              final rolesForC = epEntry.value[cId];
+              if (rolesForC != null) {
+                for (final r in rolesForC) {
+                  epRolesForShow.add(r.role);
+                }
+              }
+            }
+
+            // If this contributor has no episode data, they're show-level
+            if (epRolesForShow.isEmpty) {
+              showLevelIds.add(cId);
+              continue;
+            }
+
+            // Check if any show-level role is NOT also an episode role
+            final hasSeriesOnlyRole = showRoles.any((r) =>
+                !epRolesForShow.contains(r.role));
+            if (hasSeriesOnlyRole) {
+              showLevelIds.add(cId);
+            }
+          }
+        }
         final episodeData = _computeEpisodeData(
           showTmdbId: work.tmdbId,
           showLevelContributorIds: showLevelIds,
@@ -260,9 +300,17 @@ class ConnectionsLogic {
 
         // Merge episode-only contributors into the top-level list, and
         // annotate existing show-level contributors with episode roles.
+        // We pass the full episodeContributorMap so role counting uses ALL
+        // episodes (not just the filtered breakdown), ensuring "(X eps)"
+        // suffixes are accurate even for show-level contributors whose
+        // solo episodes were excluded from the breakdown display.
         matchedContributors = _mergeEpisodeContributors(
           matchedContributors,
           episodeBreakdown,
+          episodeContributorMap: episodeContributorMap,
+          episodeDataMap: episodeDataMap,
+          showTmdbId: work.tmdbId,
+          contributorLookup: contributorLookup,
         );
       }
 
@@ -374,6 +422,11 @@ class ConnectionsLogic {
 
   /// Build MatchedContributor list for a work, sorted by role importance
   /// (persons first by importance, then companies by importance).
+  ///
+  /// For TV shows, each contributor gets ALL their distinct show-level roles
+  /// combined (e.g. "Executive Producer, Writer") rather than just the single
+  /// best role. Episode-level roles with counts are merged in later by
+  /// [_mergeEpisodeContributors].
   List<MatchedContributor> _buildMatchedContributors(
     List<int> contributorIds,
     Map<int, List<ContributorRole>> contributorRoles,
@@ -389,17 +442,42 @@ class ConnectionsLogic {
       final roles = contributorRoles[cId] ?? [];
       if (roles.isEmpty) continue;
 
-      // Pick the most important role for this contributor in this work
-      final bestRole = _pickBestRole(roles, contributor, work);
+      if (work.type == WorkType.tvShow) {
+        // TV shows: combine all distinct roles, sorted by importance
+        final roleEntries = <({String label, int importance})>[];
+        final seenLabels = <String>{};
+        for (final role in roles) {
+          final importance = _computeRoleImportance(role, contributor, work);
+          final label = _formatRoleLabel(role, importance);
+          if (seenLabels.add(label)) {
+            roleEntries.add((label: label, importance: importance));
+          }
+        }
+        roleEntries.sort((a, b) => a.importance.compareTo(b.importance));
+        final bestImportance = roleEntries.first.importance;
+        final combinedLabel = roleEntries.map((e) => e.label).join(', ');
 
-      matched.add(MatchedContributor(
-        contributorId: cId,
-        name: contributor.name,
-        profilePath: contributor.profilePath,
-        contributorType: contributor.type,
-        role: bestRole.label,
-        roleImportance: bestRole.importance,
-      ));
+        matched.add(MatchedContributor(
+          contributorId: cId,
+          name: contributor.name,
+          profilePath: contributor.profilePath,
+          contributorType: contributor.type,
+          role: combinedLabel,
+          roleImportance: bestImportance,
+        ));
+      } else {
+        // Movies and other types: pick the single best role
+        final bestRole = _pickBestRole(roles, contributor, work);
+
+        matched.add(MatchedContributor(
+          contributorId: cId,
+          name: contributor.name,
+          profilePath: contributor.profilePath,
+          contributorType: contributor.type,
+          role: bestRole.label,
+          roleImportance: bestRole.importance,
+        ));
+      }
     }
 
     // Sort: persons by roleImportance ascending, then companies by roleImportance ascending
@@ -422,34 +500,66 @@ class ConnectionsLogic {
   /// - Contributors who only appear at the episode level are added with their
   ///   best episode role annotated with episode count, e.g. "Director (1 ep)".
   /// - Contributors who already exist at the show level AND have episode roles
-  ///   get their episode roles appended, e.g. "Consulting Producer, Writer (3 eps)".
+  ///   get their episode roles appended (only roles not already in their
+  ///   show-level string), e.g. "Executive Producer, Writer (3 eps)".
+  ///
+  /// Role counting uses the full [episodeContributorMap] (all episodes for
+  /// this show) rather than the filtered [episodeBreakdown], so that
+  /// show-level contributors whose solo episodes were excluded from the
+  /// breakdown still get accurate "(X eps)" suffixes.
   List<MatchedContributor> _mergeEpisodeContributors(
     List<MatchedContributor> showLevel,
-    List<EpisodeBreakdownEntry> episodeBreakdown,
-  ) {
-    if (episodeBreakdown.isEmpty) return showLevel;
-
-    final showLevelIds = showLevel.map((mc) => mc.contributorId).toSet();
-
-    // Aggregate episode roles per contributor: role → episode count
-    // Also track best importance and contributor metadata.
+    List<EpisodeBreakdownEntry> episodeBreakdown, {
+    required Map<String, Map<int, List<ContributorRole>>> episodeContributorMap,
+    required Map<String, Work> episodeDataMap,
+    required int showTmdbId,
+    required Map<int, Contributor> contributorLookup,
+  }) {
+    // Aggregate episode roles per contributor from the FULL episode map
+    // (not the filtered breakdown) so counts are accurate.
     final epRoleCounts = <int, Map<String, int>>{};
     final epBestImportance = <int, int>{};
     final epContributorMeta = <int, MatchedContributor>{};
 
-    for (final ep in episodeBreakdown) {
-      for (final mc in ep.allContributors) {
-        epRoleCounts.putIfAbsent(mc.contributorId, () => {});
-        epRoleCounts[mc.contributorId]!
-            .update(mc.role, (c) => c + 1, ifAbsent: () => 1);
+    for (final epEntry in episodeContributorMap.entries) {
+      final epWork = episodeDataMap[epEntry.key];
+      if (epWork == null) continue;
+      final epShowId = epWork.showId ?? epWork.tmdbId;
+      if (epShowId != showTmdbId) continue;
 
-        final prev = epBestImportance[mc.contributorId] ?? 999;
-        if (mc.roleImportance < prev) {
-          epBestImportance[mc.contributorId] = mc.roleImportance;
-          epContributorMeta[mc.contributorId] = mc;
+      for (final cEntry in epEntry.value.entries) {
+        final cId = cEntry.key;
+        final roles = cEntry.value;
+        if (roles.isEmpty) continue;
+
+        final contributor = contributorLookup[cId];
+        if (contributor == null) continue;
+
+        epRoleCounts.putIfAbsent(cId, () => {});
+
+        // Pick best role for this episode
+        final bestRole = _pickBestRole(roles, contributor, epWork);
+        epRoleCounts[cId]!
+            .update(bestRole.label, (c) => c + 1, ifAbsent: () => 1);
+
+        final prev = epBestImportance[cId] ?? 999;
+        if (bestRole.importance < prev) {
+          epBestImportance[cId] = bestRole.importance;
+          epContributorMeta[cId] = MatchedContributor(
+            contributorId: cId,
+            name: contributor.name,
+            profilePath: contributor.profilePath,
+            contributorType: contributor.type,
+            role: bestRole.label,
+            roleImportance: bestRole.importance,
+          );
         }
       }
     }
+
+    if (epRoleCounts.isEmpty) return showLevel;
+
+    final showLevelIds = showLevel.map((mc) => mc.contributorId).toSet();
 
     // Build the merged list
     final result = <MatchedContributor>[];
@@ -457,26 +567,44 @@ class ConnectionsLogic {
     for (final mc in showLevel) {
       final epRoles = epRoleCounts[mc.contributorId];
       if (epRoles != null && epRoles.isNotEmpty) {
-        // Append episode roles that differ from the show-level role
-        final epParts = <String>[];
+        // Parse the existing show-level roles into a set for comparison
+        final existingRoles = mc.role.split(', ').map((r) => r.trim()).toList();
+
+        // Build the new role string:
+        // - Show-level roles that also appear as episode roles get the count appended
+        // - Show-level roles without episode matches stay as-is
+        // - Episode roles not in show-level are added with count
+        final newParts = <String>[];
+        final handledEpRoles = <String>{};
+
+        for (final showRole in existingRoles) {
+          if (epRoles.containsKey(showRole)) {
+            // This show-level role also has episode credits — append count
+            final count = epRoles[showRole]!;
+            final suffix = count == 1 ? '(1 ep)' : '(${count} eps)';
+            newParts.add('$showRole $suffix');
+            handledEpRoles.add(showRole);
+          } else {
+            newParts.add(showRole);
+          }
+        }
+
+        // Add any episode-only roles not already handled
         for (final entry in epRoles.entries) {
-          if (entry.key == mc.role) continue; // same role, skip
+          if (handledEpRoles.contains(entry.key)) continue;
           final count = entry.value;
           final suffix = count == 1 ? '(1 ep)' : '(${count} eps)';
-          epParts.add('${entry.key} $suffix');
+          newParts.add('${entry.key} $suffix');
         }
-        if (epParts.isNotEmpty) {
-          result.add(MatchedContributor(
-            contributorId: mc.contributorId,
-            name: mc.name,
-            profilePath: mc.profilePath,
-            contributorType: mc.contributorType,
-            role: '${mc.role}, ${epParts.join(', ')}',
-            roleImportance: mc.roleImportance,
-          ));
-        } else {
-          result.add(mc);
-        }
+
+        result.add(MatchedContributor(
+          contributorId: mc.contributorId,
+          name: mc.name,
+          profilePath: mc.profilePath,
+          contributorType: mc.contributorType,
+          role: newParts.join(', '),
+          roleImportance: mc.roleImportance,
+        ));
       } else {
         result.add(mc);
       }
@@ -733,15 +861,17 @@ class ConnectionsLogic {
       }
 
       // --- Episode breakdown logic (all episodes with 1+ contributors) ---
-      // Only include episodes that have at least one contributor who is NOT
-      // in the show-level matchedContributors. Episodes where every contributor
-      // is already represented at the show level are redundant — the user
-      // already knows those people worked on the show.
+      // Include episodes that have either:
+      // - A contributor NOT in the show-level set (episode-only guest/director), OR
+      // - 2+ contributors from the show-level set (a meaningful overlap worth showing)
       if (totalEpContributors >= 1) {
         final hasNonShowLevelContributor = epContributorIds
             .any((id) => !showLevelContributorIds.contains(id));
+        final showLevelOverlapCount = epContributorIds
+            .where((id) => showLevelContributorIds.contains(id))
+            .length;
 
-        if (hasNonShowLevelContributor || showLevelContributorIds.isEmpty) {
+        if (hasNonShowLevelContributor || showLevelOverlapCount >= 2 || showLevelContributorIds.isEmpty) {
           // Build contributor list for this episode (only episode-level contributors)
           final allContributors = _buildEpisodeContributors(
             epContributorIds,

@@ -129,6 +129,7 @@ class WorkLogic {
 
       // Use aggregate credits for crew to capture episode-level roles (Director, Writer)
       // that don't appear in show-level credits
+      final totalEpisodes = showData['number_of_episodes'] as int?;
       final aggregateCrew = aggregateCreditsData['crew'] as List? ?? [];
       final crew = aggregateCrew.expand<CrewMember>((c) {
         final tmdbId = c['id'] as int;
@@ -138,9 +139,12 @@ class WorkLogic {
         // so groupAndSortCrew can merge them properly.
         // If the person+job appears in show-level credits, omit episodeCount
         // so they display as show-level crew (no "(X eps)" suffix).
+        // Also treat as series-level if episode_count == total show episodes.
         return jobs.map((j) {
           final job = j['job'] ?? '';
           final isShowLevel = showLevelCrew.contains('${tmdbId}_$job');
+          final epCount = j['episode_count'] as int?;
+          final coversAllEpisodes = totalEpisodes != null && epCount != null && epCount >= totalEpisodes;
           return CrewMember(
             tmdbId: tmdbId,
             name: c['name'] ?? '',
@@ -148,7 +152,7 @@ class WorkLogic {
             job: job,
             department: c['department'] ?? '',
             isFollowed: isFollowed,
-            episodeCount: isShowLevel ? null : j['episode_count'] as int?,
+            episodeCount: (isShowLevel || coversAllEpisodes) ? null : epCount,
           );
         });
       }).toList();

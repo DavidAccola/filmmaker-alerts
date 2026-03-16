@@ -335,9 +335,14 @@ class ContributorLogic {
   }
 
   /// Refreshes the enrichment data (Latest Work & available departments) for all followed contributors.
-  Future<void> refreshAllContributors() async {
+  /// Optional [onProgress] callback receives (completed, total) for progress tracking.
+  Future<void> refreshAllContributors({
+    void Function(int completed, int total)? onProgress,
+  }) async {
     final contributors = _contributorRepository.getContributors();
     final prefs = _preferencesRepository.getPreferences();
+    final total = contributors.length;
+    int completed = 0;
 
     for (final contributor in contributors) {
       try {
@@ -455,6 +460,8 @@ class ContributorLogic {
         }
       } catch (e) {
       }
+      completed++;
+      onProgress?.call(completed, total);
     }
   }
 
@@ -518,8 +525,24 @@ class ContributorLogic {
         );
       }).toList();
 
+      // For TV credits, also build a show-level-only roles list that excludes
+      // episode-specific credits. This ensures the show Work's contributorRoles
+      // accurately reflects show-level roles (Creator, show-level Director, etc.)
+      // rather than including episode-level roles (directed 1 episode).
+      final showLevelRoles = <ContributorRole>[];
+      if (mediaType == 'tv') {
+        for (int i = 0; i < credits.length; i++) {
+          final c = credits[i];
+          if (c['episode_number'] == null) {
+            showLevelRoles.add(roles[i]);
+          }
+        }
+      }
+
       if (mediaType == 'tv') {
         // Always ensure we have a "Show" object for TV credits to store show-level metadata (endDate, status)
+        // Use showLevelRoles (only credits without episode_number) so the show
+        // Work accurately represents show-level roles, not episode-level ones.
         final showWork = Work(
           tmdbId: id,
           title: (first['name'] ?? first['title'] ?? 'Unknown') as String,
@@ -529,7 +552,7 @@ class ContributorLogic {
           tmdbRating: (first['vote_average'] as num?)?.toDouble(),
           popularity: (first['popularity'] as num?)?.toDouble(),
           voteCount: first['vote_count'] as int?,
-          contributorRoles: roles,
+          contributorRoles: showLevelRoles,
           imdbId: first['external_ids']?['imdb_id'] ?? first['imdb_id'] as String?,
           status: first['status'] as String?,
         );
@@ -622,8 +645,71 @@ class ContributorLogic {
 
     List<Work> finalAllWorks = allWorks;
 
-    // ENHANCEMENT: Fetch latest episodes for top TV shows to enable grouping
+    // ENHANCEMENT: Fetch episode-level data for TV shows to enable grouping
+    // and accurate per-episode credits for the Contributor detail screen.
     if (contributor.type == ContributorType.person) {
+      // Build a map of showId → Set<int> creditSeasons from raw allCredits.
+      // Uses the /credit/{credit_id} endpoint to determine which seasons
+      // the contributor actually appeared in, avoiding blind fetches of all seasons.
+      final showCreditSeasons = <int, Set<int>>{};
+      final showNeedsAllSeasons = <int, bool>{}; // true if director/writer (need all seasons)
+      
+      for (final credit in allCredits) {
+        if (credit == null) continue;
+        final mediaType = credit['media_type'] as String?;
+        if (mediaType != 'tv') continue;
+        final showId = credit['id'] as int?;
+        final creditId = credit['credit_id'] as String?;
+        if (showId == null) continue;
+        
+        final showName = (credit['name'] ?? credit['original_name'] ?? '?') as String;
+        showCreditSeasons.putIfAbsent(showId, () => {});
+        showNeedsAllSeasons.putIfAbsent(showId, () => false);
+        
+        // Directors/writers need all seasons checked (their crew credits may span any episode)
+        final dept = (credit['department'] as String?)?.toLowerCase() ?? '';
+        final job = (credit['job'] as String?)?.toLowerCase() ?? '';
+        if (dept == 'directing' || job == 'director' || 
+            dept == 'writing' || job.contains('writer') || job.contains('screenplay')) {
+          showNeedsAllSeasons[showId] = true;
+        }
+        
+        // For actors (and all credits), resolve credit_id to get specific seasons
+        if (creditId != null && creditId.isNotEmpty) {
+          try {
+            final creditDetails = await _tmdbService.getCreditDetails(creditId);
+            final media = creditDetails['media'] as Map<String, dynamic>?;
+            if (media != null) {
+              // Season regulars get a seasons array
+              final seasons = media['seasons'] as List?;
+              if (seasons != null) {
+                for (final s in seasons) {
+                  final sNum = s['season_number'] as int?;
+                  if (sNum != null && sNum > 0) {
+                    showCreditSeasons[showId]!.add(sNum);
+                  }
+                }
+              }
+              // Guest stars / per-episode credits get an episodes array
+              final episodes = media['episodes'] as List?;
+              if (episodes != null) {
+                for (final ep in episodes) {
+                  final sNum = ep['season_number'] as int?;
+                  if (sNum != null && sNum > 0) {
+                    showCreditSeasons[showId]!.add(sNum);
+                  }
+                }
+              }
+            } else {
+            }
+          } catch (e) {
+            // If credit lookup fails, mark as needing all seasons as fallback
+            showNeedsAllSeasons[showId] = true;
+          }
+        } else {
+        }
+      }
+
       // Collect IDs of shows that have episodes in sortedLatest
       final latestShowTitles = sortedLatest
           .where((w) => w.type == WorkType.tvEpisode)
@@ -634,12 +720,15 @@ class ContributorLogic {
         w.type == WorkType.tvShow && latestShowTitles.contains(w.title)
       ).toList();
 
+      // Process ALL TV shows from allWorks, not just those in display sections.
+      // Season fetching is targeted via credit_id resolution, so we only fetch
+      // the specific seasons the contributor appeared in. Shows without resolved
+      // credit seasons (and not directors/writers) will simply be skipped by the
+      // season-fetching logic, keeping API calls proportional to actual appearances.
       final List<Work> relevantTvShows = {
-        ...sortedUpcoming.where((w) => w.type == WorkType.tvShow),
-        ...sortedLatest.where((w) => w.type == WorkType.tvShow),
-        ...sortedHits.where((w) => w.type == WorkType.tvShow),
+        ...allWorks.where((w) => w.type == WorkType.tvShow),
         ...showsForLatestEpisodes,
-      }.take(20).toList(); // Increased limit to 20 for more thorough Latest Releases coverage
+      }.toList();
 
       if (relevantTvShows.isNotEmpty) {
         for (final show in relevantTvShows) {
@@ -691,13 +780,45 @@ class ContributorLogic {
             final isWriterOnShow = show.contributorRoles.any((r) => 
                r.role.toLowerCase().contains('writer') || r.department?.toLowerCase() == 'writing' || r.role.toLowerCase().contains('screenplay')
             );
+            final isActorOnShow = show.contributorRoles.any((r) => 
+               r.department?.toLowerCase() == 'acting' || r.role.toLowerCase() == 'actor' || r.role.toLowerCase() == 'acting' || (r.character != null && r.character!.isNotEmpty)
+            );
             
-            // If they are EITHER, we should check episodes to be granular
-            if ((isDirectorOnShow || isWriterOnShow) && details['seasons'] != null) {
-              final seasons = details['seasons'] as List;
-              for (final season in seasons) {
-                final seasonNum = season['season_number'] as int? ?? 0;
-                if (seasonNum == 0) continue; // Skip specials usually
+            // If they are a director, writer, OR actor, we should check episodes to be granular.
+            // For directors/writers: checks crew array per episode.
+            // For actors: checks guest_stars array per episode (TMDB's combined credits API
+            // only returns show-level entries for actors with episode_count but no episode_number).
+            if ((isDirectorOnShow || isWriterOnShow || isActorOnShow) && details['seasons'] != null) {
+              final allSeasons = details['seasons'] as List;
+              
+              // Determine which seasons to fetch based on credit resolution.
+              // If we resolved specific seasons via /credit/{credit_id}, only fetch those.
+              // If the contributor is a director/writer and credit resolution failed,
+              // fall back to all seasons.
+              final knownSeasons = showCreditSeasons[show.tmdbId] ?? <int>{};
+              final needsAllSeasons = showNeedsAllSeasons[show.tmdbId] ?? false;
+              
+              final seasonsToFetch = <int>[];
+              if (knownSeasons.isNotEmpty || !needsAllSeasons) {
+                // Use targeted seasons from credit resolution
+                for (final season in allSeasons) {
+                  final seasonNum = season['season_number'] as int? ?? 0;
+                  if (seasonNum == 0) continue;
+                  if (knownSeasons.contains(seasonNum)) {
+                    seasonsToFetch.add(seasonNum);
+                  }
+                }
+              }
+              if (seasonsToFetch.isEmpty && needsAllSeasons) {
+                // Fallback: fetch all seasons for directors/writers when credit resolution failed
+                for (final season in allSeasons) {
+                  final seasonNum = season['season_number'] as int? ?? 0;
+                  if (seasonNum == 0) continue;
+                  seasonsToFetch.add(seasonNum);
+                }
+              }
+              
+              for (final seasonNum in seasonsToFetch) {
                 
                 try {
                   final seasonDetails = await _tmdbService.getTvSeasonDetails(show.tmdbId, seasonNum);
@@ -705,30 +826,57 @@ class ContributorLogic {
                   
                   for (final epData in seasonEpisodes) {
                     if (!episodesToProcess.any((e) => e['id'] == epData['id'])) {
-                      final epCrew = epData['crew'] as List? ?? [];
-                      final myCrewCredits = epCrew.where((c) => c['id'] == contributor.tmdbId || c['name'] == contributor.name).toList();
-
                       bool didDirect = false;
                       bool didWrite = false;
-                      
-                      for (final c in myCrewCredits) {
-                        final job = c['job']?.toString().toLowerCase() ?? '';
-                        if (job == 'director') didDirect = true;
-                        if (['writer', 'screenplay', 'teleplay', 'story with', 'story by'].contains(job)) didWrite = true;
+                      bool didAct = false;
+                      String? actingCharacter;
+
+                      // Check crew array for director/writer credits
+                      if (isDirectorOnShow || isWriterOnShow) {
+                        final epCrew = epData['crew'] as List? ?? [];
+                        final myCrewCredits = epCrew.where((c) => c['id'] == contributor.tmdbId || c['name'] == contributor.name).toList();
+
+                        for (final c in myCrewCredits) {
+                          final job = c['job']?.toString().toLowerCase() ?? '';
+                          if (job == 'director') didDirect = true;
+                          if (['writer', 'screenplay', 'teleplay', 'story with', 'story by'].contains(job)) didWrite = true;
+                        }
+                      }
+
+                      // Check guest_stars array for acting credits
+                      if (isActorOnShow) {
+                        final guestStars = epData['guest_stars'] as List? ?? [];
+                        final myActingCredits = guestStars.where((g) => g['id'] == contributor.tmdbId || g['name'] == contributor.name).toList();
+                        if (myActingCredits.isNotEmpty) {
+                          didAct = true;
+                          actingCharacter = myActingCredits.first['character'] as String?;
+                        }
                       }
                       
-                      if (didDirect || didWrite) {
+                      if (didDirect || didWrite || didAct) {
                          // Attach roles to the raw map so we can read them later
                          final epMap = Map<String, dynamic>.from(epData);
                          epMap['__derived_roles'] = <String>[];
-                         if (didDirect) (epMap['__derived_roles'] as List).add('Director');
-                         if (didWrite) (epMap['__derived_roles'] as List).add('Writer');
+                         epMap['__derived_characters'] = <String?>[];
+                         if (didDirect) {
+                           (epMap['__derived_roles'] as List).add('Director');
+                           (epMap['__derived_characters'] as List).add(null);
+                         }
+                         if (didWrite) {
+                           (epMap['__derived_roles'] as List).add('Writer');
+                           (epMap['__derived_characters'] as List).add(null);
+                         }
+                         if (didAct) {
+                           (epMap['__derived_roles'] as List).add('Actor');
+                           (epMap['__derived_characters'] as List).add(actingCharacter);
+                         }
                          
                          episodesToProcess.add(epMap);
                       }
                     }
                   }
                 } catch (e) {
+                  // Season fetch error — skip this season
                 }
               }
             }
@@ -747,6 +895,7 @@ class ContributorLogic {
               }
               
               final derivedRoles = ep['__derived_roles'] as List<dynamic>?;
+              final derivedCharacters = ep['__derived_characters'] as List<dynamic>?;
               
               allWorks.add(Work(
                 tmdbId: epId,
@@ -758,14 +907,25 @@ class ContributorLogic {
                 tmdbRating: (ep['vote_average'] as num?)?.toDouble(),
                 voteCount: ep['vote_count'] as int?,
                 popularity: show.popularity,
-                contributorRoles: derivedRoles?.map((r) {
+                contributorRoles: derivedRoles != null ? List.generate(derivedRoles.length, (i) {
+                  final r = derivedRoles[i].toString();
+                  final character = (derivedCharacters != null && i < derivedCharacters.length) ? derivedCharacters[i] as String? : null;
+                  String department;
+                  if (r == 'Director') {
+                    department = 'Directing';
+                  } else if (r == 'Actor') {
+                    department = 'Acting';
+                  } else {
+                    department = 'Writing';
+                  }
                   return ContributorRole(
                     contributorId: contributor.tmdbId,
                     contributorName: contributor.name,
-                    role: r.toString(),
-                    department: r.toString() == 'Director' ? 'Directing' : 'Writing',
+                    role: r,
+                    department: department,
+                    character: character,
                   );
-                }).toList() ?? [],
+                }) : [],
                 imdbId: show.imdbId,
                 seasonNumber: ep['season_number'],
                 episodeNumber: ep['episode_number'],
@@ -773,6 +933,7 @@ class ContributorLogic {
               ));
             }
           } catch (e) {
+            // Outer error for this show — skip
           }
           
         }
@@ -788,11 +949,14 @@ class ContributorLogic {
         
         final filteredWorks = allWorksEnriched.where((w) {
           if (w.type == WorkType.tvShow) {
-            final isCreator = w.contributorRoles.any((role) => 
-              role.role.toLowerCase() == 'creator' ||
-              role.department?.toLowerCase() == 'creator'
-            );
-            if (isCreator) {
+            final hasCrewRole = w.contributorRoles.any((role) {
+              final dept = role.department?.toLowerCase() ?? '';
+              final r = role.role.toLowerCase();
+              return r == 'creator' ||
+                  dept == 'creator' ||
+                  (dept != 'acting' && dept.isNotEmpty);
+            });
+            if (hasCrewRole) {
               return true;
             }
 
@@ -805,6 +969,10 @@ class ContributorLogic {
           return true;
         }).toList();
         
+        // Use filteredWorks for allWorks — removes show-level entries when
+        // episodes exist, UNLESS the contributor has a crew role at the show
+        // level (Creator, Director, Producer, Writer, etc.). Only pure acting
+        // credits are de-duped in favor of episode data.
         finalAllWorks = filteredWorks;
 
         // Requirements: Things in status of Planned or without release date go to Upcoming.

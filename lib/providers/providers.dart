@@ -35,6 +35,8 @@ import '../logic/tv_show_display_logic.dart';
 import '../logic/multiple_role_display_logic.dart';
 import '../logic/work_logic.dart';
 import '../logic/watchlist_logic.dart';
+import '../logic/connections_logic.dart';
+import '../logic/connections_models.dart';
 import '../logic/watchlist_migration_logic.dart';
 import '../data/services/notification_service.dart';
 import '../data/services/system_tray_service.dart';
@@ -188,6 +190,13 @@ final multipleRoleDisplayLogicProvider = Provider<MultipleRoleDisplayLogic>((ref
   return MultipleRoleDisplayLogic();
 });
 
+final connectionsLogicProvider = Provider<ConnectionsLogic>((ref) {
+  return ConnectionsLogic(
+    detailRepo: ref.watch(contributorDetailRepositoryProvider),
+    watchlistRepo: ref.watch(watchlistRepositoryProvider),
+  );
+});
+
 final watchlistLogicProvider = Provider<WatchlistLogic>((ref) {
   return WatchlistLogic(
     ref.watch(watchlistRepositoryProvider),
@@ -317,8 +326,11 @@ final tvShowDetailProvider = FutureProvider.autoDispose.family<TvShowDetail?, in
   
   if (repo.isShowCached(showId)) {
     final cached = repo.getTvShowDetail(showId);
-    // If cached but missing streaming options, re-fetch to get them
-    if (cached != null && cached.streamingOptions.isNotEmpty) {
+    // If cached but missing streaming options, re-fetch to get them.
+    // Also re-fetch if crew is missing episodeCount data (added in update).
+    final hasEpisodeCounts = cached != null && cached.crew.isNotEmpty &&
+        cached.crew.any((c) => c.episodeCount != null);
+    if (cached != null && cached.streamingOptions.isNotEmpty && hasEpisodeCounts) {
       return cached;
     }
   }
@@ -408,6 +420,19 @@ final selectedTabProvider = NotifierProvider<SelectedTabNotifier, int>(SelectedT
 /// This is managed at the provider level to persist across screen resizes
 final homeTabProvider = NotifierProvider<HomeTabNotifier, int>(HomeTabNotifier.new);
 
+/// Notifier for connections screen tab state (0 = Connections, 1 = Discovery)
+class ConnectionsTabNotifier extends Notifier<int> {
+  @override
+  int build() => 0;
+
+  void setTab(int index) {
+    state = index;
+  }
+}
+
+/// Connections screen tab state (0 = Connections, 1 = Discovery)
+final connectionsTabProvider = NotifierProvider<ConnectionsTabNotifier, int>(ConnectionsTabNotifier.new);
+
 /// Scroll target for watchlist - set this to scroll to a specific item
 final watchlistScrollTargetProvider = NotifierProvider<WatchlistScrollTargetNotifier, int?>(WatchlistScrollTargetNotifier.new);
 
@@ -447,6 +472,29 @@ final watchlistShowsProvider = FutureProvider<List<WatchlistEntry>>((ref) async 
 
 /// Check if a work is in the watchlist
 typedef WorkParams = ({int tmdbId, WorkType type});
+
+/// Connections data provider - computes all connection data from cache.
+/// Invalidates when watchlist, followed contributors, or preferences change.
+final connectionsDataProvider = FutureProvider<ConnectionsData>((ref) async {
+  // Watch these providers to invalidate when they change
+  final contributors = await ref.watch(contributorsProvider.future);
+  // Watch watchlist to invalidate when works are added/removed
+  await ref.watch(watchlistEntriesProvider.future);
+  final prefs = await ref.watch(preferencesProvider.future);
+
+  final logic = ref.watch(connectionsLogicProvider);
+
+  final includeHiddenContributors =
+      prefs.connectionsShowHiddenContributors ?? false;
+  final includeHiddenWatchlist =
+      prefs.connectionsShowHiddenWatchlist ?? false;
+
+  return logic.computeAllConnections(
+    followedContributors: contributors,
+    includeHiddenContributors: includeHiddenContributors,
+    includeHiddenWatchlistItems: includeHiddenWatchlist,
+  );
+});
 
 final isWorkInWatchlistProvider = FutureProvider.family<bool, WorkParams>((ref, params) async {
   final logic = ref.watch(watchlistLogicProvider);

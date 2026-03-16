@@ -142,7 +142,7 @@ void main() async {
     onAction: (payload) {
       if (payload == 'app://history') {
         // Navigate to history tab
-        container.read(selectedTabProvider.notifier).setTab(1); // History tab index
+        container.read(selectedTabProvider.notifier).setTab(2); // History tab index
       }
     },
   );

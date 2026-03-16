@@ -72,13 +72,14 @@ class CrewMemberAdapter extends TypeAdapter<CrewMember> {
       job: fields[3] as String,
       department: fields[4] as String,
       isFollowed: fields[5] as bool,
+      episodeCount: fields[6] as int?,
     );
   }
 
   @override
   void write(BinaryWriter writer, CrewMember obj) {
     writer
-      ..writeByte(6)
+      ..writeByte(7)
       ..writeByte(0)
       ..write(obj.tmdbId)
       ..writeByte(1)
@@ -90,7 +91,9 @@ class CrewMemberAdapter extends TypeAdapter<CrewMember> {
       ..writeByte(4)
       ..write(obj.department)
       ..writeByte(5)
-      ..write(obj.isFollowed);
+      ..write(obj.isFollowed)
+      ..writeByte(6)
+      ..write(obj.episodeCount);
   }
 
   @override

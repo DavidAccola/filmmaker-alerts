@@ -425,6 +425,16 @@ class TmdbService {
     return episodes;
   }
 
+  /// Get detailed credit info including which seasons/episodes a person appeared in.
+  /// Returns a `media` object with `seasons` (season numbers for regulars) and
+  /// `episodes` (specific episode objects for guest stars).
+  Future<Map<String, dynamic>> getCreditDetails(String creditId) async {
+    final endpoint = '/credit/$creditId';
+    _logApiCall(endpoint);
+    final response = await _dio.get(endpoint);
+    return response.data;
+  }
+
   Future<Map<String, dynamic>> getTvSeasonDetails(int showId, int seasonNumber) async {
     final endpoint = '/tv/$showId/season/$seasonNumber';
     _logApiCall(endpoint);

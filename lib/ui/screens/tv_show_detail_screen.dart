@@ -40,6 +40,7 @@ class TvShowDetailScreen extends ConsumerStatefulWidget {
 
 class _TvShowDetailScreenState extends ConsumerState<TvShowDetailScreen> {
   bool _isPosterHovered = false;
+  bool _isRefreshing = false;
 
   @override
   Widget build(BuildContext context) {
@@ -49,6 +50,9 @@ class _TvShowDetailScreenState extends ConsumerState<TvShowDetailScreen> {
     return Scaffold(
       appBar: AppBar(
         title: Text(widget.showTitle ?? 'TV Show Details'),
+        actions: [
+          _buildRefreshButton(),
+        ],
       ),
       body: prefsAsync.when(
         data: (prefs) => showDetailAsync.when(
@@ -621,8 +625,21 @@ class _TvShowDetailScreenState extends ConsumerState<TvShowDetailScreen> {
 
   Widget _buildCrewSection(TvShowDetail showDetail) {
     final theme = Theme.of(context);
-    final sortedCrew = WorkSortingLogic.groupAndSortCrew(showDetail.crew);
-    
+
+    // Split raw crew into series-level and episode-only people.
+    // A person is "series crew" if they have ANY role with episodeCount == null.
+    final seriesLevelIds = <int>{};
+    for (final m in showDetail.crew) {
+      if (m.episodeCount == null) {
+        seriesLevelIds.add(m.tmdbId);
+      }
+    }
+    final seriesCrewRaw = showDetail.crew.where((m) => seriesLevelIds.contains(m.tmdbId)).toList();
+    final episodeCrewRaw = showDetail.crew.where((m) => !seriesLevelIds.contains(m.tmdbId)).toList();
+
+    final seriesCrew = WorkSortingLogic.groupAndSortCrew(seriesCrewRaw);
+    final episodeCrew = WorkSortingLogic.groupAndSortCrew(episodeCrewRaw);
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -635,51 +652,78 @@ class _TvShowDetailScreenState extends ConsumerState<TvShowDetailScreen> {
             ),
           ),
         ),
-        ShelfWithArrows(
-          height: 175,
-          builder: (context, controller) => ListView.builder(
-            controller: controller,
-            scrollDirection: Axis.horizontal,
-            padding: const EdgeInsets.symmetric(horizontal: 12.0),
-            itemCount: sortedCrew.length,
-            itemBuilder: (context, index) {
-              final member = sortedCrew[index];
-              return Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 4.0),
-                child: ContributorHoverCard(
-                  tmdbId: member.tmdbId,
-                  name: member.name,
-                  profilePath: member.profilePath,
-                  subtitle: member.job,
-                  isFollowed: member.isFollowed,
-                  // radius: 35, // Removed
-                  onTap: () {
-                    Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                        builder: (context) => ContributorDetailScreen(
-                          contributor: Contributor(
-                            tmdbId: member.tmdbId,
-                            name: member.name,
-                            type: ContributorType.person,
-                            profilePath: member.profilePath,
-                            notifyForDepartments: [],
-                            availableDepartments: [],
-                            knownFor: '',
-                          ),
-                        ),
-                      ),
-                    );
-                  },
-                  onFollow: () async {
-                    await _handleFollowPerson(member, ref);
-                  },
-                ),
-              );
-            },
+        if (seriesCrew.isNotEmpty) ...[
+          Padding(
+            padding: const EdgeInsets.only(left: 16.0, bottom: 8.0),
+            child: Text(
+              'Series Crew',
+              style: theme.textTheme.titleSmall?.copyWith(
+                color: theme.colorScheme.onSurfaceVariant,
+              ),
+            ),
           ),
-        ),
+          _buildCrewCarousel(seriesCrew),
+        ],
+        if (episodeCrew.isNotEmpty) ...[
+          const SizedBox(height: 16),
+          Padding(
+            padding: const EdgeInsets.only(left: 16.0, bottom: 8.0),
+            child: Text(
+              'Episode Crew',
+              style: theme.textTheme.titleSmall?.copyWith(
+                color: theme.colorScheme.onSurfaceVariant,
+              ),
+            ),
+          ),
+          _buildCrewCarousel(episodeCrew),
+        ],
       ],
+    );
+  }
+
+  Widget _buildCrewCarousel(List<CrewMember> crew) {
+    return ShelfWithArrows(
+      height: 175,
+      builder: (context, controller) => ListView.builder(
+        controller: controller,
+        scrollDirection: Axis.horizontal,
+        padding: const EdgeInsets.symmetric(horizontal: 12.0),
+        itemCount: crew.length,
+        itemBuilder: (context, index) {
+          final member = crew[index];
+          return Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 4.0),
+            child: ContributorHoverCard(
+              tmdbId: member.tmdbId,
+              name: member.name,
+              profilePath: member.profilePath,
+              subtitle: member.job,
+              isFollowed: member.isFollowed,
+              onTap: () {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (context) => ContributorDetailScreen(
+                      contributor: Contributor(
+                        tmdbId: member.tmdbId,
+                        name: member.name,
+                        type: ContributorType.person,
+                        profilePath: member.profilePath,
+                        notifyForDepartments: [],
+                        availableDepartments: [],
+                        knownFor: '',
+                      ),
+                    ),
+                  ),
+                );
+              },
+              onFollow: () async {
+                await _handleFollowPerson(member, ref);
+              },
+            ),
+          );
+        },
+      ),
     );
   }
 
@@ -929,6 +973,64 @@ class _TvShowDetailScreenState extends ConsumerState<TvShowDetailScreen> {
     } catch (e) {
       if (mounted) {
         showSimpleSnackBar(context, 'Error: $e');
+      }
+    }
+  }
+
+  Widget _buildRefreshButton() {
+    if (_isRefreshing) {
+      return Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 12),
+        child: SizedBox(
+          width: 80,
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Text(
+                'Refreshing...',
+                style: Theme.of(context).textTheme.labelSmall,
+              ),
+              const SizedBox(height: 2),
+              const LinearProgressIndicator(),
+            ],
+          ),
+        ),
+      );
+    }
+
+    return IconButton(
+      icon: const Icon(Icons.refresh, size: 20),
+      tooltip: 'Refresh',
+      onPressed: _handleRefresh,
+    );
+  }
+
+  Future<void> _handleRefresh() async {
+    if (_isRefreshing) return;
+
+    setState(() {
+      _isRefreshing = true;
+    });
+
+    try {
+      final logic = ref.read(workLogicProvider);
+      final prefs = ref.read(preferencesRepositoryProvider).getPreferences();
+      final regionCode = prefs.streamingCountry ?? 'US';
+      await logic.fetchAndCacheTvShowDetail(widget.showId, regionCode: regionCode);
+
+      if (mounted) {
+        ref.invalidate(tvShowDetailProvider(widget.showId));
+        showSimpleSnackBar(context, 'Refreshed show data');
+      }
+    } catch (e) {
+      if (mounted) {
+        showSimpleSnackBar(context, 'Refresh failed: $e');
+      }
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isRefreshing = false;
+        });
       }
     }
   }

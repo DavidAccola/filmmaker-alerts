@@ -43,6 +43,9 @@ class _ContributorDetailScreenState extends ConsumerState<ContributorDetailScree
   late String _lastFollowedRoles;
   bool _isPosterHovered = false;
 
+  // Refresh state
+  bool _isRefreshing = false;
+
   @override
   void initState() {
     super.initState();
@@ -81,6 +84,7 @@ class _ContributorDetailScreenState extends ConsumerState<ContributorDetailScree
       appBar: AppBar(
         title: Text(widget.contributor.name),
         actions: [
+          _buildRefreshButton(),
           prefsAsync.when(
             data: (prefs) => PopupMenuButton<String>(
               icon: const Icon(Icons.display_settings),
@@ -1298,5 +1302,61 @@ class _ContributorDetailScreenState extends ConsumerState<ContributorDetailScree
     setState(() {
       _filterBiggestHits = !_filterBiggestHits;
     });
+  }
+
+  Widget _buildRefreshButton() {
+    if (_isRefreshing) {
+      return Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 12),
+        child: SizedBox(
+          width: 80,
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Text(
+                'Refreshing...',
+                style: Theme.of(context).textTheme.labelSmall,
+              ),
+              const SizedBox(height: 2),
+              const LinearProgressIndicator(),
+            ],
+          ),
+        ),
+      );
+    }
+
+    return IconButton(
+      icon: const Icon(Icons.refresh, size: 20),
+      tooltip: 'Refresh',
+      onPressed: _handleRefresh,
+    );
+  }
+
+  Future<void> _handleRefresh() async {
+    if (_isRefreshing) return;
+
+    setState(() {
+      _isRefreshing = true;
+    });
+
+    try {
+      final logic = ref.read(contributorLogicProvider);
+      await logic.refreshContributorDetail(widget.contributor);
+
+      if (mounted) {
+        ref.invalidate(contributorDetailProvider(widget.contributor.tmdbId));
+        showSimpleSnackBar(context, 'Refreshed ${widget.contributor.name}');
+      }
+    } catch (e) {
+      if (mounted) {
+        showSimpleSnackBar(context, 'Refresh failed: $e');
+      }
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isRefreshing = false;
+        });
+      }
+    }
   }
 }

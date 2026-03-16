@@ -116,6 +116,17 @@ class WorkLogic {
         );
       }).toList();
 
+      // Build a set of show-level crew: (tmdbId, job) pairs from /tv/{id}/credits.
+      // These are people credited at the show level (not episode-specific).
+      // For these people, we don't show episode counts — they're show-level crew.
+      final showLevelCrew = <String>{};
+      final showLevelCrewData = creditsData['crew'] as List? ?? [];
+      for (final c in showLevelCrewData) {
+        final id = c['id'] as int;
+        final job = c['job'] as String? ?? '';
+        showLevelCrew.add('${id}_$job');
+      }
+
       // Use aggregate credits for crew to capture episode-level roles (Director, Writer)
       // that don't appear in show-level credits
       final aggregateCrew = aggregateCreditsData['crew'] as List? ?? [];
@@ -124,15 +135,22 @@ class WorkLogic {
         final isFollowed = _contributorRepository.isFollowed(tmdbId);
         final jobs = c['jobs'] as List? ?? [];
         // Each person can have multiple jobs — create a CrewMember per job
-        // so groupAndSortCrew can merge them properly
-        return jobs.map((j) => CrewMember(
-          tmdbId: tmdbId,
-          name: c['name'] ?? '',
-          profilePath: c['profile_path'],
-          job: j['job'] ?? '',
-          department: c['department'] ?? '',
-          isFollowed: isFollowed,
-        ));
+        // so groupAndSortCrew can merge them properly.
+        // If the person+job appears in show-level credits, omit episodeCount
+        // so they display as show-level crew (no "(X eps)" suffix).
+        return jobs.map((j) {
+          final job = j['job'] ?? '';
+          final isShowLevel = showLevelCrew.contains('${tmdbId}_$job');
+          return CrewMember(
+            tmdbId: tmdbId,
+            name: c['name'] ?? '',
+            profilePath: c['profile_path'],
+            job: job,
+            department: c['department'] ?? '',
+            isFollowed: isFollowed,
+            episodeCount: isShowLevel ? null : j['episode_count'] as int?,
+          );
+        });
       }).toList();
 
       final seasons = (showData['seasons'] as List? ?? []).map((s) => TvSeason(

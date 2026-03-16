@@ -85,6 +85,18 @@ class Preferences extends HiveObject {
   @HiveField(25)
   bool? watchlistUseListView;
 
+  @HiveField(26)
+  String? connectionsSortOrder; // 'connectionCount' or 'releaseDate'
+
+  @HiveField(27)
+  bool? connectionsGroupByRelease; // group by release status toggle
+
+  @HiveField(28)
+  bool? connectionsShowHiddenContributors; // show hidden contributors toggle
+
+  @HiveField(29)
+  bool? connectionsShowHiddenWatchlist; // show hidden watchlist items toggle
+
   Preferences({
     this.notifyTheatre = true,
     this.notifyStreaming = true,
@@ -112,6 +124,10 @@ class Preferences extends HiveObject {
     this.reduceAnimations = false,
     this.watchlistSortOrder,
     this.watchlistUseListView = false,
+    this.connectionsSortOrder,
+    this.connectionsGroupByRelease,
+    this.connectionsShowHiddenContributors,
+    this.connectionsShowHiddenWatchlist,
   });
 
   // Helper getters for "True All" logic

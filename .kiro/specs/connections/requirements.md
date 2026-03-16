@@ -24,6 +24,9 @@ The Connections feature adds a dedicated screen to the app's sidebar navigation 
 - **Watchlist_Entry**: A movie or TV show the user has added to their watchlist, which stores ContributorSnapshot references to followed people.
 - **Collection_Indicator**: A subtle visual badge on a work card's poster indicating that the work belongs to a movie collection that is on the user's watchlist.
 - **Company_Contributor**: A Followed_Contributor with ContributorType.company (e.g., a production studio like A24 or Blumhouse). Companies participate in connection counting like people but are displayed after all person contributors in the people list.
+- **Episode_Connection_Count**: For a TV show, the maximum number of distinct Followed_Contributors appearing in any single episode (combining show-level and episode-level credits for that episode). This replaces the total unique count for TV shows to reflect co-occurrence within the same episode rather than across different episodes.
+- **Episode_Breakdown**: A drill-down view for a TV show that lists individual episodes alongside the Followed_Contributors appearing in each, allowing the user to see exactly which people overlap in which episodes.
+- **Contributor_Group**: A set of two or more Followed_Contributors who appear together in one or more works or episodes. The grouping logic operates on any size of contributor set (2+), not limited to pairs.
 
 ## Requirements
 
@@ -260,3 +263,52 @@ The summary stats bar sits between the toolbar and the person filter chip bar. I
 3. THE stats row SHALL use compact styling (`theme.textTheme.bodySmall` with `onSurfaceVariant` color) and minimal vertical padding (8dp) to avoid taking up significant screen real estate.
 4. WHEN filters or toggles change (Person_Filter, Show Hidden Contributors, Show Hidden Watchlist Items), THE stats row SHALL update its counts to reflect the currently visible data.
 5. WHEN the Connections_Screen is in a loading state, THE stats row SHALL be hidden or show placeholder dashes until data is available.
+
+### Requirement 16: TV Show Episode-Level Connection Count
+
+**User Story:** As a user, I want the connection count for a TV show to reflect the maximum number of followed people appearing in the same episode, so that I can distinguish between shows where my followed people actually share screen time versus shows where they appear in completely separate episodes.
+
+Currently, a TV show's Connection_Count is the total number of unique Followed_Contributors across all credits (show-level + episode-level). This can be misleading: a talk show with 5 followed guests across 5 different episodes shows "5 connections" even though no two guests share an episode. The Episode_Connection_Count corrects this by reporting the peak per-episode overlap.
+
+#### Acceptance Criteria
+
+1. WHEN a work is a TV show, THE Connections_Screen SHALL compute the Episode_Connection_Count as the maximum number of distinct Followed_Contributors appearing in any single episode. For each episode, the contributor set is the union of show-level contributors (those credited at the series level) and episode-specific contributors (those credited on that particular episode).
+2. WHEN a TV show has no episode-level credit data in the cache (only show-level credits exist), THE Connections_Screen SHALL fall back to using the total number of distinct show-level Followed_Contributors as the Connection_Count, since episode-level granularity is unavailable.
+3. THE Episode_Connection_Count SHALL replace the current Connection_Count for TV shows in all sorting, filtering, and display contexts — including the sort order (Requirement 9), the summary stats (Requirement 15), and the Person_Filter chip bar counts (Requirement 10).
+4. WHEN the Episode_Connection_Count for a TV show is at least one, THE Connections_Screen SHALL include that TV show in the appropriate section. TV shows with an Episode_Connection_Count of 1 (e.g., each followed person appears in a different episode with no overlap) SHALL still be displayed but will naturally sort toward the bottom due to their low connection count. Only TV shows with zero followed contributors in any episode SHALL be excluded. The threshold of 2+ connections continues to apply to movies only.
+5. THE Connections_Screen SHALL display the Episode_Connection_Count on the TV show card in the same position and style as the Connection_Count for movies, so the user sees a consistent metric across work types.
+6. WHEN computing Episode_Connection_Count, THE Connections_Screen SHALL include Company_Contributors in the per-episode contributor union, consistent with how companies participate in connection counting for movies (Requirement 6 criterion 1).
+7. THE episode used to determine the Episode_Connection_Count (the peak episode) SHALL be identifiable in the Episode_Breakdown (Requirement 17) so the user can see which episode drives the count.
+
+### Requirement 17: Episode Drill-Down for TV Shows
+
+**User Story:** As a user, I want to drill down into a TV show to see which followed people appear in which episodes, so that I can understand the episode-level breakdown of connections and decide which episodes to prioritize.
+
+The drill-down must coexist with the existing expand/collapse behaviors on the Connections screen: PairGroupCard expands to show grouped works, and ConnectionWorkCard expands to show standout episodes. The episode drill-down adds a third level of detail specific to TV shows.
+
+#### Acceptance Criteria
+
+1. WHEN a work is a TV show on the Connections_Screen, THE work card SHALL provide an episode drill-down action (e.g., a "See episodes" button or expandable section) that reveals the Episode_Breakdown for that show.
+2. THE Episode_Breakdown SHALL list episodes that contain one or more Followed_Contributors (combining show-level and episode-level credits). Episodes with zero followed people in their combined contributor set SHALL be omitted from the breakdown.
+3. EACH episode row in the Episode_Breakdown SHALL display the episode code (S##E##), episode title, and the full list of Followed_Contributors appearing in that episode (both show-level and episode-specific), with each contributor's name, avatar, and role.
+4. THE Episode_Breakdown SHALL sort episodes by their per-episode connection count descending, then by season number ascending, then by episode number ascending as tiebreakers. This is consistent with the standout episode sort order (Requirement 5 criterion 5).
+5. THE episode with the highest per-episode connection count (the peak episode driving the Episode_Connection_Count from Requirement 16) SHALL be visually distinguished in the Episode_Breakdown — for example, with a subtle highlight, a "peak" badge, or by being listed first with an indicator.
+6. THE Episode_Breakdown SHALL replace the existing standout episodes display (Requirement 5 cases 3 and 4). The standout episodes section is removed because the Episode_Breakdown provides a complete per-episode picture that subsumes the standout episodes' purpose. The `StandoutEpisode` model and related computation are removed from the codebase.
+7. WHEN the Episode_Breakdown is expanded, THE Connections_Screen SHALL remain scrollable and interactive. The drill-down SHALL NOT block the screen or prevent interaction with other work cards.
+8. THE Episode_Breakdown SHALL be collapsed by default, consistent with the existing collapsible patterns on the Connections_Screen (Requirement 5 criterion 4, Requirement 4 criterion 4).
+9. WHEN a user taps an episode row in the Episode_Breakdown, THE Connections_Screen SHALL navigate to TvEpisodeDetailScreen for that episode, consistent with the navigation behavior in Requirement 11 criterion 3.
+10. WITHIN the Episode_Breakdown, Followed_Contributors SHALL be ordered by Role_Importance descending (most important roles first), consistent with Requirement 6 criterion 5. Company_Contributors SHALL appear after all person contributors, consistent with Requirement 5 criterion 10.
+11. THE Episode_Breakdown SHALL respect the "Show Hidden Contributors" toggle (Requirement 14). WHEN hidden contributors are excluded, episodes whose per-episode connection count drops below one SHALL be omitted from the breakdown.
+
+### Requirement 18: Contributor Group Integrity
+
+**User Story:** As a user, I want the grouping of works by shared contributors to work correctly for any number of shared people (2, 3, 4, or more), so that collaborations involving larger groups are properly represented.
+
+This requirement codifies the existing behavior that contributor grouping operates on exact contributor sets of any size, not limited to pairs. It ensures this property is maintained as new features (Episode_Connection_Count, Episode_Breakdown) are added.
+
+#### Acceptance Criteria
+
+1. THE Connections_Screen SHALL group works by their exact set of Followed_Contributors, regardless of the set size. Works sharing the same set of 2 contributors, 3 contributors, or N contributors SHALL be grouped together.
+2. WHEN three or more works share the exact same Contributor_Group (any size), THE Discovery_Section SHALL collapse those works into a single expandable group row, consistent with the Pair_Group collapsing behavior (Requirement 4). The group label SHALL reflect the actual number of contributors (e.g., "3 people · 5 works together") rather than assuming pairs.
+3. WHEN a work involves a superset of a Contributor_Group's members (additional Followed_Contributors beyond the group), that work SHALL NOT be included in the group. It SHALL be displayed as a standalone card at its higher Connection_Count, consistent with Requirement 4 criterion 5.
+4. THE Episode_Connection_Count computation (Requirement 16) and Episode_Breakdown (Requirement 17) SHALL NOT alter the contributor grouping logic. Grouping SHALL continue to operate on the full set of matched contributors for a work, independent of per-episode counts.

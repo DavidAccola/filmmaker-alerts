@@ -53,6 +53,9 @@ class CrewMember {
   @HiveField(5)
   final bool isFollowed;
 
+  @HiveField(6)
+  final int? episodeCount;
+
   CrewMember({
     required this.tmdbId,
     required this.name,
@@ -60,6 +63,7 @@ class CrewMember {
     required this.job,
     required this.department,
     this.isFollowed = false,
+    this.episodeCount,
   });
 }
 

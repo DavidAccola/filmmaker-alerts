@@ -12,6 +12,7 @@ import 'add_contributor_screen.dart';
 import 'history_screen.dart';
 import 'home_screen.dart';
 import 'debug_screen.dart';
+import 'connections_screen.dart';
 import 'settings_screen.dart';
 import 'package:flutter/foundation.dart';
 
@@ -27,6 +28,7 @@ class _MainScreenState extends ConsumerState<MainScreen> with WindowListener {
 
   final List<Widget> _screens = const [
     HomeScreen(),
+    ConnectionsScreen(),
     HistoryScreen(),
     DebugScreen(),
     SettingsScreen(),
@@ -110,8 +112,8 @@ class _MainScreenState extends ConsumerState<MainScreen> with WindowListener {
 
     final selectedIndex = ref.watch(selectedTabProvider);
     
-    // Show FAB on Home (0) and History (1) tabs
-    final showFab = selectedIndex == 0 || selectedIndex == 1;
+    // Show FAB on Home (0) and History (2) tabs
+    final showFab = selectedIndex == 0 || selectedIndex == 2;
 
     return CallbackShortcuts(
       bindings: {
@@ -140,6 +142,11 @@ class _MainScreenState extends ConsumerState<MainScreen> with WindowListener {
               icon: Icon(Icons.home_outlined),
               selectedIcon: Icon(Icons.home),
               label: 'Home',
+            ),
+            NavigationDestination(
+              icon: Icon(Icons.hub_outlined),
+              selectedIcon: Icon(Icons.hub),
+              label: 'Connections',
             ),
             NavigationDestination(
               icon: Icon(Icons.history_outlined),

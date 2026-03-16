@@ -42,14 +42,18 @@ class PreferencesAdapter extends TypeAdapter<Preferences> {
       streamingCountry: fields[22] as String?,
       reduceAnimations: fields[23] as bool?,
       watchlistSortOrder: fields[24] as String?,
-      watchlistUseListView: fields[25] == null ? false : fields[25] as bool?,
+      watchlistUseListView: fields[25] as bool?,
+      connectionsSortOrder: fields[26] as String?,
+      connectionsGroupByRelease: fields[27] as bool?,
+      connectionsShowHiddenContributors: fields[28] as bool?,
+      connectionsShowHiddenWatchlist: fields[29] as bool?,
     );
   }
 
   @override
   void write(BinaryWriter writer, Preferences obj) {
     writer
-      ..writeByte(26)
+      ..writeByte(30)
       ..writeByte(0)
       ..write(obj.notifyTheatre)
       ..writeByte(1)
@@ -101,7 +105,15 @@ class PreferencesAdapter extends TypeAdapter<Preferences> {
       ..writeByte(24)
       ..write(obj.watchlistSortOrder)
       ..writeByte(25)
-      ..write(obj.watchlistUseListView);
+      ..write(obj.watchlistUseListView)
+      ..writeByte(26)
+      ..write(obj.connectionsSortOrder)
+      ..writeByte(27)
+      ..write(obj.connectionsGroupByRelease)
+      ..writeByte(28)
+      ..write(obj.connectionsShowHiddenContributors)
+      ..writeByte(29)
+      ..write(obj.connectionsShowHiddenWatchlist);
   }
 
   @override

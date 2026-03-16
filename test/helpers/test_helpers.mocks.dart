@@ -465,6 +465,17 @@ class MockTmdbService extends _i1.Mock implements _i5.TmdbService {
       ) as _i6.Future<List<Map<String, dynamic>>>);
 
   @override
+  _i6.Future<Map<String, dynamic>> getCreditDetails(String? creditId) =>
+      (super.noSuchMethod(
+        Invocation.method(
+          #getCreditDetails,
+          [creditId],
+        ),
+        returnValue:
+            _i6.Future<Map<String, dynamic>>.value(<String, dynamic>{}),
+      ) as _i6.Future<Map<String, dynamic>>);
+
+  @override
   _i6.Future<Map<String, dynamic>> getTvSeasonDetails(
     int? showId,
     int? seasonNumber,
@@ -504,6 +515,17 @@ class MockTmdbService extends _i1.Mock implements _i5.TmdbService {
   _i6.Future<Map<String, dynamic>> getTvCredits(int? id) => (super.noSuchMethod(
         Invocation.method(
           #getTvCredits,
+          [id],
+        ),
+        returnValue:
+            _i6.Future<Map<String, dynamic>>.value(<String, dynamic>{}),
+      ) as _i6.Future<Map<String, dynamic>>);
+
+  @override
+  _i6.Future<Map<String, dynamic>> getTvAggregateCredits(int? id) =>
+      (super.noSuchMethod(
+        Invocation.method(
+          #getTvAggregateCredits,
           [id],
         ),
         returnValue:
@@ -647,6 +669,23 @@ class MockContributorRepository extends _i1.Mock
         ),
         returnValue: false,
       ) as bool);
+
+  @override
+  _i6.Future<void> setHidden(
+    int? tmdbId,
+    bool? hidden,
+  ) =>
+      (super.noSuchMethod(
+        Invocation.method(
+          #setHidden,
+          [
+            tmdbId,
+            hidden,
+          ],
+        ),
+        returnValue: _i6.Future<void>.value(),
+        returnValueForMissingStub: _i6.Future<void>.value(),
+      ) as _i6.Future<void>);
 }
 
 /// A class which mocks [PreferencesRepository].

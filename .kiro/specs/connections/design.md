@@ -139,12 +139,17 @@ class ConnectionWork {
   final int connectionCount;
   final int highestRoleImportance; // lower = more important
   final List<MatchedContributor> matchedContributors;
-  final List<StandoutEpisode> standoutEpisodes; // TV only
   final bool hasImportantRoles; // true if 2+ contributors hold Important_Roles
   final bool isWatched; // true if watchlist entry has Watched status
   final String? status; // TV show status (for release group derivation)
   final DateTime? endDate; // TV show end date
   final int? collectionId; // for collection indicator
+
+  // --- Requirement 16 & 17: Episode-level connection data (TV shows only) ---
+  final int? episodeConnectionCount;          // max per-episode contributor count (TV only)
+  final int? peakEpisodeSeasonNumber;         // season of the peak episode
+  final int? peakEpisodeEpisodeNumber;        // episode number of the peak episode
+  final List<EpisodeBreakdownEntry> episodeBreakdown; // full episode drill-down data (TV only)
 }
 ```
 
@@ -161,18 +166,22 @@ class MatchedContributor {
 }
 ```
 
-### StandoutEpisode
+### EpisodeBreakdownEntry (Requirement 17)
 
 ```dart
-class StandoutEpisode {
+/// An episode in the drill-down breakdown, showing ALL contributors
+/// (both show-level and episode-specific) — unlike StandoutEpisode which
+/// only tracks additional contributors beyond the baseline.
+class EpisodeBreakdownEntry {
   final int tmdbId;
   final int? showId;
   final String? showName;
   final int seasonNumber;
   final int episodeNumber;
   final String title;
-  final List<MatchedContributor> additionalContributors; // beyond show-level
-  final int connectionCount; // total for this episode
+  final List<MatchedContributor> allContributors; // full contributor list for this episode
+  final int connectionCount;                       // total distinct followed people in this episode
+  final bool isPeakEpisode;                        // true if this episode drives the Episode_Connection_Count
 }
 ```
 
@@ -287,6 +296,114 @@ The Discovery section uses scroll-triggered pagination matching `SearchResultsSc
 - A `CircularProgressIndicator` appears at the bottom while preparing the next batch.
 - The full computed list is held in memory; pagination only controls how many are rendered.
 
+### Episode-Level Connection Count (Requirement 16)
+
+For TV shows, `connectionCount` changes from "total unique followed contributors across all credits" to "maximum number of distinct followed contributors in any single episode." This better reflects actual co-occurrence.
+
+#### Computation: `_computeEpisodeConnectionCount()`
+
+1. For each episode of the show in the cache, compute the contributor set as the **union** of:
+   - Show-level contributors (those credited at the series level, i.e., `trueShowLevelIds` from the existing `_computeStandoutEpisodes` refinement logic)
+   - Episode-specific contributors (those credited on that particular episode)
+2. The `episodeConnectionCount` is the **maximum** of these per-episode set sizes.
+3. Track which episode produced the maximum (the "peak episode") via `peakEpisodeSeasonNumber` and `peakEpisodeEpisodeNumber`.
+4. **Fallback**: When a TV show has no episode-level credit data (only show-level credits exist), fall back to `matchedContributors.length` (the total unique show-level count), since episode granularity is unavailable.
+5. For TV shows, `connectionCount` on `ConnectionWork` is set to `episodeConnectionCount` (or the fallback). This value is used in all sorting, filtering, threshold checks, and display.
+
+#### Relationship to `_computeStandoutEpisodes()`
+
+The existing `_computeStandoutEpisodes()` method already iterates all episodes and computes per-episode contributor unions. The episode connection count computation reuses the same iteration but extracts the **max** count rather than filtering for episodes exceeding the baseline. Both computations share the same `trueShowLevelIds` refinement and `episodeContributorMap` data, so they can be computed in a single pass.
+
+```dart
+// In computeAllConnections(), for TV shows:
+final episodeResult = _computeEpisodeData(
+  showTmdbId: work.tmdbId,
+  showLevelContributorIds: activeContributorsInWork.toSet(),
+  episodeContributorMap: episodeContributorMap,
+  episodeDataMap: episodeDataMap,
+  contributorLookup: contributorLookup,
+);
+// episodeResult contains:
+//   .standoutEpisodes — existing behavior (additional contributors beyond baseline)
+//   .episodeConnectionCount — max per-episode count (Req 16)
+//   .peakEpisode — (season, episode) of the peak (Req 16.7)
+//   .episodeBreakdown — full breakdown entries (Req 17)
+```
+
+#### Impact on Existing Behavior
+
+- **Threshold check**: A TV show is included if `episodeConnectionCount >= 1`. TV shows where no followed person appears in any episode are excluded. Shows with `episodeConnectionCount` of 1 (e.g., each followed person in a separate episode) are included but sort toward the bottom. The threshold of 2+ continues to apply to movies only.
+- **Sorting**: Uses `episodeConnectionCount` for sort comparisons, so shows with dense per-episode overlap rank higher than shows with spread-out appearances.
+- **Stats**: `connectionCount` in stats reflects the episode-level metric.
+- **Contributor grouping (Req 18)**: Grouping still uses `matchedContributors` (the full set of all followed people in the show), NOT `episodeConnectionCount`. This preserves correct group formation.
+
+### Episode Drill-Down (Requirement 17)
+
+The episode drill-down is a new expandable section on TV show cards that shows the complete per-episode picture — which followed people appear in which episodes, with full contributor lists (not just the "additional" contributors shown in standout episodes).
+
+#### Computation: `_computeEpisodeBreakdown()`
+
+Computed alongside `_computeStandoutEpisodes()` and `_computeEpisodeConnectionCount()` in the unified `_computeEpisodeData()` method:
+
+1. For each episode, compute the full contributor set (show-level ∪ episode-specific).
+2. **Filter**: Only include episodes where the full contributor count ≥ 1 (Req 17.2).
+3. For each qualifying episode, build an `EpisodeBreakdownEntry` with:
+   - Episode metadata (tmdbId, season, episode, title)
+   - `allContributors`: the complete list of followed contributors in this episode, ordered by role importance (persons first, then companies — same as Req 6.5 / Property 10)
+   - `connectionCount`: the size of the full contributor set
+   - `isPeakEpisode`: true if this episode's count equals the `episodeConnectionCount`
+4. **Sort**: By `connectionCount` descending → season ascending → episode ascending (same as standout episodes, Req 17.4).
+5. **Hidden contributors**: When the toggle is off, episode contributor sets exclude hidden contributors, and episodes dropping below 1 are omitted (Req 17.11).
+
+#### UI Integration
+
+The episode drill-down coexists with the existing standout episodes section. They serve different purposes:
+
+| Aspect | Episode Drill-Down (Req 17) |
+|--------|----------------------------|
+| Purpose | Show the *complete* per-episode picture |
+| Contributors shown | *All* followed contributors in the episode |
+| Threshold | Episode count ≥ 1 |
+| Default state | Always collapsed |
+| Trigger | User-initiated ("See episodes" action) |
+
+The standout episodes section (Req 5 cases 3 and 4) is removed. The episode drill-down fully replaces it by showing the complete per-episode picture. The `StandoutEpisode` model, `_computeStandoutEpisodes()` logic, and related UI code (`_buildStandoutEpisodes`, `_buildInlineEpisode`, `_buildCollapsibleEpisodes`, `_episodesExpanded` state) are all removed.
+
+On `ConnectionWorkCard`, the episode drill-down is rendered as a separate expandable section below the standout episodes section:
+
+```
+┌─────────────────────────────────────────┐
+│ [Poster] Title (Year) · Rating          │
+│          Streaming logos                 │
+│                                         │
+│ People: Director A, Actor B, Actor C    │
+│                                         │
+│ ▸ 12 episodes with connections          │  ← Episode drill-down (collapsed)
+│   ┌─────────────────────────────────┐   │
+│   │ ★ S02E05 — 4 people            │   │  ← Peak episode highlighted
+│   │   Director A, Actor B, C, D    │   │
+│   │ S01E03 — 3 people              │   │
+│   │   Director A, Actor B, C       │   │
+│   │ S03E01 — 1 person              │   │
+│   │   Actor B                      │   │
+│   └─────────────────────────────────┘   │
+└─────────────────────────────────────────┘
+```
+
+The `ConnectionWorkCard` has a `_breakdownExpanded` boolean state (default: false). The `_episodesExpanded` state and standout episodes rendering are removed.
+
+The drill-down section header shows the count of qualifying episodes (e.g., "12 episodes with connections"). Tapping an episode row navigates to `TvEpisodeDetailScreen` (same as Req 11.3).
+
+### Contributor Group Integrity (Requirement 18)
+
+The existing `_computeContributorGroups()` method already operates on exact contributor sets of any size — it uses a canonical key of sorted contributor IDs (`ids.join('_')`) and groups works with identical keys. The threshold for collapsing into a group is 2+ works (not 3+ as originally specified for pairs only).
+
+Requirement 18 codifies this behavior and ensures it's preserved as new features are added:
+
+- **Group label**: Updated from "N works together" to include the contributor count: "N people · M works together" (Req 18.2). The `PairGroup` class already has a `contributors` list that supports any size.
+- **Superset exclusion**: Already enforced — a work with contributors {A, B, C} has a different canonical key than {A, B}, so it never joins a pair group for A+B.
+- **Independence from episode counts**: Grouping uses `matchedContributors` (the full set of all followed people credited on the show at any level), not `episodeConnectionCount`. This is an explicit design decision: a TV show where person A appears in episode 1 and person B appears in episode 2 still has `matchedContributors = {A, B}` and can form a group with other works featuring {A, B}, even though its `episodeConnectionCount` might be 1 (no overlap). The grouping reflects "these people are all involved in this work" while the connection count reflects "these people actually share screen time."
+
 ### Person Filter
 
 The chip bar displays contributors sorted by total appearance count (descending). Tapping a chip filters both sections to show only works involving that contributor. When a filter is active and the filtered person is part of a pair group, that pair group auto-expands.
@@ -359,11 +476,14 @@ The following properties must hold for any valid output of `ConnectionsLogic`. T
 
 ### Property 1: Connection Count Threshold (Req 2.1, 3.1)
 
-Every work in both the Connections section and Discovery section must have a `connectionCount >= 2`. No work with fewer than two matched followed contributors may appear in either section.
+Every movie in both the Connections section and Discovery section must have a `connectionCount >= 2`. TV shows must have a `connectionCount >= 1` (since episode-level connection count of 1 is valid for TV shows). No movie with fewer than two matched followed contributors may appear in either section.
 
 ```
 ∀ work ∈ (watchlistConnections ∪ discoveryItems):
-  work.connectionCount ≥ 2
+  if work.type == movie:
+    work.connectionCount ≥ 2
+  if work.type == tvShow:
+    work.connectionCount ≥ 1
 ```
 
 ### Property 2: Section Disjointness (Req 3.2)
@@ -390,15 +510,21 @@ When sorted by "Number of Connections", works must be ordered by `connectionCoun
     work[i].isWatched == false ∧ work[j].isWatched == true
 ```
 
-### Property 4: Hidden Contributor Exclusion (Req 14.1, 14.2)
+### Property 4: Hidden Contributor Exclusion (Req 14.1, 14.2, 17.11)
 
-When `includeHiddenContributors` is false, no `MatchedContributor` in any displayed work may have `isHidden == true`. Connection counts must reflect only visible contributors, and works whose visible-only count drops below 2 must be excluded.
+When `includeHiddenContributors` is false, no `MatchedContributor` in any displayed work — including episode breakdown entries — may have `isHidden == true`. Connection counts must reflect only visible contributors, and movies whose visible-only count drops below 2 must be excluded. TV shows whose visible-only episode connection count drops to 0 must be excluded. Episode breakdown entries whose per-episode count drops below 1 after excluding hidden contributors must also be omitted.
 
 ```
 when includeHiddenContributors == false:
   ∀ work ∈ allDisplayedWorks:
     ∀ mc ∈ work.matchedContributors: mc.isHidden == false
-    work.connectionCount == |{mc ∈ work.matchedContributors}| ≥ 2
+    if work.type == movie:
+      work.connectionCount == |{mc ∈ work.matchedContributors}| ≥ 2
+    if work.type == tvShow:
+      work.connectionCount ≥ 1
+    ∀ ep ∈ work.episodeBreakdown:
+      ∀ mc ∈ ep.allContributors: mc.isHidden == false
+      ep.connectionCount ≥ 1
 ```
 
 ### Property 5: Hidden Watchlist Item Exclusion (Req 2.8)
@@ -411,43 +537,33 @@ when includeHiddenWatchlistItems == false:
     watchlistEntry(work).isSnoozed == false
 ```
 
-### Property 6: Pair Group Formation (Req 4.1, 4.5, 4.7)
+### Property 6: Contributor Group Formation (Req 4.1, 4.5, 4.7, 18.1, 18.2, 18.3)
 
-A PairGroup is formed if and only if 3+ Discovery works share exactly the same two contributors and no additional contributors. Works with >2 matched contributors must never appear inside a PairGroup.
-
-```
-∀ pairGroup ∈ discoveryPairGroups:
-  |pairGroup.works| ≥ 3
-  ∀ work ∈ pairGroup.works:
-    work.connectionCount == 2
-    work.matchedContributors == {pairGroup.contributor1, pairGroup.contributor2}
-
-∀ work with connectionCount > 2:
-  work ∉ any pairGroup.works
-```
-
-### Property 7: Pair Group Completeness (Req 4.1)
-
-If a canonical pair key has fewer than 3 works, those works must appear as standalone Discovery items, not as a PairGroup.
+A contributor group is formed if and only if 2+ Discovery works share exactly the same set of followed contributors (any size: 2, 3, or N) and no additional contributors. Works with a superset of a group's contributors must never appear inside that group. The grouping logic operates on the full `matchedContributors` set, not limited to pairs.
 
 ```
-∀ pairKey with |worksForPair(pairKey)| < 3:
-  ∀ work ∈ worksForPair(pairKey):
+∀ group ∈ discoveryGroups:
+  |group.works| ≥ 2
+  ∀ work ∈ group.works:
+    set(work.matchedContributors) == set(group.contributors)
+
+∀ work with set(work.matchedContributors) ⊃ set(group.contributors):
+  work ∉ group.works
+```
+
+### Property 7: Group Completeness (Req 4.1, 18.2)
+
+If a canonical contributor-set key has fewer than 2 works, those works must appear as standalone Discovery items, not as a contributor group.
+
+```
+∀ groupKey with |worksForKey(groupKey)| < 2:
+  ∀ work ∈ worksForKey(groupKey):
     work ∈ discoveryStandaloneWorks
 ```
 
-### Property 8: Standout Episode Classification (Req 5.3, 5.4, 5.7)
+### Property 8: (Removed — Standout Episodes Replaced by Episode Breakdown)
 
-A TV episode is a "standout" if and only if its connection count exceeds the show's baseline connection count (the number of distinct followed contributors credited at the show level). The `additionalContributors` list must contain only contributors not already at the show level.
-
-```
-∀ show ∈ tvShows:
-  baseline = |showLevelContributors(show)|
-  ∀ episode ∈ show.standoutEpisodes:
-    episodeConnectionCount(episode) > baseline
-    ∀ mc ∈ episode.additionalContributors:
-      mc ∉ showLevelContributors(show)
-```
+The standout episodes feature has been replaced by the Episode Breakdown (Req 17). This property is no longer applicable.
 
 ### Property 9: Person Filter Correctness (Req 10.4)
 
@@ -459,9 +575,9 @@ when personFilter == C:
     C ∈ work.matchedContributors
 ```
 
-### Property 10: Role Importance Ordering Within Cards (Req 6.5, 5.10)
+### Property 10: Role Importance Ordering Within Cards (Req 6.5, 5.10, 17.10)
 
-Within each work card's people list, contributors must be ordered by `roleImportance` ascending (most important first). Company contributors must appear after all person contributors.
+Within each work card's people list — and within each episode breakdown entry's contributor list — contributors must be ordered by `roleImportance` ascending (most important first). Company contributors must appear after all person contributors.
 
 ```
 ∀ work ∈ allDisplayedWorks:
@@ -470,6 +586,13 @@ Within each work card's people list, contributors must be ordered by `roleImport
   work.matchedContributors == [...persons, ...companies]
   persons is sorted by roleImportance ascending
   companies is sorted by roleImportance ascending
+
+  ∀ ep ∈ work.episodeBreakdown:
+    let epPersons = ep.allContributors.where(type == person)
+    let epCompanies = ep.allContributors.where(type == company)
+    ep.allContributors == [...epPersons, ...epCompanies]
+    epPersons is sorted by roleImportance ascending
+    epCompanies is sorted by roleImportance ascending
 ```
 
 ### Property 11: Important Roles Flag (Req 6.4)
@@ -492,11 +615,153 @@ stats.discoveryCount == |discoveryItems|
 stats.peopleCount == |⋃ work.matchedContributors for work ∈ allDisplayedWorks|
 ```
 
-### Property 13: Connection Count Accuracy (Req 2.1, 3.1)
+### Property 13: Connection Count Accuracy (Req 2.1, 3.1, 16.1, 16.2)
 
-Each work's `connectionCount` must equal the actual number of distinct matched followed contributors in its `matchedContributors` list.
+Each work's `connectionCount` must accurately reflect its contributor overlap. For movies, this equals the number of distinct matched followed contributors. For TV shows with episode data, this equals the `episodeConnectionCount` (max per-episode contributor count). For TV shows without episode data, this falls back to the total distinct show-level contributor count.
 
 ```
 ∀ work ∈ allDisplayedWorks:
-  work.connectionCount == |work.matchedContributors|
+  if work.type == movie:
+    work.connectionCount == |work.matchedContributors|
+  if work.type == tvShow ∧ hasEpisodeData(work):
+    work.connectionCount == max(|episodeContributors(ep)| for ep ∈ episodes(work))
+  if work.type == tvShow ∧ ¬hasEpisodeData(work):
+    work.connectionCount == |work.matchedContributors|
 ```
+
+### Property 14: Episode Connection Count Computation (Req 16.1, 16.3, 16.6)
+
+*For any* TV show with episode-level credit data, the `episodeConnectionCount` must equal the maximum number of distinct followed contributors (including companies) appearing in any single episode, where each episode's contributor set is the union of show-level contributors and episode-specific contributors.
+
+```
+∀ tvShow ∈ allDisplayedWorks where tvShow.type == tvShow ∧ hasEpisodeData(tvShow):
+  tvShow.episodeConnectionCount == max over all episodes e of:
+    |showLevelContributors(tvShow) ∪ episodeSpecificContributors(e)|
+  tvShow.connectionCount == tvShow.episodeConnectionCount
+```
+
+**Validates: Requirements 16.1, 16.3, 16.6**
+
+### Property 15: Peak Episode Consistency (Req 16.7, 17.5)
+
+*For any* TV show with an episode breakdown, the peak episode (the one driving `episodeConnectionCount`) must appear in the breakdown and its `connectionCount` must equal the show's `episodeConnectionCount`. Exactly one episode in the breakdown must be marked as `isPeakEpisode = true`.
+
+```
+∀ tvShow ∈ allDisplayedWorks where tvShow.episodeBreakdown.isNotEmpty:
+  ∃! ep ∈ tvShow.episodeBreakdown: ep.isPeakEpisode == true
+  peakEp = tvShow.episodeBreakdown.firstWhere(isPeakEpisode)
+  peakEp.connectionCount == tvShow.episodeConnectionCount
+  peakEp.seasonNumber == tvShow.peakEpisodeSeasonNumber
+  peakEp.episodeNumber == tvShow.peakEpisodeEpisodeNumber
+```
+
+**Validates: Requirements 16.7, 17.5**
+
+### Property 16: Episode Breakdown Threshold (Req 17.2, 17.11)
+
+*For any* TV show's episode breakdown, every episode entry must have a per-episode connection count of at least 1. Episodes with zero followed contributors in their combined set (show-level ∪ episode-specific) must be excluded.
+
+```
+∀ tvShow ∈ allDisplayedWorks:
+  ∀ ep ∈ tvShow.episodeBreakdown:
+    ep.connectionCount ≥ 1
+    |ep.allContributors| ≥ 1
+```
+
+**Validates: Requirements 17.2, 17.11**
+
+### Property 17: Episode Breakdown Sort Order (Req 17.4)
+
+*For any* TV show's episode breakdown, episodes must be sorted by connection count descending, then by season number ascending, then by episode number ascending.
+
+```
+∀ tvShow ∈ allDisplayedWorks:
+  ∀ i, j where i < j in tvShow.episodeBreakdown:
+    ep[i].connectionCount ≥ ep[j].connectionCount
+    if ep[i].connectionCount == ep[j].connectionCount:
+      ep[i].seasonNumber ≤ ep[j].seasonNumber
+      if ep[i].seasonNumber == ep[j].seasonNumber:
+        ep[i].episodeNumber ≤ ep[j].episodeNumber
+```
+
+**Validates: Requirements 17.4**
+
+### Property 18: Grouping Independence from Episode Counts (Req 18.4, 18.1)
+
+*For any* TV show, its membership in a contributor group must be determined by its full `matchedContributors` set (all followed people credited on the show at any level), not by its `episodeConnectionCount` or per-episode data. Two TV shows with the same `matchedContributors` set must be grouped together even if their `episodeConnectionCount` values differ.
+
+```
+∀ work1, work2 ∈ allDisplayedWorks:
+  groupKey(work1) == canonicalSort(work1.matchedContributors.map(id))
+  groupKey(work2) == canonicalSort(work2.matchedContributors.map(id))
+  groupKey(work1) == groupKey(work2) ⟹ sameGroup(work1, work2)
+  // groupKey is independent of episodeConnectionCount
+```
+
+**Validates: Requirements 18.4, 18.1**
+
+## Error Handling
+
+### Episode Data Gaps
+
+- When a TV show has no episode-level credit data cached, the system falls back to show-level contributor count for `connectionCount`. No error is surfaced — this is expected for shows whose contributor details haven't been fully refreshed yet.
+- The `episodeBreakdown` list is empty when no episode data exists. The UI simply hides the drill-down action.
+- The `episodeConnectionCount` field is null when no episode data exists; the `connectionCount` field uses the fallback value.
+
+### Inconsistent Episode Data
+
+- If episode data references a contributor ID not in the active contributor set (e.g., a contributor was unfollowed between cache refresh and screen load), that contributor is silently excluded from per-episode counts.
+- If an episode's `showId` doesn't match the parent show's `tmdbId`, the episode is skipped during computation (existing behavior in `_computeStandoutEpisodes`).
+
+### Peak Episode Edge Cases
+
+- If multiple episodes tie for the highest per-episode count, the first one in sort order (lowest season, then lowest episode number) is marked as `isPeakEpisode`. Only one episode is marked.
+- If the episode breakdown is empty (all episodes have 0 contributors), `peakEpisodeSeasonNumber` and `peakEpisodeEpisodeNumber` are null, and `episodeConnectionCount` falls back to the show-level count.
+
+## Testing Strategy
+
+### Dual Testing Approach
+
+The Connections feature uses both unit tests and property-based tests:
+
+- **Unit tests**: Specific examples, edge cases (TV show with no episode data, single-episode peak, hidden contributor exclusion edge cases), integration points between computation and UI.
+- **Property tests**: Universal properties across randomly generated inputs (connection count thresholds, sort invariants, group formation, episode connection count computation).
+
+### Property-Based Testing Configuration
+
+- **Library**: `dart_check` (or `glados` if available in the project's test dependencies — use whichever PBT library is already configured).
+- **Iterations**: Minimum 100 per property test.
+- **Tag format**: Each test is tagged with a comment referencing the design property:
+  ```dart
+  // Feature: connections, Property 14: Episode Connection Count Computation
+  ```
+
+### New Property Tests for Requirements 16-18
+
+| Property | Test Description | Key Generators |
+|----------|-----------------|----------------|
+| 14 | Episode_Connection_Count = max per-episode contributor union size | Random TV shows with random episode/show-level contributor assignments |
+| 15 | Peak episode in breakdown matches episodeConnectionCount | Same as above, verify isPeakEpisode flag consistency |
+| 16 | All episode breakdown entries have connectionCount ≥ 2 | Random TV shows with varying episode contributor counts |
+| 17 | Episode breakdown sorted by count desc → season asc → episode asc | Random episode lists, verify sort invariant |
+| 18 | Grouping uses matchedContributors, not episodeConnectionCount | Random TV shows with same matchedContributors but different episode data |
+
+### Updated Property Tests
+
+| Property | Change |
+|----------|--------|
+| 4 | Extended to verify hidden contributor exclusion in episodeBreakdown entries |
+| 6 | Generalized from pair-only to any contributor set size |
+| 7 | Threshold updated from 3 works to 2 works for group formation |
+| 10 | Extended to verify role importance ordering within episodeBreakdown contributor lists |
+| 13 | Updated to account for TV show connectionCount using episodeConnectionCount when episode data exists |
+
+### Unit Test Cases for New Requirements
+
+- TV show with 5 followed people each in separate episodes → `episodeConnectionCount` = 1 → included but sorts toward bottom (Req 16.4)
+- TV show with no episode data → falls back to show-level count (Req 16.2)
+- TV show with 3 people in show-level credits and 1 additional in S02E05 → `episodeConnectionCount` = 4, peak = S02E05 (Req 16.1, 16.7)
+- Episode breakdown includes episodes with 1 contributor (Req 17.2)
+- Episode breakdown with hidden contributors toggled off drops episodes below 1 (Req 17.11)
+- Two TV shows with same `matchedContributors` but different `episodeConnectionCount` values are grouped together (Req 18.4)
+- Contributor group with 3 people and 4 works collapses correctly, label shows "3 people · 4 works together" (Req 18.2)

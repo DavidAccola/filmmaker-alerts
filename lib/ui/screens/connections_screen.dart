@@ -9,6 +9,7 @@ import '../../providers/providers.dart';
 import '../common/snackbar_utils.dart';
 import '../common/connection_work_card.dart';
 import '../common/pair_group_card.dart';
+import '../common/unfollowed_person_card.dart';
 import '../common/tv_preferences_dialog.dart';
 
 class ConnectionsScreen extends ConsumerStatefulWidget {
@@ -25,6 +26,9 @@ class _ConnectionsScreenState extends ConsumerState<ConnectionsScreen>
 
   // Person filter state
   int? _selectedContributorId;
+
+  // Watchlist tab mode: false = Contributors (followed), true = All Connections (unfollowed)
+  bool _showAllConnections = false;
 
   // Refresh state
   bool _isRefreshing = false;
@@ -92,7 +96,7 @@ class _ConnectionsScreenState extends ConsumerState<ConnectionsScreen>
           }
         });
         return Scaffold(
-          appBar: AppBar(title: const Text('Connections')),
+          appBar: AppBar(title: const Text('Watchlist Connections')),
           body: Center(
             child: Column(
               mainAxisSize: MainAxisSize.min,
@@ -168,7 +172,7 @@ class _ConnectionsScreenState extends ConsumerState<ConnectionsScreen>
                       ref.read(connectionsTabProvider.notifier).setTab(index);
                     },
                     tabs: const [
-                      Tab(text: 'Connections'),
+                      Tab(text: 'Watchlist'),
                       Tab(text: 'Discovery'),
                     ],
                   ),
@@ -196,7 +200,7 @@ class _ConnectionsScreenState extends ConsumerState<ConnectionsScreen>
     return Row(
       children: [
         const SizedBox(width: 16),
-        const Text('Connections'),
+        const Text('Watchlist Connections'),
         // Refresh button — right next to title, matching Following screen pattern
         _buildRefreshButton(),
         const Spacer(),
@@ -360,8 +364,15 @@ class _ConnectionsScreenState extends ConsumerState<ConnectionsScreen>
         },
       );
 
+      // Fetch MovieDetail/TvShowDetail for watchlist works that aren't cached.
+      // computeUnfollowedConnections reads from these caches to find the full
+      // cast/crew of each work (getPersonCombinedCredits only returns a person's
+      // own roles, not the full cast/crew of each movie/show).
+      await _fetchUncachedWatchlistDetails();
+
       ref.invalidate(contributorsProvider);
       ref.invalidate(connectionsDataProvider);
+      ref.invalidate(unfollowedConnectionsProvider);
 
       if (mounted) {
         showSimpleSnackBar(context, 'Refresh complete');
@@ -375,6 +386,34 @@ class _ConnectionsScreenState extends ConsumerState<ConnectionsScreen>
         setState(() {
           _isRefreshing = false;
         });
+      }
+    }
+  }
+
+  /// Fetch and cache MovieDetail/TvShowDetail for watchlist works that don't
+  /// have cached detail yet. This populates the full cast/crew data needed
+  /// by the "All Connections" unfollowed-person feature.
+  Future<void> _fetchUncachedWatchlistDetails() async {
+    final watchlistLogic = ref.read(watchlistLogicProvider);
+    final workLogic = ref.read(workLogicProvider);
+    final movieDetailRepo = ref.read(movieDetailRepositoryProvider);
+    final tvDetailRepo = ref.read(tvDetailRepositoryProvider);
+
+    final entries = watchlistLogic.getWatchlistWorks();
+
+    for (final entry in entries) {
+      try {
+        if (entry.type == WorkType.movie) {
+          if (!movieDetailRepo.isCached(entry.tmdbId)) {
+            await workLogic.fetchAndCacheMovieDetail(entry.tmdbId);
+          }
+        } else if (entry.type == WorkType.tvShow) {
+          if (!tvDetailRepo.isShowCached(entry.tmdbId)) {
+            await workLogic.fetchAndCacheTvShowDetail(entry.tmdbId);
+          }
+        }
+      } catch (_) {
+        // Skip individual failures — best effort
       }
     }
   }
@@ -479,6 +518,53 @@ class _ConnectionsScreenState extends ConsumerState<ConnectionsScreen>
   // ---------------------------------------------------------------------------
 
   Widget _buildConnectionsTab(SortedConnectionsData sortedData) {
+    return Column(
+      children: [
+        // Toggle between Contributors and All Connections
+        _buildWatchlistModeToggle(),
+        Expanded(
+          child: _showAllConnections
+              ? _buildAllConnectionsList()
+              : _buildContributorsList(sortedData),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildWatchlistModeToggle() {
+    final theme = Theme.of(context);
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(12, 8, 12, 4),
+      child: SegmentedButton<bool>(
+        segments: const [
+          ButtonSegment(
+            value: false,
+            label: Text('Contributors'),
+            icon: Icon(Icons.people_outline, size: 18),
+          ),
+          ButtonSegment(
+            value: true,
+            label: Text('All Connections'),
+            icon: Icon(Icons.person_search_outlined, size: 18),
+          ),
+        ],
+        selected: {_showAllConnections},
+        onSelectionChanged: (selected) {
+          setState(() {
+            _showAllConnections = selected.first;
+          });
+        },
+        style: ButtonStyle(
+          visualDensity: VisualDensity.compact,
+          textStyle: WidgetStatePropertyAll(
+            theme.textTheme.labelMedium,
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildContributorsList(SortedConnectionsData sortedData) {
     final items = sortedData.watchlistItems;
 
     if (items.isEmpty) {
@@ -497,6 +583,30 @@ class _ConnectionsScreenState extends ConsumerState<ConnectionsScreen>
       itemCount: items.length,
       itemBuilder: (context, index) {
         return _buildDiscoveryItem(items[index]);
+      },
+    );
+  }
+
+  Widget _buildAllConnectionsList() {
+    final unfollowedAsync = ref.watch(unfollowedConnectionsProvider);
+
+    return unfollowedAsync.when(
+      loading: () => const Center(child: CircularProgressIndicator()),
+      error: (err, _) => Center(child: Text('Error: $err')),
+      data: (groups) {
+        if (groups.isEmpty) {
+          return const Center(
+            child: Text('No unfollowed people found across your watchlist.'),
+          );
+        }
+
+        return ListView.builder(
+          padding: const EdgeInsets.all(8),
+          itemCount: groups.length,
+          itemBuilder: (context, index) {
+            return UnfollowedPersonCard(personGroup: groups[index]);
+          },
+        );
       },
     );
   }

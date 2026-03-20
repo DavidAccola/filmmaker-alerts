@@ -146,7 +146,7 @@ class _MainScreenState extends ConsumerState<MainScreen> with WindowListener {
             NavigationDestination(
               icon: Icon(Icons.hub_outlined),
               selectedIcon: Icon(Icons.hub),
-              label: 'Connections',
+              label: 'Watchlist Connections',
             ),
             NavigationDestination(
               icon: Icon(Icons.history_outlined),

@@ -132,23 +132,41 @@ class _PairGroupCardState extends State<PairGroupCard> {
   }
 
   Widget _buildAvatar(ThemeData theme, MatchedContributor contributor) {
+    final isCompany = contributor.contributorType == ContributorType.company;
+    final companyBgColor = theme.brightness == Brightness.dark
+        ? Colors.grey[300]!
+        : Colors.white;
     return CircleAvatar(
       radius: 18,
-      backgroundColor: theme.colorScheme.surfaceContainerHighest,
-      backgroundImage: contributor.profilePath != null
+      backgroundColor: isCompany
+          ? companyBgColor
+          : theme.colorScheme.surfaceContainerHighest,
+      backgroundImage: contributor.profilePath != null && !isCompany
           ? CachedNetworkImageProvider(
               'https://image.tmdb.org/t/p/w45${contributor.profilePath}',
             )
           : null,
-      child: contributor.profilePath == null
-          ? Icon(
-              contributor.contributorType == ContributorType.company
-                  ? Icons.business
-                  : Icons.person,
-              size: 16,
-              color: theme.colorScheme.onSurfaceVariant,
+      child: contributor.profilePath != null && isCompany
+          ? ClipOval(
+              child: Padding(
+                padding: const EdgeInsets.all(3),
+                child: CachedNetworkImage(
+                  imageUrl:
+                      'https://image.tmdb.org/t/p/w45${contributor.profilePath}',
+                  fit: BoxFit.contain,
+                  errorWidget: (_, __, ___) => Icon(Icons.business,
+                      size: 16,
+                      color: theme.colorScheme.onSurfaceVariant),
+                ),
+              ),
             )
-          : null,
+          : contributor.profilePath == null
+              ? Icon(
+                  isCompany ? Icons.business : Icons.person,
+                  size: 16,
+                  color: theme.colorScheme.onSurfaceVariant,
+                )
+              : null,
     );
   }
 

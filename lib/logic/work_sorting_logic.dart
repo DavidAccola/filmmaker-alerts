@@ -440,4 +440,57 @@ class WorkSortingLogic {
 
     return sorted;
   }
+
+  /// Extracts the billing position number from a work's contributor roles.
+  /// "Production" alone means 1st billed. "Produced by X" means not 1st.
+  /// The exact position is stored in the character field as "billing:N:total".
+  /// Returns 999 if no production role found.
+  static int getBillingPosition(Work work) {
+    for (final role in work.contributorRoles) {
+      // Check for billing tag in character field (set for companies)
+      if (role.character != null && role.character!.startsWith('billing:')) {
+        final parts = role.character!.split(':');
+        if (parts.length >= 2) {
+          return int.tryParse(parts[1]) ?? 999;
+        }
+      }
+      if (role.role == 'Production') {
+        return 1;
+      }
+      if (role.role.startsWith('Produced by ')) {
+        return 999; // Has a "Produced by" role but no billing tag — sort last
+      }
+    }
+    return 999;
+  }
+
+  /// Extracts the total number of producers from a work's billing tag.
+  /// Returns null if not available.
+  static int? getTotalProducers(Work work) {
+    for (final role in work.contributorRoles) {
+      if (role.character != null && role.character!.startsWith('billing:')) {
+        final parts = role.character!.split(':');
+        if (parts.length >= 3) {
+          return int.tryParse(parts[2]);
+        }
+      }
+    }
+    return null;
+  }
+
+  /// Returns a display string like "Producer 2 of 3" for a work's billing info.
+  /// Returns null for 1st billed or if billing info is unavailable.
+  static String? getProducerLabel(Work work) {
+    final pos = getBillingPosition(work);
+    final total = getTotalProducers(work);
+    if (pos == 1 || pos == 999 || total == null) return null;
+    return 'Producer $pos of $total';
+  }
+
+  /// Comparator that sorts by billing position (1st billed first).
+  /// Returns 0 if both have the same position, so callers can chain
+  /// with secondary sort criteria.
+  static int compareBillingPosition(Work a, Work b) {
+    return getBillingPosition(a).compareTo(getBillingPosition(b));
+  }
 }

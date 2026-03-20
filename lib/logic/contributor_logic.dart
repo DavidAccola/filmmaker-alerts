@@ -515,15 +515,51 @@ class ContributorLogic {
         if (character != null && job == null && (department == null || department == 'null' || department.isEmpty)) {
           department = 'Acting';
         }
+
+        // For companies, use billing position from filterToProductionOnly
+        // instead of the generic 'Cast/Crew' fallback
+        String fallbackRole;
+        String? companyBillingTag;
+        if (contributor.type == ContributorType.company) {
+          final billingPos = c['_companyBillingPosition'] as int?;
+          final firstBilledName = c['_firstBilledCompanyName'] as String?;
+          final totalProducers = c['_totalProducers'] as int?;
+          if (billingPos != null && billingPos == 1) {
+            fallbackRole = 'Production';
+          } else if (firstBilledName != null && firstBilledName.isNotEmpty) {
+            fallbackRole = 'Produced by $firstBilledName';
+          } else {
+            fallbackRole = 'Production';
+          }
+          // Store billing position and total in character field for sorting/display (unused for companies)
+          if (billingPos != null && totalProducers != null) {
+            companyBillingTag = 'billing:$billingPos:$totalProducers';
+          } else if (billingPos != null) {
+            companyBillingTag = 'billing:$billingPos';
+          }
+          department ??= 'Production';
+        } else {
+          fallbackRole = contributor.type == ContributorType.movie
+              ? 'Movie'
+              : (c['media_type'] == 'tv' ? 'TV Show' : 'Cast/Crew');
+        }
         
         return ContributorRole(
           contributorId: contributor.tmdbId,
           contributorName: contributor.name,
-          role: job ?? character ?? (contributor.type == ContributorType.movie ? 'Movie' : (c['media_type'] == 'tv' ? 'TV Show' : 'Cast/Crew')),
+          role: job ?? character ?? fallbackRole,
           department: department,
-          character: character,
+          character: companyBillingTag ?? character,
         );
       }).toList();
+
+      // Deduplicate roles with the same role string (can happen when a work
+      // appears in both upcoming and top-works API results)
+      final seenRoles = <String>{};
+      final uniqueRoles = <ContributorRole>[];
+      for (final r in roles) {
+        if (seenRoles.add(r.role)) uniqueRoles.add(r);
+      }
 
       // For TV credits, also build a show-level-only roles list that excludes
       // episode-specific credits. This ensures the show Work's contributorRoles
@@ -531,10 +567,13 @@ class ContributorLogic {
       // rather than including episode-level roles (directed 1 episode).
       final showLevelRoles = <ContributorRole>[];
       if (mediaType == 'tv') {
+        final seenShowRoles = <String>{};
         for (int i = 0; i < credits.length; i++) {
           final c = credits[i];
           if (c['episode_number'] == null) {
-            showLevelRoles.add(roles[i]);
+            if (seenShowRoles.add(roles[i].role)) {
+              showLevelRoles.add(roles[i]);
+            }
           }
         }
       }
@@ -580,7 +619,7 @@ class ContributorLogic {
                   tmdbRating: (credit['vote_average'] as num?)?.toDouble(),
                   popularity: (credit['popularity'] as num?)?.toDouble(),
                   voteCount: credit['vote_count'] as int?,
-                  contributorRoles: roles,
+                  contributorRoles: uniqueRoles,
                   imdbId: credit['external_ids']?['imdb_id'] ?? credit['imdb_id'] as String?,
                   seasonNumber: seasonNum,
                   episodeNumber: episodeNum,
@@ -601,7 +640,7 @@ class ContributorLogic {
           tmdbRating: (first['vote_average'] as num?)?.toDouble(),
           popularity: (first['popularity'] as num?)?.toDouble(),
           voteCount: first['vote_count'] as int?,
-          contributorRoles: roles,
+          contributorRoles: uniqueRoles,
           imdbId: first['external_ids']?['imdb_id'] ?? first['imdb_id'] as String?,
           status: first['status'] as String?,
         ));

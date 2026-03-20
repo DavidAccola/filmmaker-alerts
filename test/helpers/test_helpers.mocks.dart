@@ -12,8 +12,9 @@ import 'package:filmmaker_alerts/data/models/movie_cache_entry.dart' as _i13;
 import 'package:filmmaker_alerts/data/models/movie_detail.dart' as _i19;
 import 'package:filmmaker_alerts/data/models/notification_history.dart' as _i11;
 import 'package:filmmaker_alerts/data/models/preferences.dart' as _i3;
-import 'package:filmmaker_alerts/data/models/status_record.dart' as _i22;
+import 'package:filmmaker_alerts/data/models/status_record.dart' as _i24;
 import 'package:filmmaker_alerts/data/models/tv_cache.dart' as _i15;
+import 'package:filmmaker_alerts/data/models/tv_detail.dart' as _i21;
 import 'package:filmmaker_alerts/data/models/watchlist_entry.dart' as _i4;
 import 'package:filmmaker_alerts/data/repositories/contributor_detail_repository.dart'
     as _i16;
@@ -29,10 +30,12 @@ import 'package:filmmaker_alerts/data/repositories/preferences_repository.dart'
     as _i9;
 import 'package:filmmaker_alerts/data/repositories/tv_cache_repository.dart'
     as _i14;
-import 'package:filmmaker_alerts/data/repositories/watchlist_repository.dart'
-    as _i21;
-import 'package:filmmaker_alerts/data/services/notification_service.dart'
+import 'package:filmmaker_alerts/data/repositories/tv_detail_repository.dart'
     as _i20;
+import 'package:filmmaker_alerts/data/repositories/watchlist_repository.dart'
+    as _i23;
+import 'package:filmmaker_alerts/data/services/notification_service.dart'
+    as _i22;
 import 'package:filmmaker_alerts/data/services/tmdb_service.dart' as _i5;
 import 'package:mockito/mockito.dart' as _i1;
 
@@ -1851,11 +1854,138 @@ class MockMovieDetailRepository extends _i1.Mock
       ) as _i6.Future<void>);
 }
 
+/// A class which mocks [TvDetailRepository].
+///
+/// See the documentation for Mockito's code generation for more information.
+class MockTvDetailRepository extends _i1.Mock
+    implements _i20.TvDetailRepository {
+  MockTvDetailRepository() {
+    _i1.throwOnMissingStub(this);
+  }
+
+  @override
+  _i21.TvShowDetail? getTvShowDetail(int? tmdbId) =>
+      (super.noSuchMethod(Invocation.method(
+        #getTvShowDetail,
+        [tmdbId],
+      )) as _i21.TvShowDetail?);
+
+  @override
+  _i6.Future<void> cacheTvShowDetail(_i21.TvShowDetail? detail) =>
+      (super.noSuchMethod(
+        Invocation.method(
+          #cacheTvShowDetail,
+          [detail],
+        ),
+        returnValue: _i6.Future<void>.value(),
+        returnValueForMissingStub: _i6.Future<void>.value(),
+      ) as _i6.Future<void>);
+
+  @override
+  bool isShowCached(int? tmdbId) => (super.noSuchMethod(
+        Invocation.method(
+          #isShowCached,
+          [tmdbId],
+        ),
+        returnValue: false,
+      ) as bool);
+
+  @override
+  _i21.TvSeasonDetail? getTvSeasonDetail(
+    int? showId,
+    int? seasonNumber,
+  ) =>
+      (super.noSuchMethod(Invocation.method(
+        #getTvSeasonDetail,
+        [
+          showId,
+          seasonNumber,
+        ],
+      )) as _i21.TvSeasonDetail?);
+
+  @override
+  _i21.TvSeasonDetail? getTvSeasonDetailExplicit(
+    int? showId,
+    int? seasonNumber,
+  ) =>
+      (super.noSuchMethod(Invocation.method(
+        #getTvSeasonDetailExplicit,
+        [
+          showId,
+          seasonNumber,
+        ],
+      )) as _i21.TvSeasonDetail?);
+
+  @override
+  _i6.Future<void> cacheTvSeasonDetail(_i21.TvSeasonDetail? detail) =>
+      (super.noSuchMethod(
+        Invocation.method(
+          #cacheTvSeasonDetail,
+          [detail],
+        ),
+        returnValue: _i6.Future<void>.value(),
+        returnValueForMissingStub: _i6.Future<void>.value(),
+      ) as _i6.Future<void>);
+
+  @override
+  bool isSeasonCached(
+    int? showId,
+    int? seasonNumber,
+  ) =>
+      (super.noSuchMethod(
+        Invocation.method(
+          #isSeasonCached,
+          [
+            showId,
+            seasonNumber,
+          ],
+        ),
+        returnValue: false,
+      ) as bool);
+
+  @override
+  _i21.TvEpisodeDetail? getTvEpisodeDetail(int? tmdbId) =>
+      (super.noSuchMethod(Invocation.method(
+        #getTvEpisodeDetail,
+        [tmdbId],
+      )) as _i21.TvEpisodeDetail?);
+
+  @override
+  _i6.Future<void> cacheTvEpisodeDetail(_i21.TvEpisodeDetail? detail) =>
+      (super.noSuchMethod(
+        Invocation.method(
+          #cacheTvEpisodeDetail,
+          [detail],
+        ),
+        returnValue: _i6.Future<void>.value(),
+        returnValueForMissingStub: _i6.Future<void>.value(),
+      ) as _i6.Future<void>);
+
+  @override
+  bool isEpisodeCached(int? tmdbId) => (super.noSuchMethod(
+        Invocation.method(
+          #isEpisodeCached,
+          [tmdbId],
+        ),
+        returnValue: false,
+      ) as bool);
+
+  @override
+  _i6.Future<void> clearAllCache() => (super.noSuchMethod(
+        Invocation.method(
+          #clearAllCache,
+          [],
+        ),
+        returnValue: _i6.Future<void>.value(),
+        returnValueForMissingStub: _i6.Future<void>.value(),
+      ) as _i6.Future<void>);
+}
+
 /// A class which mocks [NotificationService].
 ///
 /// See the documentation for Mockito's code generation for more information.
 class MockNotificationService extends _i1.Mock
-    implements _i20.NotificationService {
+    implements _i22.NotificationService {
   MockNotificationService() {
     _i1.throwOnMissingStub(this);
   }
@@ -1935,7 +2065,7 @@ class MockNotificationService extends _i1.Mock
 ///
 /// See the documentation for Mockito's code generation for more information.
 class MockWatchlistRepository extends _i1.Mock
-    implements _i21.WatchlistRepository {
+    implements _i23.WatchlistRepository {
   MockWatchlistRepository() {
     _i1.throwOnMissingStub(this);
   }
@@ -2179,7 +2309,7 @@ class MockWatchlistRepository extends _i1.Mock
   _i6.Future<void> addStatusRecord(
     int? tmdbId,
     _i17.WorkType? type,
-    _i22.StatusRecord? record,
+    _i24.StatusRecord? record,
   ) =>
       (super.noSuchMethod(
         Invocation.method(
@@ -2198,7 +2328,7 @@ class MockWatchlistRepository extends _i1.Mock
   _i6.Future<void> removeStatusRecord(
     int? tmdbId,
     _i17.WorkType? type,
-    _i22.WatchStatus? status,
+    _i24.WatchStatus? status,
   ) =>
       (super.noSuchMethod(
         Invocation.method(

@@ -7,6 +7,7 @@ import '../../data/models/contributor_detail.dart';
 import '../../data/models/status_record.dart';
 import '../../providers/providers.dart';
 import '../../logic/tv_show_display_logic.dart';
+import '../../logic/work_sorting_logic.dart';
 import 'hover_action_button.dart';
 import 'snackbar_utils.dart';
 import 'tv_preferences_dialog.dart'; // For TvNotificationPreferencesExtension
@@ -56,12 +57,67 @@ class _CreditExpansionSectionState extends State<CreditExpansionSection> {
     }
   }
 
+  /// Whether all works share the same single role (e.g. all "Production (1st billed)").
+  /// When true, per-card role labels and group-by-role are suppressed.
+  bool _allRolesUniform = false;
+
   void _processWorks() {
     if (widget.splitByStage) {
       groupedByDept = TvShowDisplayLogic.groupWorksByDepartmentAndStage(widget.works);
     } else {
       groupedByDept = TvShowDisplayLogic.groupWorksByDepartment(widget.works);
     }
+
+    // Detect uniform billing: if every work has exactly the same set of role
+    // labels, there's no useful distinction to show per-card or to group by.
+    _allRolesUniform = _checkAllRolesUniform(widget.works);
+
+    // For companies with mixed billing positions, re-group Production works
+    // by their specific role (e.g. "Production (1st billed)" vs "Production (2nd billed)")
+    if (!_allRolesUniform && !widget.splitByStage && groupedByDept.containsKey('Production')) {
+      final productionWorks = groupedByDept.remove('Production')!;
+      final subGroups = <String, List<Work>>{};
+      for (final work in productionWorks) {
+        final roleLabel = work.contributorRoles.isNotEmpty
+            ? work.contributorRoles.first.role
+            : 'Production';
+        subGroups.putIfAbsent(roleLabel, () => []).add(work);
+      }
+      // Only split if there are actually multiple distinct billing groups
+      if (subGroups.length > 1) {
+        groupedByDept.addAll(subGroups);
+      } else {
+        // Put it back as a single Production group
+        groupedByDept['Production'] = productionWorks;
+      }
+    }
+  }
+
+  /// Returns true if every work has the same role string(s).
+  bool _checkAllRolesUniform(List<Work> works) {
+    if (works.length <= 1) return true;
+    final firstRoles = _roleSignature(works.first);
+    if (firstRoles.isEmpty) return false;
+    return works.skip(1).every((w) => _roleSignature(w) == firstRoles);
+  }
+
+  String _roleSignature(Work work) {
+    final roles = WorkSortingLogic.sortRoles(work.contributorRoles)
+        .map((r) => r.role)
+        .toList();
+    return roles.join('|');
+  }
+
+  /// When all works share a uniform non-1st billing role, returns a
+  /// human-readable description like "Produced by Studio Ghibli".
+  /// Returns null if 1st billed (role == "Production") or not a uniform billing scenario.
+  String? _uniformBillingLabel() {
+    if (!_allRolesUniform || widget.works.isEmpty) return null;
+    final role = widget.works.first.contributorRoles.isNotEmpty
+        ? widget.works.first.contributorRoles.first.role
+        : '';
+    if (role.startsWith('Produced by ')) return role;
+    return null;
   }
 
   /// Sorts departments for TV/Movie credits (without stage splitting)
@@ -166,7 +222,7 @@ class _CreditExpansionSectionState extends State<CreditExpansionSection> {
 
   /// Builds the preview content based on current _groupByRole state
   Widget _buildPreview() {
-    if (_groupByRole) {
+    if (_groupByRole && !_allRolesUniform) {
       // Show grouped by role preview
       final sortedDepts = widget.splitByStage 
           ? _sortDepartments(groupedByDept.keys.toList())
@@ -259,32 +315,46 @@ class _CreditExpansionSectionState extends State<CreditExpansionSection> {
                             ),
                           ),
                         ),
-                        // Group by Role toggle on the right
-                        Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Text('Group by Role', style: theme.textTheme.labelSmall),
-                            Switch(
-                              value: _groupByRole,
-                              onChanged: (val) {
-                                setState(() {
-                                  _groupByRole = val;
-                                });
-                              },
-                              materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                            ),
-                          ],
-                        ),
+                        // Group by Role toggle — hidden when all roles are uniform
+                        if (!_allRolesUniform)
+                          Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Text('Group by Role', style: theme.textTheme.labelSmall),
+                              Switch(
+                                value: _groupByRole,
+                                onChanged: (val) {
+                                  setState(() {
+                                    _groupByRole = val;
+                                  });
+                                },
+                                materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                              ),
+                            ],
+                          ),
                       ],
                     ),
                   ),
                 ),
 
+                // Billing position banner for non-1st-billed companies
+                if (_uniformBillingLabel() != null)
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(16, 0, 16, 4),
+                    child: Text(
+                      '${_uniformBillingLabel()} on all these works',
+                      style: theme.textTheme.labelSmall?.copyWith(
+                        color: theme.colorScheme.onSurfaceVariant,
+                        fontStyle: FontStyle.italic,
+                      ),
+                    ),
+                  ),
+
                 if (_isExpanded) ...[
                   // Expanded Controls (Group by Role toggle moved to header, so remove it from here)
                   // No additional controls needed in expanded state
 
-                  if (_groupByRole)
+                  if (_groupByRole && !_allRolesUniform)
                     ...sortedDepts.map((dept) {
                       final worksInDept = groupedByDept[dept]!;
                       return Column(
@@ -431,6 +501,13 @@ class _CreditExpansionSectionState extends State<CreditExpansionSection> {
       ..sort((a, b) {
         final wa = uniqueWorks[a]!;
         final wb = uniqueWorks[b]!;
+
+        // For companies (non-stage-split): billing position first
+        if (!widget.splitByStage) {
+          final billingCmp = WorkSortingLogic.compareBillingPosition(wa, wb);
+          if (billingCmp != 0) return billingCmp;
+        }
+
         if (wa.releaseDate == null && wb.releaseDate == null) return 0;
         if (wa.releaseDate == null) return 1;
         if (wb.releaseDate == null) return -1;
@@ -504,6 +581,11 @@ class _CreditExpansionSectionState extends State<CreditExpansionSection> {
     
     final List<Work> nonEpisodeWorks = works.where((w) => w.type != WorkType.tvEpisode).toList()
       ..sort((a, b) {
+        // For companies (non-stage-split): billing position first
+        if (!widget.splitByStage) {
+          final billingCmp = WorkSortingLogic.compareBillingPosition(a, b);
+          if (billingCmp != 0) return billingCmp;
+        }
         if (a.releaseDate == null && b.releaseDate == null) return 0;
         if (a.releaseDate == null) return 1;
         if (b.releaseDate == null) return -1;
@@ -600,6 +682,8 @@ class _CreditExpansionSectionState extends State<CreditExpansionSection> {
       isEpisode: isEpisode,
       currentDepartmentFilter: currentDepartmentFilter,
       hideRatings: widget.hideRatings,
+      hideRoles: _allRolesUniform,
+      isCompany: !widget.splitByStage,
       onWorkTap: widget.onWorkTap,
       onAddToWatchlist: widget.onAddToWatchlist,
       watchlistTargetWork: watchlistTargetWork,
@@ -622,6 +706,8 @@ class _CreditWorkItem extends StatefulWidget {
   final List<Widget>? children;
   final String? currentDepartmentFilter;
   final bool hideRatings;
+  final bool hideRoles;
+  final bool isCompany;
   final Function(Work)? onWorkTap;
   final Function(Work)? onAddToWatchlist;
   /// For single episodes displayed as shows, this contains the show info for watchlist
@@ -635,6 +721,8 @@ class _CreditWorkItem extends StatefulWidget {
     this.children,
     this.currentDepartmentFilter,
     required this.hideRatings,
+    this.hideRoles = false,
+    this.isCompany = false,
     this.onWorkTap,
     this.onAddToWatchlist,
     this.watchlistTargetWork,
@@ -677,7 +765,35 @@ class _CreditWorkItemState extends State<_CreditWorkItem> {
     rawRoles = rawRoles.where((r) => !['tv', 'movie', 'tv show', 'general'].contains(r.toLowerCase())).toList();
     
     String finalRolesString = "";
-    if (rawRoles.isNotEmpty) {
+
+    // Company-specific role formatting
+    if (widget.isCompany && rawRoles.isNotEmpty) {
+      final producerLabel = WorkSortingLogic.getProducerLabel(work);
+      final isGrouped = currentDepartmentFilter != null;
+      
+      if (isGrouped) {
+        // Grouped by role: for "Produced by X" groups, show "Producer X of Y"
+        // For "Production" group (1st billed), show nothing
+        if (producerLabel != null) {
+          finalRolesString = producerLabel;
+        }
+        // 1st billed under "Production" group: leave empty (no need to repeat)
+      } else {
+        // Not grouped: 1st billed shows nothing, others show "Producer X of Y (Produced by Z)"
+        if (producerLabel != null) {
+          final producedByRole = rawRoles.firstWhere(
+            (r) => r.startsWith('Produced by '),
+            orElse: () => '',
+          );
+          if (producedByRole.isNotEmpty) {
+            finalRolesString = '$producerLabel ($producedByRole)';
+          } else {
+            finalRolesString = producerLabel;
+          }
+        }
+        // 1st billed: leave empty
+      }
+    } else if (rawRoles.isNotEmpty) {
         List<String> crew = [];
         List<String> cast = [];
         for (var r in rawRoles.toSet()) {
@@ -791,7 +907,7 @@ class _CreditWorkItemState extends State<_CreditWorkItem> {
                               fontSize: 10,
                             ),
                           ),
-                        if (finalRolesString.isNotEmpty && !isEpisode)
+                        if (finalRolesString.isNotEmpty && !isEpisode && !widget.hideRoles)
                          Padding(
                            padding: const EdgeInsets.only(top: 2.0),
                            child: Text(

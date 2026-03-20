@@ -1,10 +1,27 @@
 import '../data/models/contributor.dart';
 import '../data/models/contributor_detail.dart';
+import '../data/models/movie_detail.dart';
 import '../data/models/status_record.dart';
+import '../data/models/tv_detail.dart';
 import '../data/models/watchlist_entry.dart';
 import '../data/repositories/contributor_detail_repository.dart';
+import '../data/repositories/movie_detail_repository.dart';
+import '../data/repositories/tv_detail_repository.dart';
 import '../data/repositories/watchlist_repository.dart';
 import 'connections_models.dart';
+
+/// Helper for tracking the best role an unfollowed person has in a work.
+class _UnfollowedRoleInfo {
+  final String label;
+  final int importance;
+  final Work work;
+
+  const _UnfollowedRoleInfo({
+    required this.label,
+    required this.importance,
+    required this.work,
+  });
+}
 
 /// Result object for the unified episode data computation.
 /// Contains episode connection count, peak episode, breakdown,
@@ -33,12 +50,18 @@ class _EpisodeDataResult {
 class ConnectionsLogic {
   final ContributorDetailRepository _detailRepo;
   final WatchlistRepository _watchlistRepo;
+  final MovieDetailRepository _movieDetailRepo;
+  final TvDetailRepository _tvDetailRepo;
 
   ConnectionsLogic({
     required ContributorDetailRepository detailRepo,
     required WatchlistRepository watchlistRepo,
+    required MovieDetailRepository movieDetailRepo,
+    required TvDetailRepository tvDetailRepo,
   })  : _detailRepo = detailRepo,
-        _watchlistRepo = watchlistRepo;
+        _watchlistRepo = watchlistRepo,
+        _movieDetailRepo = movieDetailRepo,
+        _tvDetailRepo = tvDetailRepo;
 
   /// Compute all connection data from cache.
   ConnectionsData computeAllConnections({
@@ -103,11 +126,14 @@ class ConnectionsLogic {
           workContributorMap[key]![contributorId]!.addAll(rolesForContributor);
         } else {
           // The work came from this contributor's allWorks, so they're in it
-          // Use a fallback role
+          // Use a fallback role based on contributor type
+          final contributor = contributorLookup[contributorId];
+          final isCompany = contributor?.type == ContributorType.company;
           workContributorMap[key]![contributorId]!.add(ContributorRole(
             contributorId: contributorId,
             contributorName: detail.name,
-            role: 'Cast/Crew',
+            role: isCompany ? 'Production' : 'Cast/Crew',
+            department: isCompany ? 'Production' : null,
           ));
         }
 
@@ -1553,5 +1579,195 @@ class ConnectionsLogic {
       ReleaseStatusGroup.released => 'RELEASED',
       ReleaseStatusGroup.ended => 'ENDED',
     };
+  }
+
+  /// Compute unfollowed people who appear across 2+ watchlist works.
+  ///
+  /// Scans cached MovieDetail and TvShowDetail for each watchlist work,
+  /// collects all cast/crew, filters out already-followed contributors,
+  /// and returns groups for people appearing in 2+ watchlist works.
+  List<UnfollowedPersonGroup> computeUnfollowedConnections({
+    required List<Contributor> followedContributors,
+  }) {
+    final followedIds = followedContributors.map((c) => c.tmdbId).toSet();
+
+    // Get all watchlist works
+    final watchlistEntries = _watchlistRepo.getWorks();
+    if (watchlistEntries.isEmpty) return [];
+
+    // Track: personId → { workKey → best role info }
+    final personWorks = <int, Map<String, _UnfollowedRoleInfo>>{};
+    final personMeta = <int, ({String name, String? profilePath})>{};
+
+    for (final entry in watchlistEntries) {
+      if (entry.type == WorkType.movie) {
+        final detail = _movieDetailRepo.getMovieDetail(entry.tmdbId);
+        if (detail == null) continue;
+
+        final workObj = Work(
+          tmdbId: detail.tmdbId,
+          title: detail.title,
+          posterPath: detail.posterPath,
+          type: WorkType.movie,
+          contributorRoles: [],
+        );
+
+        // Scan cast
+        for (final member in detail.cast) {
+          if (followedIds.contains(member.tmdbId)) continue;
+          if (member.tmdbId <= 0) continue;
+          _addUnfollowedPerson(
+            personWorks: personWorks,
+            personMeta: personMeta,
+            personId: member.tmdbId,
+            name: member.name,
+            profilePath: member.profilePath,
+            workKey: _workKey(entry.tmdbId, entry.type),
+            role: member.character,
+            importance: member.order <= 5 ? 4 : 5,
+            work: workObj,
+          );
+        }
+
+        // Scan crew
+        for (final member in detail.crew) {
+          if (followedIds.contains(member.tmdbId)) continue;
+          if (member.tmdbId <= 0) continue;
+          _addUnfollowedPerson(
+            personWorks: personWorks,
+            personMeta: personMeta,
+            personId: member.tmdbId,
+            name: member.name,
+            profilePath: member.profilePath,
+            workKey: _workKey(entry.tmdbId, entry.type),
+            role: member.job,
+            importance: _crewJobImportance(member.job, member.department),
+            work: workObj,
+          );
+        }
+      } else if (entry.type == WorkType.tvShow) {
+        final detail = _tvDetailRepo.getTvShowDetail(entry.tmdbId);
+        if (detail == null) continue;
+
+        final workObj = Work(
+          tmdbId: detail.tmdbId,
+          title: detail.name,
+          posterPath: detail.posterPath,
+          type: WorkType.tvShow,
+          contributorRoles: [],
+        );
+
+        // Scan cast
+        for (final member in detail.cast) {
+          if (followedIds.contains(member.tmdbId)) continue;
+          if (member.tmdbId <= 0) continue;
+          _addUnfollowedPerson(
+            personWorks: personWorks,
+            personMeta: personMeta,
+            personId: member.tmdbId,
+            name: member.name,
+            profilePath: member.profilePath,
+            workKey: _workKey(entry.tmdbId, entry.type),
+            role: member.character,
+            importance: member.order <= 5 ? 4 : 5,
+            work: workObj,
+          );
+        }
+
+        // Scan crew
+        for (final member in detail.crew) {
+          if (followedIds.contains(member.tmdbId)) continue;
+          if (member.tmdbId <= 0) continue;
+          _addUnfollowedPerson(
+            personWorks: personWorks,
+            personMeta: personMeta,
+            personId: member.tmdbId,
+            name: member.name,
+            profilePath: member.profilePath,
+            workKey: _workKey(entry.tmdbId, entry.type),
+            role: member.job,
+            importance: _crewJobImportance(member.job, member.department),
+            work: workObj,
+          );
+        }
+      }
+    }
+
+    // Filter to people appearing in 2+ watchlist works, build groups
+    final groups = <UnfollowedPersonGroup>[];
+    for (final entry in personWorks.entries) {
+      if (entry.value.length < 2) continue;
+
+      final meta = personMeta[entry.key]!;
+      final works = entry.value.values.map((info) => UnfollowedPersonWork(
+        tmdbId: info.work.tmdbId,
+        type: info.work.type,
+        title: info.work.title,
+        posterPath: info.work.posterPath,
+        role: info.label,
+        roleImportance: info.importance,
+      )).toList()
+        ..sort((a, b) => a.roleImportance.compareTo(b.roleImportance));
+
+      final bestImportance = works
+          .map((w) => w.roleImportance)
+          .reduce((a, b) => a < b ? a : b);
+
+      groups.add(UnfollowedPersonGroup(
+        contributorId: entry.key,
+        name: meta.name,
+        profilePath: meta.profilePath,
+        works: works,
+        bestRoleImportance: bestImportance,
+      ));
+    }
+
+    // Sort: most works desc, then best role importance asc
+    groups.sort((a, b) {
+      final countCmp = b.works.length.compareTo(a.works.length);
+      if (countCmp != 0) return countCmp;
+      return a.bestRoleImportance.compareTo(b.bestRoleImportance);
+    });
+
+    return groups;
+  }
+
+  /// Helper to add an unfollowed person's role in a work.
+  void _addUnfollowedPerson({
+    required Map<int, Map<String, _UnfollowedRoleInfo>> personWorks,
+    required Map<int, ({String name, String? profilePath})> personMeta,
+    required int personId,
+    required String name,
+    required String? profilePath,
+    required String workKey,
+    required String role,
+    required int importance,
+    required Work work,
+  }) {
+    personWorks.putIfAbsent(personId, () => {});
+    final existingMeta = personMeta[personId];
+    if (existingMeta == null ||
+        (existingMeta.profilePath == null && profilePath != null)) {
+      personMeta[personId] = (name: name, profilePath: profilePath);
+    }
+
+    final existing = personWorks[personId]![workKey];
+    if (existing == null || importance < existing.importance) {
+      personWorks[personId]![workKey] = _UnfollowedRoleInfo(
+        label: role,
+        importance: importance,
+        work: work,
+      );
+    }
+  }
+
+  /// Map a crew job/department to an importance rank.
+  int _crewJobImportance(String job, String department) {
+    if (department == 'Directing' && _isDirectorRole(job)) return 0;
+    if (department == 'Creator' || job == 'Original Series Creator') return 1;
+    if (department == 'Writing' && _isWriterRole(job)) return 2;
+    if (department == 'Production' && _isProducerRole(job)) return 3;
+    if (department == 'Sound' && _isComposerRole(job)) return 6;
+    return 7;
   }
 }

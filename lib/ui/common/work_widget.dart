@@ -30,6 +30,8 @@ class WorkWidget extends StatefulWidget {
   final String? hoverTitle;
   final String? titleOverride; // Used to show Show Title instead of full Episode Title
   final bool useNewWatchlistButton; // Use the new WatchlistButton component
+  final bool hideRoles; // Suppress role labels under the title
+  final bool companyRoleFormat; // For company detail sections: hide "Production", parenthesize "Produced by X"
 
   const WorkWidget({
     super.key,
@@ -47,6 +49,8 @@ class WorkWidget extends StatefulWidget {
     this.hoverTitle,
     this.titleOverride,
     this.useNewWatchlistButton = true,
+    this.hideRoles = false,
+    this.companyRoleFormat = false,
   });
 
   @override
@@ -325,19 +329,39 @@ class _WorkWidgetState extends State<WorkWidget> {
                       ],
                     ),
                     
-                    if (work.contributorRoles.isNotEmpty)
-                      Padding(
-                        padding: const EdgeInsets.only(top: 2),
-                        child: AdaptiveTooltipText(
-                          WorkSortingLogic.sortRoles(work.contributorRoles).map((r) => r.role).join(', '),
-                          style: theme.textTheme.labelSmall?.copyWith(
-                            fontSize: 10,
-                            color: theme.colorScheme.secondary,
-                            fontWeight: FontWeight.w500,
+                    if (work.contributorRoles.isNotEmpty && !widget.hideRoles)
+                      Builder(builder: (context) {
+                        String roleText;
+                        if (widget.companyRoleFormat) {
+                          // For company detail sections (Upcoming/Latest/Biggest):
+                          // 1st billed: show nothing
+                          // Others: show "(Producer X of Y, Produced by Z)"
+                          final producerLabel = WorkSortingLogic.getProducerLabel(work);
+                          if (producerLabel == null) return const SizedBox.shrink(); // 1st billed
+                          final producedByRole = work.contributorRoles
+                              .map((r) => r.role)
+                              .firstWhere((r) => r.startsWith('Produced by '), orElse: () => '');
+                          if (producedByRole.isNotEmpty) {
+                            roleText = '($producerLabel, $producedByRole)';
+                          } else {
+                            roleText = '($producerLabel)';
+                          }
+                        } else {
+                          roleText = WorkSortingLogic.sortRoles(work.contributorRoles).map((r) => r.role).join(', ');
+                        }
+                        return Padding(
+                          padding: const EdgeInsets.only(top: 2),
+                          child: AdaptiveTooltipText(
+                            roleText,
+                            style: theme.textTheme.labelSmall?.copyWith(
+                              fontSize: 10,
+                              color: theme.colorScheme.secondary,
+                              fontWeight: FontWeight.w500,
+                            ),
+                            maxLines: 1,
                           ),
-                          maxLines: 1,
-                        ),
-                      ),
+                        );
+                      }),
                   ],
                 ),
               ),

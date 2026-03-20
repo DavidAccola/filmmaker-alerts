@@ -8,6 +8,7 @@ import 'package:filmmaker_alerts/data/repositories/movie_cache_repository.dart';
 import 'package:filmmaker_alerts/data/repositories/tv_cache_repository.dart';
 import 'package:filmmaker_alerts/data/repositories/contributor_detail_repository.dart';
 import 'package:filmmaker_alerts/data/repositories/movie_detail_repository.dart';
+import 'package:filmmaker_alerts/data/repositories/tv_detail_repository.dart';
 import 'package:filmmaker_alerts/data/repositories/watchlist_repository.dart';
 import 'package:filmmaker_alerts/data/services/notification_service.dart';
 
@@ -21,6 +22,7 @@ import 'package:filmmaker_alerts/data/services/notification_service.dart';
   TvCacheRepository,
   ContributorDetailRepository,
   MovieDetailRepository,
+  TvDetailRepository,
   NotificationService,
   WatchlistRepository,
 ])

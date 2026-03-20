@@ -148,36 +148,42 @@ class TmdbService {
   }
 
   Future<Map<String, dynamic>> getCompanyTopWorks(int id) async {
-    // Try movies first
     try {
+      // Fetch both movies and TV shows
       final movieResponse = await _dio.get('/discover/movie', queryParameters: {
         'with_companies': id,
         'sort_by': 'popularity.desc',
         'page': 1,
       });
-      final results = movieResponse.data['results'] as List?;
-      
-      if (results != null && results.isNotEmpty) {
-        return movieResponse.data;
+      final movieResults = movieResponse.data['results'] as List? ?? [];
+      for (final r in movieResults) {
+        r['media_type'] = 'movie';
       }
 
-      // If no movies found, try TV Shows (Fallback)
       final tvResponse = await _dio.get('/discover/tv', queryParameters: {
         'with_companies': id,
         'sort_by': 'popularity.desc',
         'page': 1,
       });
-      
-      // Map TV results to use 'title' field (TV uses 'name')
-      final tvData = tvResponse.data;
-      if (tvData['results'] != null) {
-        tvData['results'] = (tvData['results'] as List).map((t) {
-           t['title'] = t['name'];
-           return t;
-        }).toList();
-      }
-      return tvData;
-      
+      final tvResults = tvResponse.data['results'] as List? ?? [];
+      final mappedTvResults = tvResults.map((t) {
+        t['title'] = t['name'];
+        t['media_type'] = 'tv';
+        return t;
+      }).toList();
+
+      // Combine and sort by popularity descending
+      final allResults = [...movieResults, ...mappedTvResults];
+      allResults.sort((a, b) {
+        final popA = (a['popularity'] as num?)?.toDouble() ?? 0.0;
+        final popB = (b['popularity'] as num?)?.toDouble() ?? 0.0;
+        return popB.compareTo(popA);
+      });
+
+      return {
+        'results': allResults,
+        'total_results': allResults.length,
+      };
     } catch (_) {
       return {'results': []};
     }
@@ -200,6 +206,11 @@ class TmdbService {
       
       final movieResults = movieResponse.data['results'] as List? ?? [];
       
+      // Tag movie results with media_type
+      for (final r in movieResults) {
+        r['media_type'] = 'movie';
+      }
+
       // Fetch upcoming TV shows
       final tvResponse = await _dio.get('/discover/tv', queryParameters: {
         'with_companies': id,
@@ -258,12 +269,19 @@ class TmdbService {
 
         final productionCompanies =
             details['production_companies'] as List? ?? [];
-        // Only keep works where this company is in the first 2 positions
-        // (primary producer or close co-producer, not a distant distributor/financier)
         final companyIndex = productionCompanies.indexWhere((c) => c['id'] == companyId);
-        final isTopProducer = companyIndex >= 0 && companyIndex <= 1;
         
-        return isTopProducer ? work : null;
+        if (companyIndex >= 0) {
+          // Inject billing position and 1st-billed company name for downstream display
+          final enriched = Map<String, dynamic>.from(work);
+          enriched['_companyBillingPosition'] = companyIndex + 1; // 1-based
+          enriched['_totalProducers'] = productionCompanies.length;
+          if (companyIndex > 0 && productionCompanies.isNotEmpty) {
+            enriched['_firstBilledCompanyName'] = productionCompanies[0]['name'] as String? ?? '';
+          }
+          return enriched;
+        }
+        return null;
       } catch (_) {
         return work; // keep on error
       }

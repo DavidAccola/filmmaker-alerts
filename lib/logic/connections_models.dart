@@ -212,3 +212,44 @@ class SortedConnectionsData {
     this.discoveryGroups,
   });
 }
+
+/// An unfollowed person who appears across multiple watchlist works.
+/// Used in the "All Connections" mode to surface people worth following.
+class UnfollowedPersonGroup {
+  final int contributorId;
+  final String name;
+  final String? profilePath;
+  /// The watchlist works this person appears in, with their role in each.
+  final List<UnfollowedPersonWork> works;
+  /// Best (lowest) role importance across all works.
+  final int bestRoleImportance;
+  bool isExpanded;
+
+  UnfollowedPersonGroup({
+    required this.contributorId,
+    required this.name,
+    this.profilePath,
+    required this.works,
+    required this.bestRoleImportance,
+    this.isExpanded = false,
+  });
+}
+
+/// A single watchlist work that an unfollowed person appears in.
+class UnfollowedPersonWork {
+  final int tmdbId;
+  final WorkType type;
+  final String title;
+  final String? posterPath;
+  final String role;
+  final int roleImportance;
+
+  const UnfollowedPersonWork({
+    required this.tmdbId,
+    required this.type,
+    required this.title,
+    this.posterPath,
+    required this.role,
+    required this.roleImportance,
+  });
+}

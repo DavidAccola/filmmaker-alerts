@@ -194,6 +194,8 @@ final connectionsLogicProvider = Provider<ConnectionsLogic>((ref) {
   return ConnectionsLogic(
     detailRepo: ref.watch(contributorDetailRepositoryProvider),
     watchlistRepo: ref.watch(watchlistRepositoryProvider),
+    movieDetailRepo: ref.watch(movieDetailRepositoryProvider),
+    tvDetailRepo: ref.watch(tvDetailRepositoryProvider),
   );
 });
 
@@ -203,6 +205,7 @@ final watchlistLogicProvider = Provider<WatchlistLogic>((ref) {
     ref.watch(episodeStatusRepositoryProvider),
     ref.watch(seasonStatusRepositoryProvider),
     ref.watch(preferencesRepositoryProvider),
+    workLogic: ref.watch(workLogicProvider),
   );
 });
 
@@ -493,6 +496,19 @@ final connectionsDataProvider = FutureProvider<ConnectionsData>((ref) async {
     followedContributors: contributors,
     includeHiddenContributors: includeHiddenContributors,
     includeHiddenWatchlistItems: includeHiddenWatchlist,
+  );
+});
+
+/// Unfollowed connections provider - finds people across 2+ watchlist works
+/// who aren't already followed. Invalidates with contributors/watchlist changes.
+final unfollowedConnectionsProvider =
+    FutureProvider<List<UnfollowedPersonGroup>>((ref) async {
+  final contributors = await ref.watch(contributorsProvider.future);
+  await ref.watch(watchlistEntriesProvider.future);
+
+  final logic = ref.watch(connectionsLogicProvider);
+  return logic.computeUnfollowedConnections(
+    followedContributors: contributors,
   );
 });
 

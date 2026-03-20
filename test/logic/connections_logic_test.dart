@@ -216,6 +216,8 @@ void main() {
     // Set up mocks
     final mockDetailRepo = MockContributorDetailRepository();
     final mockWatchlistRepo = MockWatchlistRepository();
+    final mockMovieDetailRepo = MockMovieDetailRepository();
+    final mockTvDetailRepo = MockTvDetailRepository();
 
     for (final c in contributors) {
       when(mockDetailRepo.getContributorDetail(c.tmdbId))
@@ -226,6 +228,8 @@ void main() {
     final logic = ConnectionsLogic(
       detailRepo: mockDetailRepo,
       watchlistRepo: mockWatchlistRepo,
+      movieDetailRepo: mockMovieDetailRepo,
+      tvDetailRepo: mockTvDetailRepo,
     );
 
     return logic.computeAllConnections(
@@ -483,9 +487,13 @@ void main() {
         final mockDetailRepo = MockContributorDetailRepository();
         final mockWatchlistRepo = MockWatchlistRepository();
         when(mockWatchlistRepo.getWorks()).thenReturn([]);
+        final mockMovieDetailRepo = MockMovieDetailRepository();
+        final mockTvDetailRepo = MockTvDetailRepository();
         final logic = ConnectionsLogic(
           detailRepo: mockDetailRepo,
           watchlistRepo: mockWatchlistRepo,
+          movieDetailRepo: mockMovieDetailRepo,
+          tvDetailRepo: mockTvDetailRepo,
         );
 
         final sorted = logic.sortAndGroup(
@@ -1361,9 +1369,13 @@ void main() {
         final mockDetailRepo = MockContributorDetailRepository();
         final mockWatchlistRepo = MockWatchlistRepository();
         when(mockWatchlistRepo.getWorks()).thenReturn([]);
+        final mockMovieDetailRepo = MockMovieDetailRepository();
+        final mockTvDetailRepo = MockTvDetailRepository();
         final logic = ConnectionsLogic(
           detailRepo: mockDetailRepo,
           watchlistRepo: mockWatchlistRepo,
+          movieDetailRepo: mockMovieDetailRepo,
+          tvDetailRepo: mockTvDetailRepo,
         );
 
         final sorted = logic.sortAndGroup(

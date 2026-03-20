@@ -331,20 +331,27 @@ class _ContributorDetailScreenState extends ConsumerState<ContributorDetailScree
     final List<Work> upcomingWorks = _filterByFollowedRoles(detail?.upcomingWorks ?? []); 
     
     if (upcomingWorks.isEmpty) {
-      return _buildPlaceholderContent('Upcoming works will appear here');
+      return _buildPlaceholderContent('No known upcoming works for ${widget.contributor.name}');
     }
     
-    // Sort by: 1) Poster presence (has poster first), 2) Popularity (descending)
+    // Sort by: 1) Billing position for companies, 2) Poster presence (has poster first), 3) Popularity (descending)
+    final isCompany = widget.contributor.type == ContributorType.company;
     final sortedWorks = List<Work>.from(upcomingWorks)..sort((a, b) {
-      // First: poster presence (has poster = true comes first)
+      // For companies: billing position first
+      if (isCompany) {
+        final billingCmp = WorkSortingLogic.compareBillingPosition(a, b);
+        if (billingCmp != 0) return billingCmp;
+      }
+
+      // Poster presence (has poster = true comes first)
       final aHasPoster = a.posterPath != null && a.posterPath!.isNotEmpty;
       final bHasPoster = b.posterPath != null && b.posterPath!.isNotEmpty;
       
       if (aHasPoster != bHasPoster) {
-        return aHasPoster ? -1 : 1; // Has poster comes first
+        return aHasPoster ? -1 : 1;
       }
       
-      // Second: popularity (descending - higher popularity first)
+      // Popularity (descending)
       final aPopularity = a.popularity ?? 0.0;
       final bPopularity = b.popularity ?? 0.0;
       return bPopularity.compareTo(aPopularity);
@@ -375,6 +382,7 @@ class _ContributorDetailScreenState extends ConsumerState<ContributorDetailScree
                 showDateInPoster: true,
                 showRating: false,
                 showDate: false,
+                companyRoleFormat: isCompany,
               ),
             ),
           );
@@ -387,7 +395,11 @@ class _ContributorDetailScreenState extends ConsumerState<ContributorDetailScree
     final List<Work> rawReleases = detail?.latestReleases ?? [];
     
     if (rawReleases.isEmpty) {
-      return _buildPlaceholderContent('Latest releases will appear here');
+      return _buildSection(
+        title: 'Latest Releases',
+        icon: Icons.new_releases,
+        child: _buildPlaceholderContent('Latest releases will appear here'),
+      );
     }
 
     // Get the stored contributor to ensure we have the latest followed roles
@@ -417,7 +429,11 @@ class _ContributorDetailScreenState extends ConsumerState<ContributorDetailScree
     }
 
     if (filteredReleases.isEmpty) {
-      return _buildPlaceholderContent('Latest releases will appear here');
+      return _buildSection(
+        title: 'Latest Releases',
+        icon: Icons.new_releases,
+        child: _buildPlaceholderContent('Latest releases will appear here'),
+      );
     }
 
     // Group TV episodes by show
@@ -449,6 +465,12 @@ class _ContributorDetailScreenState extends ConsumerState<ContributorDetailScree
 
     // Sort all display items by their most recent date
     displayItems.sort((a, b) {
+      // For companies: billing position first
+      if (widget.contributor.type == ContributorType.company && a is Work && b is Work) {
+        final billingCmp = WorkSortingLogic.compareBillingPosition(a, b);
+        if (billingCmp != 0) return billingCmp;
+      }
+
       final DateTime? dateA = a is Work ? a.releaseDate : (a as Map)['episodes'].first.releaseDate;
       final DateTime? dateB = b is Work ? b.releaseDate : (b as Map)['episodes'].first.releaseDate;
       
@@ -501,6 +523,7 @@ class _ContributorDetailScreenState extends ConsumerState<ContributorDetailScree
                   showDateInPoster: true,
                   watchlistButtonPosition: WatchlistButtonPosition.topRight,
                   showWatchlistOnHover: true,
+                  companyRoleFormat: widget.contributor.type == ContributorType.company,
                   titleOverride: item.type == WorkType.tvEpisode ? TvShowDisplayLogic.extractShowTitle(item.title) : null,
                   hoverTitle: item.type == WorkType.tvEpisode ? TvShowDisplayLogic.formatEpisodeInfo(item) : null,
                 ),
@@ -516,7 +539,16 @@ class _ContributorDetailScreenState extends ConsumerState<ContributorDetailScree
     final List<Work> rawBiggestHits = detail?.biggestHits ?? [];
     
     if (rawBiggestHits.isEmpty) {
-      return _buildPlaceholderContent('Biggest hits will appear here');
+      // If detail is loaded (allWorks populated), there are definitively no hits — hide entirely
+      if (detail != null && detail.allWorks != null) {
+        return const SizedBox.shrink();
+      }
+      // Still loading
+      return _buildSection(
+        title: 'Biggest Hits',
+        icon: Icons.star,
+        child: _buildLoadingContent(),
+      );
     }
 
     // Get the stored contributor to ensure we have the latest followed roles
@@ -546,11 +578,20 @@ class _ContributorDetailScreenState extends ConsumerState<ContributorDetailScree
     }
 
     if (filteredHits.isEmpty) {
-      return _buildPlaceholderContent('Biggest hits will appear here');
+      return const SizedBox.shrink();
     }
     
     // rankBiggestHits already returns works sorted by hit score (descending)
     final rankedWorks = WorkSortingLogic.rankBiggestHits(filteredHits);
+
+    // For companies: sort by billing position first, then by hit score
+    if (widget.contributor.type == ContributorType.company) {
+      rankedWorks.sort((a, b) {
+        final billingCmp = WorkSortingLogic.compareBillingPosition(a, b);
+        if (billingCmp != 0) return billingCmp;
+        return 0; // preserve existing hit-score order within same billing
+      });
+    }
     
     final sectionHeight = 310.0;
 
@@ -593,6 +634,7 @@ class _ContributorDetailScreenState extends ConsumerState<ContributorDetailScree
                   showDate: false,
                   watchlistButtonPosition: WatchlistButtonPosition.topRight,
                   showWatchlistOnHover: true,
+                  companyRoleFormat: widget.contributor.type == ContributorType.company,
                   titleOverride: work.type == WorkType.tvEpisode ? TvShowDisplayLogic.extractShowTitle(work.title) : null,
                   hoverTitle: work.type == WorkType.tvEpisode ? TvShowDisplayLogic.formatEpisodeInfo(work) : null,
                 ),

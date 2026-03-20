@@ -315,28 +315,47 @@ class _ConnectionWorkCardState extends ConsumerState<ConnectionWorkCard> {
   Widget _buildContributorChip(
       BuildContext context, MatchedContributor mc) {
     final theme = Theme.of(context);
+    final isCompany = mc.contributorType == ContributorType.company;
+    // Company logos are often dark — use a light background so they're visible
+    final companyBgColor = theme.brightness == Brightness.dark
+        ? Colors.grey[300]!
+        : Colors.white;
     return GestureDetector(
       onTap: () => _onContributorTap(context, mc),
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          // Avatar
+          // Avatar — companies use contain-fit so wide logos aren't clipped
           CircleAvatar(
             radius: 12,
-            backgroundColor: theme.colorScheme.surfaceContainerHighest,
-            backgroundImage: mc.profilePath != null
+            backgroundColor: isCompany
+                ? companyBgColor
+                : theme.colorScheme.surfaceContainerHighest,
+            backgroundImage: mc.profilePath != null && !isCompany
                 ? CachedNetworkImageProvider(
                     'https://image.tmdb.org/t/p/w45${mc.profilePath}')
                 : null,
-            child: mc.profilePath == null
-                ? Icon(
-                    mc.contributorType == ContributorType.company
-                        ? Icons.business
-                        : Icons.person,
-                    size: 14,
-                    color: theme.colorScheme.onSurfaceVariant,
+            child: mc.profilePath != null && isCompany
+                ? ClipOval(
+                    child: Padding(
+                      padding: const EdgeInsets.all(2),
+                      child: CachedNetworkImage(
+                        imageUrl:
+                            'https://image.tmdb.org/t/p/w45${mc.profilePath}',
+                        fit: BoxFit.contain,
+                        errorWidget: (_, __, ___) => Icon(Icons.business,
+                            size: 14,
+                            color: theme.colorScheme.onSurfaceVariant),
+                      ),
+                    ),
                   )
-                : null,
+                : mc.profilePath == null
+                    ? Icon(
+                        isCompany ? Icons.business : Icons.person,
+                        size: 14,
+                        color: theme.colorScheme.onSurfaceVariant,
+                      )
+                    : null,
           ),
           const SizedBox(width: 4),
           // Name + role

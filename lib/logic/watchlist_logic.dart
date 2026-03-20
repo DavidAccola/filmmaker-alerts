@@ -6,19 +6,22 @@ import '../data/repositories/watchlist_repository.dart';
 import '../data/repositories/episode_status_repository.dart';
 import '../data/repositories/season_status_repository.dart';
 import '../data/repositories/preferences_repository.dart';
+import 'work_logic.dart';
 
 class WatchlistLogic {
   final WatchlistRepository _watchlistRepo;
   final EpisodeStatusRepository _episodeRepo;
   final SeasonStatusRepository _seasonRepo;
   final PreferencesRepository _preferencesRepo;
+  final WorkLogic? _workLogic;
 
   WatchlistLogic(
     this._watchlistRepo,
     this._episodeRepo,
     this._seasonRepo,
-    this._preferencesRepo,
-  );
+    this._preferencesRepo, {
+    WorkLogic? workLogic,
+  }) : _workLogic = workLogic;
 
   /// Add a work to the watchlist
   Future<WatchlistEntry> addWorkToWatchlist({
@@ -55,7 +58,7 @@ class WatchlistLogic {
       );
     }
 
-    return await _watchlistRepo.addWork(
+    final entry = await _watchlistRepo.addWork(
       tmdbId: tmdbId,
       type: type,
       title: title,
@@ -66,6 +69,30 @@ class WatchlistLogic {
       releaseNotificationPrefs: releaseNotificationPrefs ?? defaultReleasePrefs,
       tvNotificationPrefs: tvNotificationPrefs ?? defaultTvPrefs,
     );
+
+    // Fire-and-forget: fetch full cast/crew detail so "All Connections"
+    // can find unfollowed people in this work without waiting for the
+    // user to open the detail page.
+    if (_workLogic != null) {
+      _fetchDetailInBackground(tmdbId, type);
+    }
+
+    return entry;
+  }
+
+  /// Fetch MovieDetail or TvShowDetail in the background (best-effort).
+  void _fetchDetailInBackground(int tmdbId, WorkType type) {
+    Future(() async {
+      try {
+        if (type == WorkType.movie) {
+          await _workLogic!.fetchAndCacheMovieDetail(tmdbId);
+        } else if (type == WorkType.tvShow) {
+          await _workLogic!.fetchAndCacheTvShowDetail(tmdbId);
+        }
+      } catch (_) {
+        // Best effort — detail will be fetched on next refresh or detail page visit
+      }
+    });
   }
 
   /// Remove a work from the watchlist

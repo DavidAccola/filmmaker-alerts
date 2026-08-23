@@ -7,6 +7,7 @@ import '../../data/models/contributor_detail.dart';
 import '../../data/models/status_record.dart';
 import '../../providers/providers.dart';
 import 'status_colors.dart';
+import 'half_star_rating.dart';
 import 'snackbar_utils.dart';
 import '../screens/show_configuration_screen.dart';
 import '../screens/collection_configuration_screen.dart';
@@ -309,6 +310,22 @@ class _WatchlistListCardState extends ConsumerState<WatchlistListCard> {
                 ),
 
                 const SizedBox(width: 4),
+
+                // Rating badge (shown when rated)
+                Builder(builder: (context) {
+                  final ratingLogic = ref.read(ratingLogicProvider);
+                  final effective = ratingLogic.effectiveRating(entry);
+                  final isComputed = effective != null && !ratingLogic.isManualRating(entry);
+                  if (effective == null) return const SizedBox.shrink();
+                  return Padding(
+                    padding: const EdgeInsets.only(right: 4),
+                    child: RatingBadge(
+                      value: effective,
+                      isComputed: isComputed,
+                      fontSize: 11,
+                    ),
+                  );
+                }),
 
                 // Status buttons
                 _buildStatusIcon(

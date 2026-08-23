@@ -23,6 +23,8 @@ import '../common/runtime_display.dart';
 import '../common/adaptive_tooltip_text.dart';
 import '../common/contributor_hover_card.dart';
 import '../common/department_selection_dialog.dart';
+import '../common/half_star_rating.dart';
+import '../common/rating_prompt.dart';
 
 class TvShowDetailScreen extends ConsumerStatefulWidget {
   final int showId;
@@ -40,6 +42,7 @@ class TvShowDetailScreen extends ConsumerStatefulWidget {
 
 class _TvShowDetailScreenState extends ConsumerState<TvShowDetailScreen> {
   bool _isPosterHovered = false;
+  bool _ratingBusy = false;
   bool _isRefreshing = false;
 
   @override
@@ -430,7 +433,113 @@ class _TvShowDetailScreenState extends ConsumerState<TvShowDetailScreen> {
           tmdbId: showDetail.tmdbId,
           workType: WorkType.tvShow,
         ),
+
+        // My rating (shown when in watchlist)
+        _buildMyRatingRow(showDetail),
       ],
+    );
+  }
+
+  Widget _buildMyRatingRow(TvShowDetail showDetail) {
+    final watchlistLogic = ref.read(watchlistLogicProvider);
+    final entry = watchlistLogic.getWork(showDetail.tmdbId, WorkType.tvShow);
+    if (entry == null) return const SizedBox.shrink();
+
+    final ratingLogic = ref.read(ratingLogicProvider);
+    final effectiveRating = ratingLogic.effectiveRating(entry);
+    final isManual = ratingLogic.isManualRating(entry);
+
+    return Padding(
+      padding: const EdgeInsets.only(top: 8),
+      child: Row(
+        children: [
+          Text(
+            'My rating:',
+            style: Theme.of(context).textTheme.bodySmall?.copyWith(
+              color: Theme.of(context).colorScheme.onSurfaceVariant,
+            ),
+          ),
+          const SizedBox(width: 8),
+          if (effectiveRating != null)
+            HalfStarRating(
+              value: entry.userRating, // interactive only on manual
+              starSize: 18,
+              onChanged: isManual ? (v) async {
+                if (_ratingBusy) return;
+                _ratingBusy = true;
+                try {
+                  await ratingLogic.setWorkRating(entry, v);
+                  if (mounted) setState(() {});
+                } finally {
+                  _ratingBusy = false;
+                }
+              } : null,
+            )
+          else
+            TextButton.icon(
+              onPressed: () async {
+                if (_ratingBusy) return;
+                _ratingBusy = true;
+                try {
+                  final result = await showRatingPrompt(
+                    context,
+                    title: showDetail.name,
+                    ratingContext: RatingContext.tvShow,
+                  );
+                  if (result?.rating != null && mounted) {
+                    await ratingLogic.setWorkRating(entry, result!.rating);
+                    if (mounted) setState(() {});
+                  }
+                } finally {
+                  _ratingBusy = false;
+                }
+              },
+              icon: const Icon(Icons.star_outline, size: 16),
+              label: const Text('Rate'),
+              style: TextButton.styleFrom(
+                padding: EdgeInsets.zero,
+                tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+              ),
+            ),
+          if (effectiveRating != null) ...[
+            const SizedBox(width: 4),
+            Text(
+              !isManual ? '(avg)' : '',
+              style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                color: Theme.of(context).colorScheme.onSurfaceVariant,
+                fontSize: 10,
+              ),
+            ),
+            InkWell(
+              onTap: () async {
+                if (_ratingBusy) return;
+                _ratingBusy = true;
+                try {
+                  final result = await showRatingPrompt(
+                    context,
+                    title: showDetail.name,
+                    ratingContext: RatingContext.tvShow,
+                    existingRating: entry.userRating,
+                    allowClear: entry.userRating != null,
+                  );
+                  if (result != null && mounted) {
+                    if (result.cleared) {
+                      await ratingLogic.setWorkRating(entry, null);
+                    } else if (result.rating != null) {
+                      await ratingLogic.setWorkRating(entry, result.rating);
+                    }
+                    if (mounted) setState(() {});
+                  }
+                } finally {
+                  _ratingBusy = false;
+                }
+              },
+              child: Icon(Icons.edit, size: 14,
+                  color: Theme.of(context).colorScheme.onSurfaceVariant),
+            ),
+          ],
+        ],
+      ),
     );
   }
 

@@ -21,13 +21,14 @@ class SeasonStatusEntryAdapter extends TypeAdapter<SeasonStatusEntry> {
       seasonNumber: fields[1] as int,
       airDate: fields[2] as DateTime?,
       statusRecords: (fields[3] as List?)?.cast<StatusRecord>(),
+      userRating: fields[4] as int?,
     );
   }
 
   @override
   void write(BinaryWriter writer, SeasonStatusEntry obj) {
     writer
-      ..writeByte(4)
+      ..writeByte(5)
       ..writeByte(0)
       ..write(obj.showId)
       ..writeByte(1)
@@ -35,7 +36,9 @@ class SeasonStatusEntryAdapter extends TypeAdapter<SeasonStatusEntry> {
       ..writeByte(2)
       ..write(obj.airDate)
       ..writeByte(3)
-      ..write(obj.statusRecords);
+      ..write(obj.statusRecords)
+      ..writeByte(4)
+      ..write(obj.userRating);
   }
 
   @override

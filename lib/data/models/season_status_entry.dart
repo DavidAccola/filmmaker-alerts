@@ -17,11 +17,15 @@ class SeasonStatusEntry extends HiveObject {
   @HiveField(3)
   late List<StatusRecord> statusRecords;
 
+  @HiveField(4)
+  late int? userRating;
+
   SeasonStatusEntry({
     required this.showId,
     required this.seasonNumber,
     this.airDate,
     List<StatusRecord>? statusRecords,
+    this.userRating,
   }) : statusRecords = statusRecords ?? [];
 
   String get uniqueKey => '${showId}_$seasonNumber';

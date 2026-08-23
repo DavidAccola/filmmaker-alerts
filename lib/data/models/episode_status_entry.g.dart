@@ -23,13 +23,14 @@ class EpisodeStatusEntryAdapter extends TypeAdapter<EpisodeStatusEntry> {
       episodeTitle: fields[3] as String,
       airDate: fields[4] as DateTime?,
       statusRecords: (fields[5] as List?)?.cast<StatusRecord>(),
+      userRating: fields[6] as int?,
     );
   }
 
   @override
   void write(BinaryWriter writer, EpisodeStatusEntry obj) {
     writer
-      ..writeByte(6)
+      ..writeByte(7)
       ..writeByte(0)
       ..write(obj.showId)
       ..writeByte(1)
@@ -41,7 +42,9 @@ class EpisodeStatusEntryAdapter extends TypeAdapter<EpisodeStatusEntry> {
       ..writeByte(4)
       ..write(obj.airDate)
       ..writeByte(5)
-      ..write(obj.statusRecords);
+      ..write(obj.statusRecords)
+      ..writeByte(6)
+      ..write(obj.userRating);
   }
 
   @override

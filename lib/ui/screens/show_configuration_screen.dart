@@ -14,6 +14,7 @@ import '../common/expand_poster_button.dart';
 import '../common/adaptive_tooltip_text.dart';
 import '../common/notification_prefs_chips.dart';
 import '../common/status_colors.dart';
+import '../common/rating_prompt.dart';
 import 'tv_show_detail_screen.dart';
 
 class ShowConfigurationScreen extends ConsumerStatefulWidget {
@@ -1379,6 +1380,15 @@ class _ShowConfigurationScreenState
   Future<void> _handleSave() async {
     final logic = ref.read(watchlistLogicProvider);
     final episodeRepo = ref.read(episodeStatusRepositoryProvider);
+    final ratingLogic = ref.read(ratingLogicProvider);
+
+    // Snapshot which episodes were already watched BEFORE saving
+    final previouslyWatched = <String>{};
+    for (final ep in episodeRepo.getEpisodesByShow(widget.showId)) {
+      if (ep.statusRecords.any((r) => r.status == WatchStatus.watched)) {
+        previouslyWatched.add('${ep.seasonNumber}_${ep.episodeNumber}');
+      }
+    }
 
     // Check for unreleased content
     bool hasUnreleased = false;
@@ -1415,6 +1425,83 @@ class _ShowConfigurationScreenState
             status,
           );
         }
+      }
+    }
+
+    // Determine what's newly watched after saving
+    if (mounted) {
+      final allEpisodes = episodeRepo.getEpisodesByShow(widget.showId);
+      final nowWatched = allEpisodes
+          .where((ep) => ep.statusRecords.any((r) => r.status == WatchStatus.watched))
+          .toList();
+      final newlyWatchedEps = nowWatched
+          .where((ep) => !previouslyWatched.contains('${ep.seasonNumber}_${ep.episodeNumber}'))
+          .toList();
+
+      if (newlyWatchedEps.isNotEmpty) {
+        // Group by season to decide prompt level
+        final newlyWatchedSeasons = newlyWatchedEps.map((e) => e.seasonNumber).toSet();
+
+        // Check if the whole show is now watched
+        final allEpCount = allEpisodes.length;
+        final watchedCount = nowWatched.length;
+        final wholeShowWatched = allEpCount > 0 && watchedCount >= allEpCount;
+
+        if (wholeShowWatched) {
+          // Prompt for show-level rating
+          final watchlistEntry = ref.read(watchlistLogicProvider).getWork(widget.showId, WorkType.tvShow);
+          if (watchlistEntry != null) {
+            final result = await showRatingPrompt(
+              context,
+              title: widget.showTitle,
+              ratingContext: RatingContext.tvShow,
+              existingRating: watchlistEntry.userRating,
+              allowClear: watchlistEntry.userRating != null,
+            );
+            if (result != null && mounted) {
+              if (result.cleared) {
+                await ratingLogic.setWorkRating(watchlistEntry, null);
+              } else if (result.rating != null) {
+                await ratingLogic.setWorkRating(watchlistEntry, result.rating);
+              }
+            }
+          }
+        } else if (newlyWatchedSeasons.length == 1) {
+          final seasonNumber = newlyWatchedSeasons.first;
+          // Check if the whole season is now watched
+          final seasonEps = allEpisodes.where((e) => e.seasonNumber == seasonNumber).toList();
+          final seasonWatchedCount = nowWatched.where((e) => e.seasonNumber == seasonNumber).length;
+          final wholeSeasonWatched = seasonEps.isNotEmpty && seasonWatchedCount >= seasonEps.length;
+
+          if (wholeSeasonWatched && newlyWatchedEps.length > 1) {
+            // Bulk-marked a full season — prompt season rating
+            final result = await showRatingPrompt(
+              context,
+              title: '${widget.showTitle} — Season $seasonNumber',
+              ratingContext: RatingContext.tvSeason,
+            );
+            if (result?.rating != null && mounted) {
+              await ratingLogic.setSeasonRating(widget.showId, seasonNumber, result!.rating);
+            }
+          } else if (newlyWatchedEps.length == 1) {
+            // Single episode marked watched — prompt episode rating
+            final ep = newlyWatchedEps.first;
+            final result = await showRatingPrompt(
+              context,
+              title: 'S${ep.seasonNumber}E${ep.episodeNumber} — ${ep.episodeTitle}',
+              ratingContext: RatingContext.tvEpisode,
+            );
+            if (result?.rating != null && mounted) {
+              await ratingLogic.setEpisodeRating(
+                widget.showId,
+                ep.seasonNumber,
+                ep.episodeNumber,
+                result!.rating,
+              );
+            }
+          }
+        }
+        // Multiple seasons newly watched — skip prompts to avoid spam
       }
     }
 

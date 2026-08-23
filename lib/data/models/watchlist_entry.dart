@@ -138,6 +138,9 @@ class WatchlistEntry extends HiveObject {
   @HiveField(17)
   late DateTime? lastViewedAt;
 
+  @HiveField(18)
+  late int? userRating;
+
   WatchlistEntry({
     required this.tmdbId,
     required this.type,
@@ -157,6 +160,7 @@ class WatchlistEntry extends HiveObject {
     this.releaseNotificationPrefs,
     this.tvNotificationPrefs,
     this.lastViewedAt,
+    this.userRating,
   })  : followedContributors = followedContributors ?? [],
         statusRecords = statusRecords ?? [];
 

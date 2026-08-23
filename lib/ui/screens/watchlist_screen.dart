@@ -12,6 +12,7 @@ import '../common/watchlist_list_card.dart';
 import '../common/watchlist_rank_card.dart';
 import '../common/snackbar_utils.dart';
 import '../common/rewatch_dialog.dart';
+import '../common/rating_prompt.dart';
 import '../common/tmdb_attribution.dart';
 import 'add_contributor_screen.dart';
 import 'movie_detail_screen.dart';
@@ -31,6 +32,7 @@ enum WatchlistSortOption {
   userRank,
   alphabetical,
   releaseDate,
+  myRating,
 }
 
 class WatchlistScreen extends ConsumerStatefulWidget {
@@ -226,6 +228,7 @@ class _WatchlistScreenState extends ConsumerState<WatchlistScreen>
       case WatchlistSortOption.userRank: return 'userRank';
       case WatchlistSortOption.alphabetical: return 'alphabetical';
       case WatchlistSortOption.releaseDate: return 'releaseDate';
+      case WatchlistSortOption.myRating: return 'myRating';
     }
   }
 
@@ -235,6 +238,7 @@ class _WatchlistScreenState extends ConsumerState<WatchlistScreen>
       case 'userRank': return WatchlistSortOption.userRank;
       case 'alphabetical': return WatchlistSortOption.alphabetical;
       case 'releaseDate': return WatchlistSortOption.releaseDate;
+      case 'myRating': return WatchlistSortOption.myRating;
       case 'addOrder':
       default:
         return WatchlistSortOption.addOrder;
@@ -585,6 +589,10 @@ class _WatchlistScreenState extends ConsumerState<WatchlistScreen>
                       const PopupMenuItem(
                         value: WatchlistSortOption.releaseDate,
                         child: Text('Release Date'),
+                      ),
+                      const PopupMenuItem(
+                        value: WatchlistSortOption.myRating,
+                        child: Text('My Rating'),
                       ),
                     ],
                   ),
@@ -1365,6 +1373,22 @@ class _WatchlistScreenState extends ConsumerState<WatchlistScreen>
           return bDate.compareTo(aDate); // Newest first
         });
         break;
+      case WatchlistSortOption.myRating:
+        final ratingLogic = ref.read(ratingLogicProvider);
+        sorted.sort((a, b) {
+          final aRating = ratingLogic.effectiveRating(a);
+          final bRating = ratingLogic.effectiveRating(b);
+          // Rated items first, highest rating first
+          if (aRating != null && bRating != null) {
+            return bRating.compareTo(aRating);
+          } else if (aRating != null) {
+            return -1;
+          } else if (bRating != null) {
+            return 1;
+          }
+          return a.addRank.compareTo(b.addRank);
+        });
+        break;
     }
 
     return sorted;
@@ -1822,7 +1846,24 @@ class _WatchlistScreenState extends ConsumerState<WatchlistScreen>
           if (updatedDates.isEmpty) {
             // User deleted all watches - unmark as watched
             await logic.removeStatusFromWork(entry.tmdbId, entry.type, status);
-            
+
+            // Prompt to clear rating if one exists
+            if (mounted && entry.userRating != null) {
+              final clearResult = await showRatingPrompt(
+                context,
+                title: entry.title,
+                ratingContext: entry.type == WorkType.tvShow
+                    ? RatingContext.tvShow
+                    : RatingContext.movie,
+                existingRating: entry.userRating,
+                allowClear: true,
+              );
+              if (clearResult?.cleared == true && mounted) {
+                final ratingLogic = ref.read(ratingLogicProvider);
+                await ratingLogic.setWorkRating(entry, null);
+              }
+            }
+
             if (mounted) {
               showSimpleSnackBar(
                 context,
@@ -1839,7 +1880,28 @@ class _WatchlistScreenState extends ConsumerState<WatchlistScreen>
               status,
               watchDates: updatedDates,
             );
-            
+
+            // Offer to update rating on re-watch
+            if (mounted) {
+              final ratingResult = await showRatingPrompt(
+                context,
+                title: entry.title,
+                ratingContext: entry.type == WorkType.tvShow
+                    ? RatingContext.tvShow
+                    : RatingContext.movie,
+                existingRating: entry.userRating,
+                allowClear: entry.userRating != null,
+              );
+              if (ratingResult != null && mounted) {
+                final ratingLogic = ref.read(ratingLogicProvider);
+                if (ratingResult.cleared) {
+                  await ratingLogic.setWorkRating(entry, null);
+                } else if (ratingResult.rating != null) {
+                  await ratingLogic.setWorkRating(entry, ratingResult.rating);
+                }
+              }
+            }
+
             if (mounted) {
               showSimpleSnackBar(
                 context,
@@ -1858,7 +1920,22 @@ class _WatchlistScreenState extends ConsumerState<WatchlistScreen>
           status,
           watchDates: [DateTime.now()],
         );
-        
+
+        // Prompt for rating on first watch
+        if (mounted) {
+          final ratingResult = await showRatingPrompt(
+            context,
+            title: entry.title,
+            ratingContext: entry.type == WorkType.tvShow
+                ? RatingContext.tvShow
+                : RatingContext.movie,
+          );
+          if (ratingResult?.rating != null && mounted) {
+            final ratingLogic = ref.read(ratingLogicProvider);
+            await ratingLogic.setWorkRating(entry, ratingResult!.rating);
+          }
+        }
+
         if (mounted) {
           showSimpleSnackBar(
             context,

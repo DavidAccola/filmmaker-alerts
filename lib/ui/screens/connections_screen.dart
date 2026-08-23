@@ -1,16 +1,13 @@
-import 'dart:ui' show PointerDeviceKind;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:cached_network_image/cached_network_image.dart';
+import '../../data/models/contributor.dart';
 import '../../data/models/contributor_detail.dart';
-import '../../data/models/preferences.dart';
-import '../../logic/connections_logic.dart';
 import '../../logic/connections_models.dart';
 import '../../providers/providers.dart';
 import '../common/snackbar_utils.dart';
-import '../common/connection_work_card.dart';
-import '../common/pair_group_card.dart';
-import '../common/unfollowed_person_card.dart';
-import '../common/tv_preferences_dialog.dart';
+import '../common/tmdb_attribution.dart';
+import 'contributor_detail_screen.dart';
 
 class ConnectionsScreen extends ConsumerStatefulWidget {
   const ConnectionsScreen({super.key});
@@ -21,328 +18,61 @@ class ConnectionsScreen extends ConsumerStatefulWidget {
 
 class _ConnectionsScreenState extends ConsumerState<ConnectionsScreen>
     with TickerProviderStateMixin {
-  TabController? _tabController;
-  bool _isInitialized = false;
+  late TabController _tabController;
 
-  // Person filter state
+  // Contributor filter (set from Contributors tab tap)
   int? _selectedContributorId;
+  String? _selectedContributorName;
 
-  // Watchlist tab mode: false = Contributors (followed), true = All Connections (unfollowed)
-  bool _showAllConnections = false;
+  // Feed type filter: null = both, 'movie' = movies only, 'tv' = TV only
+  String? _typeFilter;
+
+  // Era filter: false = all time, true = recent (last 5 years)
+  bool _recentOnly = false;
 
   // Refresh state
   bool _isRefreshing = false;
   int _refreshCompleted = 0;
   int _refreshTotal = 0;
 
-  // Discovery lazy loading state
-  int _discoveryLoadedCount = 20;
-  bool _isLoadingMore = false;
-  final ScrollController _discoveryScrollController = ScrollController();
+  // Auto-fetch on cold cache
+  bool _autoFetchTriggered = false;
 
-  void _initTabController(int initialIndex) {
-    if (_isInitialized) return;
-    _isInitialized = true;
-
-    _tabController = TabController(
-      length: 2,
-      vsync: this,
-      initialIndex: initialIndex,
-    );
-    _tabController!.addListener(_onTabChanged);
-  }
-
-  void _onTabChanged() {
-    if (_tabController != null && !_tabController!.indexIsChanging) {
-      final currentProviderValue = ref.read(connectionsTabProvider);
-      if (currentProviderValue != _tabController!.index) {
-        ref.read(connectionsTabProvider.notifier).setTab(_tabController!.index);
-      }
-    }
+  @override
+  void initState() {
+    super.initState();
+    _tabController = TabController(length: 2, vsync: this);
   }
 
   @override
   void dispose() {
-    _tabController?.removeListener(_onTabChanged);
-    _tabController?.dispose();
-    _discoveryScrollController.dispose();
+    _tabController.dispose();
     super.dispose();
   }
 
-  /// Compute the initial tab index: default 0 (Connections),
-  /// but if Connections is empty and Discovery has results, use 1.
-  int _computeInitialTab(ConnectionsData data) {
-    if (data.watchlistItems.isEmpty && data.discoveryItems.isNotEmpty) {
-      return 1;
+  // ---------------------------------------------------------------------------
+  // Auto-fetch on cold cache
+  // ---------------------------------------------------------------------------
+
+  void _maybeAutoFetch(List<Contributor> contributors) {
+    if (_autoFetchTriggered) return;
+    _autoFetchTriggered = true;
+
+    final detailRepo = ref.read(contributorDetailRepositoryProvider);
+    final hasCache = contributors.any((c) => detailRepo.isCached(c.tmdbId));
+    if (!hasCache) {
+      // Cold cache — trigger refresh silently
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) _handleRefresh(silent: true);
+      });
     }
-    return 0;
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final connectionsAsync = ref.watch(connectionsDataProvider);
-    final prefsAsync = ref.watch(preferencesProvider);
-    final connectionsTab = ref.watch(connectionsTabProvider);
-
-    return connectionsAsync.when(
-      loading: () => const Scaffold(
-        body: Center(child: CircularProgressIndicator()),
-      ),
-      error: (err, stack) {
-        // Show error state with retry
-        WidgetsBinding.instance.addPostFrameCallback((_) {
-          if (context.mounted) {
-            showSimpleSnackBar(context, 'Error loading connections: $err');
-          }
-        });
-        return Scaffold(
-          appBar: AppBar(title: const Text('Watchlist Connections')),
-          body: Center(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                const Text('Failed to load connections'),
-                const SizedBox(height: 16),
-                FilledButton.icon(
-                  onPressed: () => ref.invalidate(connectionsDataProvider),
-                  icon: const Icon(Icons.refresh),
-                  label: const Text('Retry'),
-                ),
-              ],
-            ),
-          ),
-        );
-      },
-      data: (connectionsData) {
-        final prefs = prefsAsync.value ?? Preferences();
-        final sortMode = prefs.connectionsSortOrder ?? 'connectionCount';
-        final groupByRelease = prefs.connectionsGroupByRelease ??
-            (sortMode == 'releaseDate');
-
-        // Sort and group the data
-        final logic = ref.read(connectionsLogicProvider);
-        final sortedData = logic.sortAndGroup(
-          data: connectionsData,
-          sortMode: sortMode,
-          groupByRelease: groupByRelease,
-          contributorFilter: _selectedContributorId,
-        );
-
-        // Initialize tab controller with computed initial index
-        if (!_isInitialized) {
-          final initialTab = _computeInitialTab(connectionsData);
-          // If provider already has a value different from default, use it
-          final providerTab = ref.read(connectionsTabProvider);
-          _initTabController(providerTab == 0 ? initialTab : providerTab);
-          if (initialTab != 0 && providerTab == 0) {
-            WidgetsBinding.instance.addPostFrameCallback((_) {
-              if (mounted) {
-                ref.read(connectionsTabProvider.notifier).setTab(initialTab);
-              }
-            });
-          }
-        }
-
-        // Sync TabController with provider when provider changes externally
-        if (_tabController != null && _tabController!.index != connectionsTab) {
-          _tabController!.animateTo(connectionsTab);
-        }
-
-        if (_tabController == null) {
-          return const Scaffold(
-            body: Center(child: CircularProgressIndicator()),
-          );
-        }
-
-        return Scaffold(
-          appBar: AppBar(
-            titleSpacing: 0,
-            title: _buildToolbar(prefs, connectionsData),
-            bottom: PreferredSize(
-              preferredSize: const Size.fromHeight(120),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  _buildSummaryStatsBar(connectionsData.stats),
-                  _buildPersonFilterChipBar(connectionsData.chipBarContributors),
-                  TabBar(
-                    controller: _tabController!,
-                    labelStyle: const TextStyle(fontWeight: FontWeight.w500),
-                    onTap: (index) {
-                      ref.read(connectionsTabProvider.notifier).setTab(index);
-                    },
-                    tabs: const [
-                      Tab(text: 'Watchlist'),
-                      Tab(text: 'Discovery'),
-                    ],
-                  ),
-                ],
-              ),
-            ),
-          ),
-          body: TabBarView(
-            controller: _tabController!,
-            children: [
-              _buildConnectionsTab(sortedData),
-              _buildDiscoveryTab(sortedData),
-            ],
-          ),
-        );
-      },
-    );
   }
 
   // ---------------------------------------------------------------------------
-  // 7.2 — Toolbar: Display Options + Refresh
+  // Refresh
   // ---------------------------------------------------------------------------
 
-  Widget _buildToolbar(Preferences prefs, ConnectionsData data) {
-    return Row(
-      children: [
-        const SizedBox(width: 16),
-        const Text('Watchlist Connections'),
-        // Refresh button — right next to title, matching Following screen pattern
-        _buildRefreshButton(),
-        const Spacer(),
-        // Display Options button
-        _buildDisplayOptionsButton(prefs),
-      ],
-    );
-  }
-
-  Widget _buildDisplayOptionsButton(Preferences prefs) {
-    final currentSort = prefs.connectionsSortOrder ?? 'connectionCount';
-    final groupByRelease = prefs.connectionsGroupByRelease ??
-        (currentSort == 'releaseDate');
-    final showHiddenContributors =
-        prefs.connectionsShowHiddenContributors ?? false;
-    final showHiddenWatchlist =
-        prefs.connectionsShowHiddenWatchlist ?? false;
-
-    return PopupMenuButton<String>(
-      icon: const Icon(Icons.tune),
-      tooltip: 'Display Options',
-      onSelected: (value) async {
-        final repo = ref.read(preferencesRepositoryProvider);
-        final currentPrefs =
-            (await ref.read(preferencesProvider.future));
-
-        if (value == 'sort_connectionCount') {
-          currentPrefs.connectionsSortOrder = 'connectionCount';
-          // Default group-by-release to off for connection count sort
-          currentPrefs.connectionsGroupByRelease = false;
-        } else if (value == 'sort_releaseDate') {
-          currentPrefs.connectionsSortOrder = 'releaseDate';
-          // Default group-by-release to on for release date sort
-          currentPrefs.connectionsGroupByRelease = true;
-        } else if (value == 'toggle_group') {
-          currentPrefs.connectionsGroupByRelease = !groupByRelease;
-        } else if (value == 'toggle_hidden_contributors') {
-          currentPrefs.connectionsShowHiddenContributors =
-              !showHiddenContributors;
-        } else if (value == 'toggle_hidden_watchlist') {
-          currentPrefs.connectionsShowHiddenWatchlist =
-              !showHiddenWatchlist;
-        }
-
-        await repo.savePreferences(currentPrefs);
-        ref.invalidate(preferencesProvider);
-        if (value == 'toggle_hidden_contributors' ||
-            value == 'toggle_hidden_watchlist') {
-          ref.invalidate(connectionsDataProvider);
-        }
-      },
-      itemBuilder: (context) {
-        return [
-          const PopupMenuItem(
-            enabled: false,
-            height: 32,
-            child: Text('Sort by',
-                style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
-          ),
-          PopupMenuItem(
-            value: 'sort_connectionCount',
-            child: Row(
-              children: [
-                if (currentSort == 'connectionCount')
-                  const Icon(Icons.check, size: 18),
-                const SizedBox(width: 8),
-                const Text('Number of Connections'),
-              ],
-            ),
-          ),
-          PopupMenuItem(
-            value: 'sort_releaseDate',
-            child: Row(
-              children: [
-                if (currentSort == 'releaseDate')
-                  const Icon(Icons.check, size: 18),
-                const SizedBox(width: 8),
-                const Text('Release Date'),
-              ],
-            ),
-          ),
-          const PopupMenuDivider(),
-          CheckedPopupMenuItem(
-            value: 'toggle_group',
-            checked: groupByRelease,
-            child: const Text('Group by Release Status'),
-          ),
-          const PopupMenuDivider(),
-          CheckedPopupMenuItem(
-            value: 'toggle_hidden_contributors',
-            checked: showHiddenContributors,
-            child: const Text('Show Hidden Contributors'),
-          ),
-          CheckedPopupMenuItem(
-            value: 'toggle_hidden_watchlist',
-            checked: showHiddenWatchlist,
-            child: const Text('Show Hidden Watchlist Items'),
-          ),
-        ];
-      },
-    );
-  }
-
-  // ---------------------------------------------------------------------------
-  // 7.7 — Refresh button
-  // ---------------------------------------------------------------------------
-
-  Widget _buildRefreshButton() {
-    if (_isRefreshing) {
-      return Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 12),
-        child: SizedBox(
-          width: 80,
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Text(
-                _refreshTotal > 0
-                    ? '$_refreshCompleted / $_refreshTotal'
-                    : 'Refreshing...',
-                style: Theme.of(context).textTheme.labelSmall,
-              ),
-              const SizedBox(height: 2),
-              LinearProgressIndicator(
-                value: _refreshTotal > 0
-                    ? _refreshCompleted / _refreshTotal
-                    : null,
-              ),
-            ],
-          ),
-        ),
-      );
-    }
-
-    return IconButton(
-      icon: const Icon(Icons.refresh, size: 20),
-      tooltip: 'Refresh All',
-      onPressed: _handleRefresh,
-    );
-  }
-
-  Future<void> _handleRefresh() async {
+  Future<void> _handleRefresh({bool silent = false}) async {
     if (_isRefreshing) return;
 
     setState(() {
@@ -364,546 +94,561 @@ class _ConnectionsScreenState extends ConsumerState<ConnectionsScreen>
         },
       );
 
-      // Fetch MovieDetail/TvShowDetail for watchlist works that aren't cached.
-      // computeUnfollowedConnections reads from these caches to find the full
-      // cast/crew of each work (getPersonCombinedCredits only returns a person's
-      // own roles, not the full cast/crew of each movie/show).
-      await _fetchUncachedWatchlistDetails();
-
       ref.invalidate(contributorsProvider);
-      ref.invalidate(connectionsDataProvider);
-      ref.invalidate(unfollowedConnectionsProvider);
+      ref.invalidate(rankedDiscoveryFeedProvider);
+      ref.invalidate(contributorsByAffinityProvider);
 
-      if (mounted) {
+      if (mounted && !silent) {
         showSimpleSnackBar(context, 'Refresh complete');
       }
     } catch (e) {
-      if (mounted) {
+      if (mounted && !silent) {
         showSimpleSnackBar(context, 'Refresh failed: $e');
       }
     } finally {
       if (mounted) {
-        setState(() {
-          _isRefreshing = false;
-        });
-      }
-    }
-  }
-
-  /// Fetch and cache MovieDetail/TvShowDetail for watchlist works that don't
-  /// have cached detail yet. This populates the full cast/crew data needed
-  /// by the "All Connections" unfollowed-person feature.
-  Future<void> _fetchUncachedWatchlistDetails() async {
-    final watchlistLogic = ref.read(watchlistLogicProvider);
-    final workLogic = ref.read(workLogicProvider);
-    final movieDetailRepo = ref.read(movieDetailRepositoryProvider);
-    final tvDetailRepo = ref.read(tvDetailRepositoryProvider);
-
-    final entries = watchlistLogic.getWatchlistWorks();
-
-    for (final entry in entries) {
-      try {
-        if (entry.type == WorkType.movie) {
-          if (!movieDetailRepo.isCached(entry.tmdbId)) {
-            await workLogic.fetchAndCacheMovieDetail(entry.tmdbId);
-          }
-        } else if (entry.type == WorkType.tvShow) {
-          if (!tvDetailRepo.isShowCached(entry.tmdbId)) {
-            await workLogic.fetchAndCacheTvShowDetail(entry.tmdbId);
-          }
-        }
-      } catch (_) {
-        // Skip individual failures — best effort
+        setState(() => _isRefreshing = false);
       }
     }
   }
 
   // ---------------------------------------------------------------------------
-  // 7.3 — Summary Stats Bar
+  // Dismiss
   // ---------------------------------------------------------------------------
 
-  Widget _buildSummaryStatsBar(ConnectionsStats stats) {
-    final theme = Theme.of(context);
-    final style = theme.textTheme.bodySmall?.copyWith(
-      color: theme.colorScheme.onSurfaceVariant,
+  Future<void> _dismissWork(ConnectionWork work) async {
+    // Use the already-loaded prefs synchronously — no await needed since
+    // preferencesProvider is always loaded by the time the feed is visible.
+    final prefs = ref.read(preferencesProvider).value;
+    if (prefs == null) return; // prefs not yet loaded — shouldn't happen in practice
+    final prefsRepo = ref.read(preferencesRepositoryProvider);
+    final key = '${work.type.name}_${work.tmdbId}';
+    final updated = List<String>.from(prefs.dismissedConnectionIds ?? []);
+    if (!updated.contains(key)) {
+      updated.add(key);
+      prefs.dismissedConnectionIds = updated;
+      await prefsRepo.savePreferences(prefs);
+      ref.invalidate(preferencesProvider);
+      ref.invalidate(rankedDiscoveryFeedProvider);
+    }
+  }
+
+  // ---------------------------------------------------------------------------
+  // Add to watchlist
+  // ---------------------------------------------------------------------------
+
+  Future<void> _addToWatchlist(ConnectionWork work) async {
+    final logic = ref.read(watchlistLogicProvider);
+    await logic.addWorkToWatchlist(
+      tmdbId: work.tmdbId,
+      type: work.type,
+      title: work.title,
+      posterPath: work.posterPath,
+      releaseDate: work.releaseDate,
     );
-
-    final parts = <String>[
-      '${stats.watchlistCount} on watchlist',
-      '${stats.discoveryCount} to discover',
-      '${stats.peopleCount} people',
-    ];
-    if (stats.pendingCount > 0) {
-      parts.add('${stats.pendingCount} pending');
+    ref.invalidate(watchlistEntriesProvider);
+    ref.invalidate(rankedDiscoveryFeedProvider);
+    if (mounted) {
+      showSimpleSnackBar(context, '${work.title} added to watchlist');
     }
+  }
 
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
-      child: Text(
-        parts.join(' · '),
-        style: style,
+  // ---------------------------------------------------------------------------
+  // Build
+  // ---------------------------------------------------------------------------
+
+  @override
+  Widget build(BuildContext context) {
+    final contributorsAsync = ref.watch(contributorsProvider);
+
+    contributorsAsync.whenData((contributors) => _maybeAutoFetch(contributors));
+
+    return Scaffold(
+      appBar: AppBar(
+        titleSpacing: 0,
+        title: _buildTitle(),
+        bottom: TabBar(
+          controller: _tabController,
+          tabs: const [
+            Tab(text: 'Discover'),
+            Tab(text: 'Contributors'),
+          ],
+        ),
+      ),
+      body: TabBarView(
+        controller: _tabController,
+        children: [
+          _buildDiscoverTab(),
+          _buildContributorsTab(),
+        ],
       ),
     );
   }
 
-  // ---------------------------------------------------------------------------
-  // 7.4 — Person Filter Chip Bar
-  // ---------------------------------------------------------------------------
-
-  Widget _buildPersonFilterChipBar(List<ContributorSummary> contributors) {
-    if (contributors.isEmpty) return const SizedBox.shrink();
-
-    return SizedBox(
-      height: 44,
-      child: ScrollConfiguration(
-        behavior: ScrollConfiguration.of(context).copyWith(
-          dragDevices: {
-            ...ScrollConfiguration.of(context).dragDevices,
-            PointerDeviceKind.mouse,
-          },
-        ),
-        child: ListView.separated(
-          scrollDirection: Axis.horizontal,
-          physics: const BouncingScrollPhysics(),
-          padding: const EdgeInsets.symmetric(horizontal: 12),
-          itemCount: contributors.length,
-          separatorBuilder: (_, __) => const SizedBox(width: 6),
-          itemBuilder: (context, index) {
-            final contributor = contributors[index];
-            final isSelected =
-                _selectedContributorId == contributor.contributorId;
-
-            return FilterChip(
-              selected: isSelected,
-              avatar: contributor.profilePath != null
-                  ? CircleAvatar(
-                      backgroundImage: NetworkImage(
-                        'https://image.tmdb.org/t/p/w45${contributor.profilePath}',
-                      ),
-                      radius: 14,
-                    )
-                  : CircleAvatar(
-                      radius: 14,
-                      child: Text(
-                        contributor.name.isNotEmpty
-                            ? contributor.name[0].toUpperCase()
-                            : '?',
-                        style: const TextStyle(fontSize: 12),
-                      ),
-                    ),
-              label: Text(
-                contributor.name,
+  Widget _buildTitle() {
+    return Row(
+      children: [
+        const SizedBox(width: 16),
+        const Text('Connections'),
+        if (_isRefreshing) ...[
+          const SizedBox(width: 8),
+          SizedBox(
+            width: 16,
+            height: 16,
+            child: CircularProgressIndicator(
+              strokeWidth: 2,
+              value: _refreshTotal > 0 ? _refreshCompleted / _refreshTotal : null,
+            ),
+          ),
+          if (_refreshTotal > 0)
+            Padding(
+              padding: const EdgeInsets.only(left: 4),
+              child: Text(
+                '$_refreshCompleted/$_refreshTotal',
                 style: const TextStyle(fontSize: 12),
               ),
-              onSelected: (_) {
-                setState(() {
-                  if (isSelected) {
-                    _selectedContributorId = null;
-                  } else {
-                    _selectedContributorId = contributor.contributorId;
-                  }
-                  // Reset discovery lazy loading when filter changes
-                  _discoveryLoadedCount = 20;
-                });
-              },
-            );
-          },
-        ),
-      ),
-    );
-  }
-
-  // ---------------------------------------------------------------------------
-  // 7.5 — Connections Tab Content
-  // ---------------------------------------------------------------------------
-
-  Widget _buildConnectionsTab(SortedConnectionsData sortedData) {
-    return Column(
-      children: [
-        // Toggle between Contributors and All Connections
-        _buildWatchlistModeToggle(),
-        Expanded(
-          child: _showAllConnections
-              ? _buildAllConnectionsList()
-              : _buildContributorsList(sortedData),
+            ),
+        ],
+        const Spacer(),
+        IconButton(
+          icon: const Icon(Icons.refresh),
+          tooltip: 'Refresh',
+          onPressed: _isRefreshing ? null : () => _handleRefresh(),
         ),
       ],
     );
   }
 
-  Widget _buildWatchlistModeToggle() {
-    final theme = Theme.of(context);
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(12, 8, 12, 4),
-      child: SegmentedButton<bool>(
-        segments: const [
-          ButtonSegment(
-            value: false,
-            label: Text('Contributors'),
-            icon: Icon(Icons.people_outline, size: 18),
+  // ---------------------------------------------------------------------------
+  // Discover Tab
+  // ---------------------------------------------------------------------------
+
+  Widget _buildDiscoverTab() {
+    final feedAsync = ref.watch(rankedDiscoveryFeedProvider(_selectedContributorId));
+
+    return Column(
+      children: [
+        _buildFilterBar(),
+        Expanded(
+          child: feedAsync.when(
+            loading: () => const Center(child: CircularProgressIndicator()),
+            error: (err, _) => Center(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const Text('Failed to load'),
+                  const SizedBox(height: 8),
+                  FilledButton.icon(
+                    onPressed: () => ref.invalidate(rankedDiscoveryFeedProvider),
+                    icon: const Icon(Icons.refresh),
+                    label: const Text('Retry'),
+                  ),
+                ],
+              ),
+            ),
+            data: (works) {
+              final filtered = _applyFilters(works);
+              if (filtered.isEmpty) {
+                return _buildEmptyDiscoverState();
+              }
+              return ListView.builder(
+                padding: const EdgeInsets.fromLTRB(12, 8, 12, 16),
+                itemCount: filtered.length + 1, // +1 for attribution
+                itemBuilder: (context, index) {
+                  if (index == filtered.length) {
+                    return const Padding(
+                      padding: EdgeInsets.only(top: 8),
+                      child: TmdbAttribution(),
+                    );
+                  }
+                  return _DiscoverCard(
+                    work: filtered[index],
+                    onAdd: () => _addToWatchlist(filtered[index]),
+                    onDismiss: () => _dismissWork(filtered[index]),
+                  );
+                },
+              );
+            },
           ),
-          ButtonSegment(
-            value: true,
-            label: Text('All Connections'),
-            icon: Icon(Icons.person_search_outlined, size: 18),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildFilterBar() {
+    return SingleChildScrollView(
+      scrollDirection: Axis.horizontal,
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+      child: Row(
+        children: [
+          // Active contributor filter chip
+          if (_selectedContributorId != null)
+            Padding(
+              padding: const EdgeInsets.only(right: 8),
+              child: FilterChip(
+                label: Text(_selectedContributorName ?? 'Person'),
+                selected: true,
+                onSelected: (_) => setState(() {
+                  _selectedContributorId = null;
+                  _selectedContributorName = null;
+                }),
+                onDeleted: () => setState(() {
+                  _selectedContributorId = null;
+                  _selectedContributorName = null;
+                }),
+              ),
+            ),
+          // Type filter
+          Padding(
+            padding: const EdgeInsets.only(right: 8),
+            child: FilterChip(
+              label: const Text('Movies'),
+              selected: _typeFilter == 'movie',
+              onSelected: (v) => setState(() =>
+                  _typeFilter = v ? 'movie' : (_typeFilter == 'movie' ? null : _typeFilter)),
+            ),
+          ),
+          Padding(
+            padding: const EdgeInsets.only(right: 8),
+            child: FilterChip(
+              label: const Text('TV'),
+              selected: _typeFilter == 'tv',
+              onSelected: (v) => setState(() =>
+                  _typeFilter = v ? 'tv' : (_typeFilter == 'tv' ? null : _typeFilter)),
+            ),
+          ),
+          // Era filter
+          FilterChip(
+            label: const Text('Recent (5yr)'),
+            selected: _recentOnly,
+            onSelected: (v) => setState(() => _recentOnly = v),
           ),
         ],
-        selected: {_showAllConnections},
-        onSelectionChanged: (selected) {
-          setState(() {
-            _showAllConnections = selected.first;
-          });
-        },
-        style: ButtonStyle(
-          visualDensity: VisualDensity.compact,
-          textStyle: WidgetStatePropertyAll(
-            theme.textTheme.labelMedium,
-          ),
+      ),
+    );
+  }
+
+  List<ConnectionWork> _applyFilters(List<ConnectionWork> works) {
+    return works.where((w) {
+      if (_typeFilter == 'movie' && w.type != WorkType.movie) return false;
+      if (_typeFilter == 'tv' && w.type != WorkType.tvShow) return false;
+      if (_recentOnly) {
+        // Exclude items with no release date — we can't confirm they're recent.
+        if (w.releaseDate == null) return false;
+        final cutoff = DateTime.now().subtract(const Duration(days: 365 * 5));
+        if (w.releaseDate!.isBefore(cutoff)) return false;
+      }
+      return true;
+    }).toList();
+  }
+
+  Widget _buildEmptyDiscoverState() {
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(32),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(Icons.explore_outlined,
+                size: 48, color: Theme.of(context).colorScheme.onSurfaceVariant),
+            const SizedBox(height: 16),
+            Text(
+              _selectedContributorId != null
+                  ? 'No discoveries for this person yet.'
+                  : 'Nothing to discover yet.',
+              style: Theme.of(context).textTheme.titleMedium,
+              textAlign: TextAlign.center,
+            ),
+            const SizedBox(height: 8),
+            Text(
+              'Try refreshing to fetch the latest works from people you follow.',
+              style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                color: Theme.of(context).colorScheme.onSurfaceVariant,
+              ),
+              textAlign: TextAlign.center,
+            ),
+            const SizedBox(height: 16),
+            OutlinedButton.icon(
+              onPressed: _isRefreshing ? null : () => _handleRefresh(),
+              icon: const Icon(Icons.refresh),
+              label: const Text('Refresh'),
+            ),
+          ],
         ),
       ),
     );
   }
 
-  Widget _buildContributorsList(SortedConnectionsData sortedData) {
-    final items = sortedData.watchlistItems;
+  // ---------------------------------------------------------------------------
+  // Contributors Tab
+  // ---------------------------------------------------------------------------
 
-    if (items.isEmpty) {
-      return const Center(
-        child: Text('No connections found on your watchlist.'),
-      );
-    }
+  Widget _buildContributorsTab() {
+    final contributorsAsync = ref.watch(contributorsByAffinityProvider);
+    final allContributorsAsync = ref.watch(contributorsProvider);
 
-    // If grouped by release status, show with headers
-    if (sortedData.watchlistGroups != null) {
-      return _buildGroupedItemList(sortedData.watchlistGroups!);
-    }
-
-    return ListView.builder(
-      padding: const EdgeInsets.all(8),
-      itemCount: items.length,
-      itemBuilder: (context, index) {
-        return _buildDiscoveryItem(items[index]);
-      },
-    );
-  }
-
-  Widget _buildAllConnectionsList() {
-    final unfollowedAsync = ref.watch(unfollowedConnectionsProvider);
-
-    return unfollowedAsync.when(
+    return contributorsAsync.when(
       loading: () => const Center(child: CircularProgressIndicator()),
       error: (err, _) => Center(child: Text('Error: $err')),
-      data: (groups) {
-        if (groups.isEmpty) {
-          return const Center(
-            child: Text('No unfollowed people found across your watchlist.'),
+      data: (contributors) {
+        final allContributors = allContributorsAsync.value ?? [];
+        if (contributors.isEmpty) {
+          return Center(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const Text('No contributors followed yet.'),
+                const SizedBox(height: 8),
+                OutlinedButton(
+                  onPressed: () => Navigator.of(context).pop(),
+                  child: const Text('Go back'),
+                ),
+              ],
+            ),
           );
         }
-
         return ListView.builder(
-          padding: const EdgeInsets.all(8),
-          itemCount: groups.length,
+          padding: const EdgeInsets.symmetric(vertical: 8),
+          itemCount: contributors.length,
           itemBuilder: (context, index) {
-            return UnfollowedPersonCard(personGroup: groups[index]);
+            final c = contributors[index];
+            final isSelected = _selectedContributorId == c.contributorId;
+            // Find full Contributor object for detail screen
+            final fullContributor = allContributors
+                .where((fc) => fc.tmdbId == c.contributorId)
+                .firstOrNull;
+            return ListTile(
+              leading: CircleAvatar(
+                radius: 22,
+                backgroundImage: c.profilePath != null
+                    ? CachedNetworkImageProvider(
+                        'https://image.tmdb.org/t/p/w185${c.profilePath}')
+                    : null,
+                child: c.profilePath == null
+                    ? const Icon(Icons.person)
+                    : null,
+              ),
+              title: Text(c.name),
+              subtitle: Text(
+                c.contributorType == ContributorType.person
+                    ? '${c.appearanceCount} works'
+                    : 'Company · ${c.appearanceCount} works',
+                style: Theme.of(context).textTheme.bodySmall,
+              ),
+              selected: isSelected,
+              selectedTileColor:
+                  Theme.of(context).colorScheme.primaryContainer.withValues(alpha: 0.3),
+              trailing: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  if (isSelected)
+                    TextButton(
+                      onPressed: () {
+                        setState(() {
+                          _selectedContributorId = null;
+                          _selectedContributorName = null;
+                        });
+                        _tabController.animateTo(0);
+                      },
+                      child: const Text('Clear filter'),
+                    )
+                  else
+                    TextButton(
+                      onPressed: () {
+                        setState(() {
+                          _selectedContributorId = c.contributorId;
+                          _selectedContributorName = c.name;
+                        });
+                        _tabController.animateTo(0);
+                      },
+                      child: const Text('Filter'),
+                    ),
+                  if (fullContributor != null)
+                    IconButton(
+                      icon: const Icon(Icons.open_in_new, size: 18),
+                      tooltip: 'View profile',
+                      onPressed: () => Navigator.of(context).push(
+                        MaterialPageRoute(
+                          builder: (_) => ContributorDetailScreen(
+                            contributor: fullContributor,
+                          ),
+                        ),
+                      ),
+                    ),
+                ],
+              ),
+            );
           },
         );
       },
     );
-  }
-
-  /// Shared grouped list builder for both Connections and Discovery tabs.
-  Widget _buildGroupedItemList(
-      Map<ReleaseStatusGroup, List<DiscoveryItem>> groups) {
-    final entries = groups.entries
-        .where((e) => e.value.isNotEmpty)
-        .toList();
-
-    return ListView.builder(
-      padding: const EdgeInsets.all(8),
-      itemCount: entries.fold<int>(0, (sum, e) => sum + 1 + e.value.length),
-      itemBuilder: (context, index) {
-        int current = 0;
-        for (final entry in entries) {
-          if (index == current) {
-            return _buildGroupHeader(entry.key);
-          }
-          current++;
-          if (index < current + entry.value.length) {
-            return _buildDiscoveryItem(entry.value[index - current]);
-          }
-          current += entry.value.length;
-        }
-        return const SizedBox.shrink();
-      },
-    );
-  }
-
-  Widget _buildGroupHeader(ReleaseStatusGroup group) {
-    final theme = Theme.of(context);
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(8, 16, 8, 4),
-      child: Text(
-        ConnectionsLogic.releaseStatusGroupLabel(group),
-        style: theme.textTheme.labelLarge?.copyWith(
-          color: theme.colorScheme.primary,
-          fontWeight: FontWeight.bold,
-          letterSpacing: 1.2,
-        ),
-      ),
-    );
-  }
-
-  Widget _buildSectionHeader(String label) {
-    final theme = Theme.of(context);
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(8, 16, 8, 4),
-      child: Text(
-        label.toUpperCase(),
-        style: theme.textTheme.labelLarge?.copyWith(
-          color: theme.colorScheme.primary,
-          fontWeight: FontWeight.bold,
-          letterSpacing: 1.2,
-        ),
-      ),
-    );
-  }
-
-  // ---------------------------------------------------------------------------
-  // 7.6 — Discovery Tab Content with Lazy Loading
-  // ---------------------------------------------------------------------------
-
-  Widget _buildDiscoveryTab(SortedConnectionsData sortedData) {
-    final collaborations = sortedData.collaborations;
-    final spotlightItems = sortedData.spotlightItems;
-
-    if (collaborations.isEmpty && spotlightItems.isEmpty) {
-      return const Center(
-        child: Text('No discoveries found.'),
-      );
-    }
-
-    // If grouped by release status, show the old flat grouped view
-    if (sortedData.discoveryGroups != null) {
-      return _buildGroupedDiscoveryList(sortedData.discoveryGroups!);
-    }
-
-    // Build a combined list with section headers
-    final allItems = <_GroupedItem>[];
-
-    if (collaborations.isNotEmpty) {
-      allItems.add(_GroupedItem.sectionHeader('Collaborations'));
-      for (final item in collaborations) {
-        allItems.add(_GroupedItem.item(item));
-      }
-    }
-
-    if (spotlightItems.isNotEmpty) {
-      allItems.add(_GroupedItem.sectionHeader('Spotlight'));
-      for (final item in spotlightItems) {
-        allItems.add(_GroupedItem.item(item));
-      }
-    }
-
-    final visibleCount = _discoveryLoadedCount.clamp(0, allItems.length);
-    final hasMore = visibleCount < allItems.length;
-
-    return NotificationListener<ScrollNotification>(
-      onNotification: (notification) {
-        if (notification is ScrollUpdateNotification &&
-            notification.metrics.pixels >=
-                notification.metrics.maxScrollExtent - 300 &&
-            hasMore &&
-            !_isLoadingMore) {
-          _loadMoreDiscovery(allItems.length);
-        }
-        return false;
-      },
-      child: ListView.builder(
-        controller: _discoveryScrollController,
-        padding: const EdgeInsets.all(8),
-        itemCount: visibleCount + (hasMore ? 1 : 0),
-        itemBuilder: (context, index) {
-          if (index >= visibleCount) {
-            return const Padding(
-              padding: EdgeInsets.all(16),
-              child: Center(child: CircularProgressIndicator()),
-            );
-          }
-          final grouped = allItems[index];
-          if (grouped.isHeader) {
-            if (grouped.sectionLabel != null) {
-              return _buildSectionHeader(grouped.sectionLabel!);
-            }
-            return _buildGroupHeader(grouped.group!);
-          }
-          return _buildDiscoveryItem(grouped.discoveryItem!);
-        },
-      ),
-    );
-  }
-
-  Widget _buildGroupedDiscoveryList(
-      Map<ReleaseStatusGroup, List<DiscoveryItem>> groups) {
-    final entries = groups.entries
-        .where((e) => e.value.isNotEmpty)
-        .toList();
-
-    // Flatten for lazy loading
-    final allItems = <_GroupedItem>[];
-    for (final entry in entries) {
-      allItems.add(_GroupedItem.header(entry.key));
-      for (final item in entry.value) {
-        allItems.add(_GroupedItem.item(item));
-      }
-    }
-
-    final visibleCount = _discoveryLoadedCount.clamp(0, allItems.length);
-    final hasMore = visibleCount < allItems.length;
-
-    return NotificationListener<ScrollNotification>(
-      onNotification: (notification) {
-        if (notification is ScrollUpdateNotification &&
-            notification.metrics.pixels >=
-                notification.metrics.maxScrollExtent - 300 &&
-            hasMore &&
-            !_isLoadingMore) {
-          _loadMoreDiscovery(allItems.length);
-        }
-        return false;
-      },
-      child: ListView.builder(
-        controller: _discoveryScrollController,
-        padding: const EdgeInsets.all(8),
-        itemCount: visibleCount + (hasMore ? 1 : 0),
-        itemBuilder: (context, index) {
-          if (index >= visibleCount) {
-            return const Padding(
-              padding: EdgeInsets.all(16),
-              child: Center(child: CircularProgressIndicator()),
-            );
-          }
-          final grouped = allItems[index];
-          if (grouped.isHeader) {
-            return _buildGroupHeader(grouped.group!);
-          }
-          return _buildDiscoveryItem(grouped.discoveryItem!);
-        },
-      ),
-    );
-  }
-
-  void _loadMoreDiscovery(int totalCount) {
-    setState(() {
-      _isLoadingMore = true;
-    });
-    // Simulate a brief delay for batch loading
-    Future.delayed(const Duration(milliseconds: 100), () {
-      if (mounted) {
-        setState(() {
-          _discoveryLoadedCount =
-              (_discoveryLoadedCount + 20).clamp(0, totalCount);
-          _isLoadingMore = false;
-        });
-      }
-    });
-  }
-
-  // ---------------------------------------------------------------------------
-  // Add to Watchlist from Discovery (Task 10.1)
-  // ---------------------------------------------------------------------------
-
-  Future<void> _handleAddToWatchlist(ConnectionWork work) async {
-    try {
-      final watchlistLogic = ref.read(watchlistLogicProvider);
-
-      final entry = await watchlistLogic.addWorkToWatchlist(
-        tmdbId: work.tmdbId,
-        type: work.type,
-        title: work.title,
-        posterPath: work.posterPath,
-        releaseDate: work.releaseDate,
-      );
-
-      // Invalidate providers to trigger recomputation (moves work from Discovery → Connections)
-      ref.invalidate(watchlistEntriesProvider);
-      ref.invalidate(connectionsDataProvider);
-
-      if (!mounted) return;
-
-      if (work.type == WorkType.tvShow) {
-        final tvPrefs = entry.tvNotificationPrefs;
-        final selectedTypes = tvPrefs?.selectedTypes ?? [];
-
-        showTvWatchlistSnackBar(
-          context,
-          workTitle: work.title,
-          selectedEpisodeTypes: selectedTypes,
-          onUndo: () async {
-            await watchlistLogic.removeWorkFromWatchlist(
-              work.tmdbId,
-              work.type,
-            );
-            ref.invalidate(watchlistEntriesProvider);
-            ref.invalidate(connectionsDataProvider);
-          },
-          onEditPreferences: () {},
-        );
-      } else {
-        showSimpleSnackBar(
-          context,
-          'Added "${work.title}" to watchlist',
-        );
-      }
-    } catch (e) {
-      if (mounted) {
-        showSimpleSnackBar(
-          context,
-          'Failed to add to watchlist: $e',
-          duration: const Duration(seconds: 3),
-        );
-      }
-    }
-  }
-
-  // ---------------------------------------------------------------------------
-  // Discovery item builder — uses ConnectionWorkCard and PairGroupCard
-  // ---------------------------------------------------------------------------
-
-  Widget _buildDiscoveryItem(DiscoveryItem item) {
-    return switch (item) {
-      StandaloneDiscoveryWork(:final work) =>
-        ConnectionWorkCard(
-          work: work,
-          onAddToWatchlist: _handleAddToWatchlist,
-        ),
-      PairGroupDiscoveryItem(:final pairGroup) =>
-        PairGroupCard(
-          pairGroup: pairGroup,
-          onAddToWatchlist: _handleAddToWatchlist,
-        ),
-    };
   }
 }
 
-// Helper class for grouped discovery list
-class _GroupedItem {
-  final bool isHeader;
-  final ReleaseStatusGroup? group;
-  final String? sectionLabel;
-  final DiscoveryItem? discoveryItem;
+// ---------------------------------------------------------------------------
+// Discover Card Widget
+// ---------------------------------------------------------------------------
 
-  _GroupedItem.header(this.group)
-      : isHeader = true,
-        sectionLabel = null,
-        discoveryItem = null;
+class _DiscoverCard extends StatelessWidget {
+  final ConnectionWork work;
+  final VoidCallback onAdd;
+  final VoidCallback onDismiss;
 
-  _GroupedItem.sectionHeader(this.sectionLabel)
-      : isHeader = true,
-        group = null,
-        discoveryItem = null;
+  const _DiscoverCard({
+    required this.work,
+    required this.onAdd,
+    required this.onDismiss,
+  });
 
-  _GroupedItem.item(this.discoveryItem)
-      : isHeader = false,
-        group = null,
-        sectionLabel = null;
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final year = work.releaseDate?.year;
+
+    return Card(
+      margin: const EdgeInsets.symmetric(vertical: 5),
+      child: Padding(
+        padding: const EdgeInsets.all(12),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // Poster
+            ClipRRect(
+              borderRadius: BorderRadius.circular(6),
+              child: SizedBox(
+                width: 56,
+                height: 84,
+                child: work.posterPath != null
+                    ? CachedNetworkImage(
+                        imageUrl:
+                            'https://image.tmdb.org/t/p/w185${work.posterPath}',
+                        fit: BoxFit.cover,
+                        placeholder: (context, url) => Container(
+                          color: theme.colorScheme.surfaceContainerHighest,
+                        ),
+                        errorWidget: (context, url, error) => Container(
+                          color: theme.colorScheme.surfaceContainerHighest,
+                          child: Icon(Icons.movie,
+                              color: theme.colorScheme.onSurfaceVariant),
+                        ),
+                      )
+                    : Container(
+                        color: theme.colorScheme.surfaceContainerHighest,
+                        child: Icon(Icons.movie,
+                            color: theme.colorScheme.onSurfaceVariant),
+                      ),
+              ),
+            ),
+            const SizedBox(width: 12),
+
+            // Content
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  // Title + year
+                  Row(
+                    children: [
+                      Expanded(
+                        child: Text(
+                          work.title,
+                          style: theme.textTheme.titleSmall?.copyWith(
+                            fontWeight: FontWeight.w600,
+                          ),
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                      if (year != null)
+                        Text(
+                          '$year',
+                          style: theme.textTheme.bodySmall?.copyWith(
+                            color: theme.colorScheme.onSurfaceVariant,
+                          ),
+                        ),
+                    ],
+                  ),
+                  const SizedBox(height: 4),
+
+                  // TMDB rating
+                  if (work.tmdbRating != null && (work.voteCount ?? 0) > 0)
+                    Row(
+                      children: [
+                        const Icon(Icons.star_rounded,
+                            size: 13, color: Colors.amber),
+                        const SizedBox(width: 2),
+                        Text(
+                          work.tmdbRating!.toStringAsFixed(1),
+                          style: theme.textTheme.labelSmall,
+                        ),
+                        const SizedBox(width: 8),
+                        Text(
+                          work.type == WorkType.tvShow ? 'TV' : 'Movie',
+                          style: theme.textTheme.labelSmall?.copyWith(
+                            color: theme.colorScheme.onSurfaceVariant,
+                          ),
+                        ),
+                      ],
+                    ),
+                  const SizedBox(height: 6),
+
+                  // Why — people + roles
+                  Wrap(
+                    spacing: 6,
+                    runSpacing: 4,
+                    children: work.matchedContributors.take(4).map((mc) {
+                      return Container(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 7, vertical: 3),
+                        decoration: BoxDecoration(
+                          color: theme.colorScheme.secondaryContainer,
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        child: Text(
+                          '${mc.name} · ${mc.role}',
+                          style: theme.textTheme.labelSmall?.copyWith(
+                            color: theme.colorScheme.onSecondaryContainer,
+                          ),
+                        ),
+                      );
+                    }).toList(),
+                  ),
+                  const SizedBox(height: 8),
+
+                  // Actions
+                  Row(
+                    children: [
+                      FilledButton.icon(
+                        onPressed: onAdd,
+                        icon: const Icon(Icons.add, size: 16),
+                        label: const Text('Add'),
+                        style: FilledButton.styleFrom(
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 12, vertical: 6),
+                          minimumSize: Size.zero,
+                          tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      OutlinedButton.icon(
+                        onPressed: onDismiss,
+                        icon: const Icon(Icons.close, size: 16),
+                        label: const Text('Dismiss'),
+                        style: OutlinedButton.styleFrom(
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 12, vertical: 6),
+                          minimumSize: Size.zero,
+                          tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
 }

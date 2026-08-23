@@ -38,6 +38,7 @@ import '../logic/watchlist_logic.dart';
 import '../logic/connections_logic.dart';
 import '../logic/connections_models.dart';
 import '../logic/watchlist_migration_logic.dart';
+import '../logic/rating_logic.dart';
 import '../data/services/notification_service.dart';
 import '../data/services/system_tray_service.dart';
 import '../data/models/preferences.dart';
@@ -213,6 +214,13 @@ final watchlistMigrationLogicProvider = Provider<WatchlistMigrationLogic>((ref) 
   return WatchlistMigrationLogic(
     ref.watch(contributorRepositoryProvider),
     ref.watch(watchlistLogicProvider),
+  );
+});
+
+final ratingLogicProvider = Provider<RatingLogic>((ref) {
+  return RatingLogic(
+    episodeRepo: ref.read(episodeStatusRepositoryProvider),
+    seasonRepo: ref.read(seasonStatusRepositoryProvider),
   );
 });
 
@@ -515,4 +523,36 @@ final unfollowedConnectionsProvider =
 final isWorkInWatchlistProvider = FutureProvider.family<bool, WorkParams>((ref, params) async {
   final logic = ref.watch(watchlistLogicProvider);
   return logic.isWorkInWatchlist(params.tmdbId, params.type);
+});
+
+/// Ranked discovery feed — works not on watchlist/watched/dismissed,
+/// sorted by affinity score. Invalidates with contributors, watchlist, prefs.
+final rankedDiscoveryFeedProvider = FutureProvider.family<List<ConnectionWork>, int?>((ref, contributorFilter) async {
+  final contributors = await ref.watch(contributorsProvider.future);
+  await ref.watch(watchlistEntriesProvider.future);
+  final prefs = await ref.watch(preferencesProvider.future);
+
+  final logic = ref.watch(connectionsLogicProvider);
+  final ratingLogic = ref.watch(ratingLogicProvider);
+
+  return logic.computeRankedDiscoveryFeed(
+    followedContributors: contributors,
+    dismissedConnectionIds: prefs.dismissedConnectionIds ?? [],
+    ratingLogic: ratingLogic,
+    contributorFilter: contributorFilter,
+  );
+});
+
+/// Contributors sorted by affinity for the Contributors tab.
+final contributorsByAffinityProvider = FutureProvider<List<ContributorSummary>>((ref) async {
+  final contributors = await ref.watch(contributorsProvider.future);
+  await ref.watch(watchlistEntriesProvider.future);
+
+  final logic = ref.watch(connectionsLogicProvider);
+  final ratingLogic = ref.watch(ratingLogicProvider);
+
+  return logic.computeContributorsByAffinity(
+    followedContributors: contributors,
+    ratingLogic: ratingLogic,
+  );
 });

@@ -9,6 +9,7 @@ import '../data/repositories/movie_detail_repository.dart';
 import '../data/repositories/tv_detail_repository.dart';
 import '../data/repositories/watchlist_repository.dart';
 import 'connections_models.dart';
+import 'rating_logic.dart';
 
 /// Helper for tracking the best role an unfollowed person has in a work.
 class _UnfollowedRoleInfo {
@@ -1769,5 +1770,251 @@ class ConnectionsLogic {
     if (department == 'Production' && _isProducerRole(job)) return 3;
     if (department == 'Sound' && _isComposerRole(job)) return 6;
     return 7;
+  }
+
+  // ---------------------------------------------------------------------------
+  // Affinity score computation
+  // ---------------------------------------------------------------------------
+
+  /// Compute a 0.0–1.0 affinity weight for a followed contributor.
+  /// Based on: average effective rating of their watched works in the watchlist.
+  /// If no rated works exist for this contributor, returns 1.0 (neutral).
+  double _computeContributorAffinity(
+    int contributorId,
+    List<WatchlistEntry> watchlistEntries,
+    RatingLogic ratingLogic,
+  ) {
+    final ratedScores = <double>[];
+    for (final entry in watchlistEntries) {
+      // Check if this contributor is in this watchlist entry
+      final isContributor = entry.followedContributors
+          .any((c) => c.contributorId == contributorId);
+      if (!isContributor) continue;
+      // Only use watched entries
+      final isWatched = entry.statusRecords
+          .any((r) => r.status == WatchStatus.watched);
+      if (!isWatched) continue;
+      final rating = ratingLogic.effectiveRating(entry);
+      if (rating != null) {
+        ratedScores.add(rating);
+      }
+    }
+    if (ratedScores.isEmpty) return 1.0; // neutral
+    final avg = ratedScores.reduce((a, b) => a + b) / ratedScores.length;
+    return (avg / 10.0).clamp(0.0, 1.0); // normalize to 0–1
+  }
+
+  /// Compute a composite affinity score for a ConnectionWork.
+  /// Score = sum over matched contributors of:
+  ///   (roleWeight × affinityWeight)
+  /// where roleWeight = (8 - roleImportance) / 8.0 (director = 1.0, crew = 0.125)
+  /// Plus a recency boost: works released in last 2 years get +0.3
+  double _computeAffinityScore(
+    ConnectionWork work,
+    Map<int, double> contributorAffinities,
+  ) {
+    double score = 0.0;
+    for (final mc in work.matchedContributors) {
+      final affinity = contributorAffinities[mc.contributorId] ?? 1.0;
+      final roleWeight = (8 - mc.roleImportance) / 8.0;
+      score += roleWeight * affinity;
+    }
+    // Recency boost
+    if (work.releaseDate != null) {
+      final ageInDays = DateTime.now().difference(work.releaseDate!).inDays;
+      if (ageInDays >= 0 && ageInDays <= 730) {
+        score += 0.3;
+      }
+    }
+    // TMDB rating tiebreaker (scaled 0–1)
+    if (work.tmdbRating != null) {
+      score += (work.tmdbRating! / 10.0) * 0.1;
+    }
+    return score;
+  }
+
+  // ---------------------------------------------------------------------------
+  // Ranked discovery feed
+  // ---------------------------------------------------------------------------
+
+  /// Compute a ranked list of ConnectionWorks for the Discover tab.
+  ///
+  /// Filters out:
+  /// - Works already on the watchlist
+  /// - Works already watched
+  /// - Works in the dismissed list
+  /// - Works with insufficient signal (no significant role AND only 1 contributor)
+  ///
+  /// Ranks remaining works by affinity score (contributor weight × user affinity × recency).
+  List<ConnectionWork> computeRankedDiscoveryFeed({
+    required List<Contributor> followedContributors,
+    required List<String> dismissedConnectionIds,
+    required RatingLogic ratingLogic,
+    int? contributorFilter,
+  }) {
+    final activeContributors = followedContributors.where((c) => !c.isHidden).toList();
+    final activeContributorIds = activeContributors.map((c) => c.tmdbId).toSet();
+    final contributorLookup = <int, Contributor>{
+      for (final c in activeContributors) c.tmdbId: c,
+    };
+
+    // Get all cached contributor details
+    final allDetails = <int, ContributorDetail>{};
+    for (final c in activeContributors) {
+      final detail = _detailRepo.getContributorDetail(c.tmdbId);
+      if (detail?.allWorks != null) allDetails[c.tmdbId] = detail!;
+    }
+
+    // Get watchlist for filtering
+    final watchlistEntries = _watchlistRepo.getWorks();
+    final watchlistKeys = <String>{};
+    for (final e in watchlistEntries) {
+      watchlistKeys.add(_workKey(e.tmdbId, e.type));
+    }
+    final watchedKeys = <String>{};
+    for (final e in watchlistEntries) {
+      if (e.statusRecords.any((r) => r.status == WatchStatus.watched)) {
+        watchedKeys.add(_workKey(e.tmdbId, e.type));
+      }
+    }
+    final dismissedKeys = dismissedConnectionIds.toSet();
+
+    // Build work → contributor map (same as computeAllConnections)
+    final workContributorMap = <String, Map<int, List<ContributorRole>>>{};
+    final workDataMap = <String, Work>{};
+
+    for (final entry in allDetails.entries) {
+      final contributorId = entry.key;
+      final detail = entry.value;
+      for (final work in detail.allWorks!) {
+        if (work.type == WorkType.tvEpisode) continue;
+        final key = _workKey(work.tmdbId, work.type);
+        // Skip watchlist, watched, dismissed
+        if (watchlistKeys.contains(key)) continue;
+        if (watchedKeys.contains(key)) continue;
+        if (dismissedKeys.contains(key)) continue;
+
+        workContributorMap.putIfAbsent(key, () => {});
+        workContributorMap[key]!.putIfAbsent(contributorId, () => []);
+        final roles = work.contributorRoles
+            .where((r) => r.contributorId == contributorId)
+            .toList();
+        if (roles.isNotEmpty) {
+          workContributorMap[key]![contributorId]!.addAll(roles);
+        } else {
+          final c = contributorLookup[contributorId];
+          workContributorMap[key]![contributorId]!.add(ContributorRole(
+            contributorId: contributorId,
+            contributorName: detail.name,
+            role: c?.type == ContributorType.company ? 'Production' : 'Cast/Crew',
+          ));
+        }
+        if (!workDataMap.containsKey(key) ||
+            work.contributorRoles.length > (workDataMap[key]?.contributorRoles.length ?? 0)) {
+          workDataMap[key] = work;
+        }
+      }
+    }
+
+    // Compute contributor affinities
+    final affinities = <int, double>{};
+    for (final c in activeContributors) {
+      affinities[c.tmdbId] = _computeContributorAffinity(c.tmdbId, watchlistEntries, ratingLogic);
+    }
+
+    // Build ConnectionWork list applying threshold and optional contributor filter
+    final results = <ConnectionWork>[];
+
+    for (final entry in workContributorMap.entries) {
+      final key = entry.key;
+      final contributors = entry.value;
+      final work = workDataMap[key];
+      if (work == null) continue;
+
+      final activeInWork = contributors.keys
+          .where((id) => activeContributorIds.contains(id))
+          .toList();
+      if (activeInWork.isEmpty) continue;
+
+      // Apply contributor filter if set
+      if (contributorFilter != null && !activeInWork.contains(contributorFilter)) continue;
+
+      final matchedContributors = _buildMatchedContributors(
+        activeInWork, contributors, contributorLookup, work);
+
+      if (matchedContributors.isEmpty) continue;
+
+      final highestRoleImportance = matchedContributors
+          .map((mc) => mc.roleImportance)
+          .reduce((a, b) => a < b ? a : b);
+
+      // Threshold: 2+ followed people OR 1 in a significant role (importance ≤ 4)
+      final meetsThreshold = matchedContributors.length >= 2 ||
+          (matchedContributors.length == 1 && highestRoleImportance <= 4);
+      if (!meetsThreshold) continue;
+
+      final connectionWork = ConnectionWork(
+        tmdbId: work.tmdbId,
+        type: work.type,
+        title: work.title,
+        posterPath: work.posterPath,
+        releaseDate: work.releaseDate,
+        tmdbRating: work.tmdbRating,
+        voteCount: work.voteCount,
+        streamingOptions: work.streamingOptions,
+        connectionCount: matchedContributors.length,
+        highestRoleImportance: highestRoleImportance,
+        matchedContributors: matchedContributors,
+        hasImportantRoles: highestRoleImportance <= 4,
+        isWatched: false,
+        status: work.status,
+        endDate: work.endDate,
+      );
+
+      results.add(connectionWork);
+    }
+
+    // Sort by affinity score descending
+    results.sort((a, b) {
+      final aScore = _computeAffinityScore(a, affinities);
+      final bScore = _computeAffinityScore(b, affinities);
+      return bScore.compareTo(aScore);
+    });
+
+    return results;
+  }
+
+  /// Compute the Contributors tab data: followed contributors with affinity scores,
+  /// sorted by affinity descending.
+  List<ContributorSummary> computeContributorsByAffinity({
+    required List<Contributor> followedContributors,
+    required RatingLogic ratingLogic,
+  }) {
+    final watchlistEntries = _watchlistRepo.getWorks();
+    final result = <ContributorSummary>[];
+
+    for (final c in followedContributors.where((c) => !c.isHidden)) {
+      final detail = _detailRepo.getContributorDetail(c.tmdbId);
+      final workCount = detail?.allWorks?.length ?? 0;
+      result.add(ContributorSummary(
+        contributorId: c.tmdbId,
+        name: c.name,
+        profilePath: c.profilePath,
+        contributorType: c.type,
+        appearanceCount: workCount,
+      ));
+    }
+
+    // Precompute affinities once — avoids O(N×W×logN) repeated calls inside the comparator.
+    final affinityMap = <int, double>{
+      for (final s in result)
+        s.contributorId: _computeContributorAffinity(s.contributorId, watchlistEntries, ratingLogic),
+    };
+
+    // Sort by affinity descending (unrated contributors stay at 1.0, sort last among equals).
+    result.sort((a, b) =>
+        affinityMap[b.contributorId]!.compareTo(affinityMap[a.contributorId]!));
+
+    return result;
   }
 }

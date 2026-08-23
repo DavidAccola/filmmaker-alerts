@@ -36,6 +36,8 @@ dependencies:
   # Fonts
   google_fonts: ^6.2.1
 
+  # Graph Visualization (plough removed — custom implementation used instead)
+
   # Utilities
   intl: ^0.20.2
   path_provider: ^2.1.5
@@ -47,6 +49,7 @@ dependencies:
   # Icons
   material_symbols_icons: ^4.2719.3
   reorderable_grid_view: ^2.2.8
+  sankey_flutter: ^0.0.3
 
 dev_dependencies:
   flutter_test:
@@ -59,6 +62,7 @@ dev_dependencies:
   mockito: ^5.4.4
   hive_test: ^1.0.1
   http_mock_adapter: ^0.6.1
+  glados: ^1.1.7
 
 flutter:
   uses-material-design: true
@@ -66,3 +70,10 @@ flutter:
   assets:
     - .env
     - assets/images/
+
+dependency_overrides:
+  # Patched locally to fix Dart 3.10 mixin compiler crash (reorderable_grid_mixin.dart).
+  # The mixin 'on State<T>, TickerProviderStateMixin<T>' crashes the Dart 3.10 front-end;
+  # patched to 'on TickerProviderStateMixin<T>' which implies State<T>.
+  reorderable_grid_view:
+    path: packages/reorderable_grid_view

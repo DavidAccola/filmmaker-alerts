@@ -368,6 +368,14 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "4.0.0"
+  glados:
+    dependency: "direct dev"
+    description:
+      name: glados
+      sha256: c39446c0c4fe83a6ee6ee4fdee5a1afa27050619c7df390bf4c3b77b6f1acb33
+      url: "https://pub.dev"
+    source: hosted
+    version: "1.1.7"
   glob:
     dependency: transitive
     description:
@@ -755,10 +763,9 @@ packages:
   reorderable_grid_view:
     dependency: "direct main"
     description:
-      name: reorderable_grid_view
-      sha256: e36c6229a97105a10c79e15ab4b9b14ee9f6c488574ff2be9e858c82af47cda6
-      url: "https://pub.dev"
-    source: hosted
+      path: "packages/reorderable_grid_view"
+      relative: true
+    source: path
     version: "2.2.8"
   riverpod:
     dependency: transitive
@@ -776,6 +783,14 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "0.28.0"
+  sankey_flutter:
+    dependency: "direct main"
+    description:
+      name: sankey_flutter
+      sha256: "69ee950db48c9fec69e8ac82e9e20a1151049fb487984cc05f0756e56f025459"
+      url: "https://pub.dev"
+    source: hosted
+    version: "0.0.3"
   screen_retriever:
     dependency: transitive
     description:

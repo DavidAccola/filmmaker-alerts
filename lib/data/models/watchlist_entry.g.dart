@@ -119,13 +119,14 @@ class WatchlistEntryAdapter extends TypeAdapter<WatchlistEntry> {
       releaseNotificationPrefs: fields[15] as ReleaseNotificationPreferences?,
       tvNotificationPrefs: fields[16] as TvNotificationPreferences?,
       lastViewedAt: fields[17] as DateTime?,
+      userRating: fields[18] as int?,
     );
   }
 
   @override
   void write(BinaryWriter writer, WatchlistEntry obj) {
     writer
-      ..writeByte(18)
+      ..writeByte(19)
       ..writeByte(0)
       ..write(obj.tmdbId)
       ..writeByte(1)
@@ -161,7 +162,9 @@ class WatchlistEntryAdapter extends TypeAdapter<WatchlistEntry> {
       ..writeByte(16)
       ..write(obj.tvNotificationPrefs)
       ..writeByte(17)
-      ..write(obj.lastViewedAt);
+      ..write(obj.lastViewedAt)
+      ..writeByte(18)
+      ..write(obj.userRating);
   }
 
   @override

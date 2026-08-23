@@ -23,6 +23,7 @@ import 'data/models/season_status_entry.dart';
 import 'data/models/movie_status_entry.dart';
 import 'data/models/collection_order.dart';
 import 'ui/screens/main_screen.dart';
+import 'data/repositories/contributor_detail_repository.dart';
 import 'ui/common/rate_limit_listener.dart';
 import 'logic/background_service.dart';
 import 'logic/single_instance_manager.dart';
@@ -124,6 +125,11 @@ void main() async {
   // 4. Open Boxes with error handling for lock conflicts
   try {
     await _openHiveBoxes();
+
+    // Migrate ContributorDetailRepository to string keys (one-time).
+    // Must run after boxes are open — skip silently if boxes failed to open.
+    final detailRepo = ContributorDetailRepository();
+    await detailRepo.migrateToStringKeys();
   } catch (e) {
     // Continue anyway - the app will show an error dialog when it tries to access data
     // This allows the UI to load and display a helpful error message
@@ -489,16 +495,16 @@ class MyApp extends ConsumerWidget {
 }
 
 /// Wrapper to handle app lifecycle and clear caches on resume
-class _AppLifecycleWrapper extends StatefulWidget {
+class _AppLifecycleWrapper extends ConsumerStatefulWidget {
   final Widget child;
 
   const _AppLifecycleWrapper({required this.child});
 
   @override
-  State<_AppLifecycleWrapper> createState() => _AppLifecycleWrapperState();
+  ConsumerState<_AppLifecycleWrapper> createState() => _AppLifecycleWrapperState();
 }
 
-class _AppLifecycleWrapperState extends State<_AppLifecycleWrapper>
+class _AppLifecycleWrapperState extends ConsumerState<_AppLifecycleWrapper>
     with WidgetsBindingObserver {
   @override
   void initState() {
@@ -533,6 +539,11 @@ class _AppLifecycleWrapperState extends State<_AppLifecycleWrapper>
       // Clear image cache when app resumes to prevent GC pause
       imageCache.clear();
       imageCache.clearLiveImages();
+
+      // Invalidate cached data providers so fresh data is read from Hive
+      ref.invalidate(contributorsProvider);
+      ref.invalidate(watchlistEntriesProvider);
+      ref.invalidate(connectionsDataProvider);
     } else if (state == AppLifecycleState.paused) {
       // Optionally clear on pause too
     } else if (state == AppLifecycleState.detached) {

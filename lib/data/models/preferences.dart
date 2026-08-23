@@ -97,6 +97,9 @@ class Preferences extends HiveObject {
   @HiveField(29)
   bool? connectionsShowHiddenWatchlist; // show hidden watchlist items toggle
 
+  @HiveField(30)
+  List<String>? dismissedConnectionIds; // stored as 'type_tmdbId' strings
+
   Preferences({
     this.notifyTheatre = true,
     this.notifyStreaming = true,
@@ -128,7 +131,8 @@ class Preferences extends HiveObject {
     this.connectionsGroupByRelease,
     this.connectionsShowHiddenContributors,
     this.connectionsShowHiddenWatchlist,
-  });
+    List<String>? dismissedConnectionIds,
+  }) : dismissedConnectionIds = dismissedConnectionIds ?? [];
 
   // Helper getters for "True All" logic
   // Only honor 'True All' if the feature is enabled

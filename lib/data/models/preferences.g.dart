@@ -47,13 +47,14 @@ class PreferencesAdapter extends TypeAdapter<Preferences> {
       connectionsGroupByRelease: fields[27] as bool?,
       connectionsShowHiddenContributors: fields[28] as bool?,
       connectionsShowHiddenWatchlist: fields[29] as bool?,
+      dismissedConnectionIds: (fields[30] as List?)?.cast<String>(),
     );
   }
 
   @override
   void write(BinaryWriter writer, Preferences obj) {
     writer
-      ..writeByte(30)
+      ..writeByte(31)
       ..writeByte(0)
       ..write(obj.notifyTheatre)
       ..writeByte(1)
@@ -113,7 +114,9 @@ class PreferencesAdapter extends TypeAdapter<Preferences> {
       ..writeByte(28)
       ..write(obj.connectionsShowHiddenContributors)
       ..writeByte(29)
-      ..write(obj.connectionsShowHiddenWatchlist);
+      ..write(obj.connectionsShowHiddenWatchlist)
+      ..writeByte(30)
+      ..write(obj.dismissedConnectionIds);
   }
 
   @override

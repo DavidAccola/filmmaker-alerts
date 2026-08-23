@@ -14,6 +14,7 @@ import 'release_preferences_dialog.dart';
 import 'tv_preferences_dialog.dart';
 import 'expand_poster_button.dart';
 import 'status_colors.dart';
+import 'half_star_rating.dart';
 import '../../providers/providers.dart';
 import '../screens/show_configuration_screen.dart';
 import '../screens/collection_configuration_screen.dart';
@@ -753,6 +754,30 @@ class _WatchlistCardState extends ConsumerState<WatchlistCard>
                         ),
                       ),
                     ),
+
+                  // Rating badge — bottom-left, shown when rated
+                  Builder(builder: (context) {
+                    final ratingLogic = ref.read(ratingLogicProvider);
+                    final effective = ratingLogic.effectiveRating(entry);
+                    final isComputed = effective != null && !ratingLogic.isManualRating(entry);
+                    if (effective == null) return const SizedBox.shrink();
+                    return Positioned(
+                      bottom: 8,
+                      left: 8,
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 3),
+                        decoration: BoxDecoration(
+                          color: Colors.black.withValues(alpha: 0.65),
+                          borderRadius: BorderRadius.circular(5),
+                        ),
+                        child: RatingBadge(
+                          value: effective,
+                          isComputed: isComputed,
+                          fontSize: 11,
+                        ),
+                      ),
+                    );
+                  }),
 
                   // Media type icon in bottom-right
                   Positioned(

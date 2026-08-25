@@ -140,14 +140,13 @@ class GoogleAuthService {
         (url) => launchUrl(Uri.parse(url), mode: LaunchMode.externalApplication),
       );
 
-      // Fetch user email for display
+      // Fetch user email via userinfo endpoint using the authenticated client
+      // (Authorization: Bearer header — token never goes in the URL).
       String? email;
       try {
         final tempClient = gauth.authenticatedClient(http.Client(), creds);
-        // Use the token to get user info from tokeninfo endpoint
-        final resp = await http.get(
-          Uri.parse('https://www.googleapis.com/oauth2/v3/tokeninfo'
-              '?access_token=${creds.accessToken.data}'),
+        final resp = await tempClient.get(
+          Uri.parse('https://www.googleapis.com/oauth2/v3/userinfo'),
         );
         if (resp.statusCode == 200) {
           final info = jsonDecode(resp.body) as Map<String, dynamic>;

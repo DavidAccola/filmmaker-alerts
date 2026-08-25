@@ -510,7 +510,16 @@ class _AppLifecycleWrapperState extends ConsumerState<_AppLifecycleWrapper>
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
-    // Try to restore Google session and download newer data on launch
+
+    // Upload whenever the watchlist changes (add, remove, status change, rating).
+    // Registered synchronously so no changes are missed.
+    // uploadIfSignedIn() is a no-op when _isApplyingDownload is true,
+    // preventing an echo upload after a download replaces the watchlist.
+    ref.listenManual(watchlistEntriesProvider, (_, __) {
+      ref.read(syncServiceProvider).uploadIfSignedIn();
+    });
+
+    // Try to restore Google session and download newer data on launch.
     WidgetsBinding.instance.addPostFrameCallback((_) async {
       final auth = ref.read(googleAuthServiceProvider);
       final sync = ref.read(syncServiceProvider);
@@ -518,19 +527,16 @@ class _AppLifecycleWrapperState extends ConsumerState<_AppLifecycleWrapper>
       if (restored) {
         await sync.downloadIfNewerAndSignedIn();
       }
-
-      // Upload whenever the watchlist changes (add, remove, status change, rating)
-      ref.listen(watchlistEntriesProvider, (_, __) {
-        ref.read(syncServiceProvider).uploadIfSignedIn();
-      });
     });
   }
 
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
-    // Upload on app close
-    ref.read(syncServiceProvider).uploadIfSignedIn();
+    // Note: do NOT call uploadIfSignedIn() here — dispose() is synchronous,
+    // the Future would be abandoned before Hive boxes close.
+    // Upload is handled by AppLifecycleState.paused (mobile) and
+    // AppLifecycleState.detached (both platforms) in didChangeAppLifecycleState.
     _closeHiveBoxes();
     _releaseSingleInstanceLock();
     super.dispose();

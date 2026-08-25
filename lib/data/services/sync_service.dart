@@ -2,7 +2,6 @@ import 'dart:convert';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:googleapis/drive/v3.dart' as drive;
 import 'package:hive/hive.dart';
-import 'package:http/http.dart' as http;
 import '../models/contributor.dart';
 import '../models/contributor_detail.dart'; // for WorkType, ReleaseType
 import '../models/episode_status_entry.dart';
@@ -29,6 +28,13 @@ class SyncService {
   final GoogleAuthService _auth;
   final FlutterSecureStorage _storage;
 
+  /// Guard against concurrent uploads (e.g. rapid watchlist changes).
+  bool _isUploading = false;
+
+  /// Set to true while _applyPayload runs to prevent the watchlist listener
+  /// from immediately re-uploading data that was just downloaded.
+  bool _isApplyingDownload = false;
+
   SyncService({
     required GoogleAuthService auth,
     FlutterSecureStorage? storage,
@@ -40,13 +46,17 @@ class SyncService {
   // ---------------------------------------------------------------------------
 
   /// Upload local data to Drive. Called on app close and after mutations.
-  /// Silent fail if not signed in or no network.
+  /// Silent fail if not signed in, no network, already uploading, or
+  /// currently applying a downloaded payload (prevents echo uploads).
   Future<void> uploadIfSignedIn() async {
-    if (!_auth.isSignedIn) return;
+    if (!_auth.isSignedIn || _isUploading || _isApplyingDownload) return;
+    _isUploading = true;
     try {
       await _upload();
     } catch (_) {
       // Silent fail — local data is authoritative, sync is best-effort
+    } finally {
+      _isUploading = false;
     }
   }
 
@@ -145,7 +155,12 @@ class SyncService {
     }
 
     final payload = jsonDecode(utf8.decode(bytes)) as Map<String, dynamic>;
-    await _applyPayload(payload);
+    _isApplyingDownload = true;
+    try {
+      await _applyPayload(payload);
+    } finally {
+      _isApplyingDownload = false;
+    }
 
     await _storage.write(
       key: _kLastSyncKey,
@@ -242,10 +257,24 @@ class SyncService {
     String Function(T) keyOf,
   ) async {
     final box = Hive.box<T>(boxName);
-    await box.clear();
+
+    // Build new items map first — no data is deleted until we're ready.
+    final newItems = <String, T>{};
     for (final item in items) {
       final obj = deserializer(item as Map<String, dynamic>);
-      await box.put(keyOf(obj), obj);
+      newItems[keyOf(obj)] = obj;
+    }
+
+    // Delete keys no longer present in the remote data.
+    final keysToDelete = box.keys.cast<String>().toSet()
+        .difference(newItems.keys.toSet());
+    for (final k in keysToDelete) {
+      await box.delete(k);
+    }
+
+    // Upsert new and changed entries.
+    for (final entry in newItems.entries) {
+      await box.put(entry.key, entry.value);
     }
   }
 
@@ -376,22 +405,94 @@ class SyncService {
         'profilePath': c.profilePath,
         'knownFor': c.knownFor,
         'isHidden': c.isHidden,
+        'notificationsSnoozed': c.notificationsSnoozed,
         'notifyForDepartments': c.notifyForDepartments,
         'availableDepartments': c.availableDepartments,
+        'allRolesSelected': c.allRolesSelected,
+        'notifyTvEpisodeWork': c.notifyTvEpisodeWork,
+        'showStatus': c.showStatus,
+        'totalSeasons': c.totalSeasons,
+        'nextEpisodeDate': c.nextEpisodeDate,
+        'imdbId': c.imdbId,
+        'followedAt': c.followedAt?.toIso8601String(),
+        'tvNotificationPrefs': c.tvNotificationPrefs == null
+            ? null
+            : {
+                'seriesPremiere': c.tvNotificationPrefs!.seriesPremiere,
+                'seasonPremieres': c.tvNotificationPrefs!.seasonPremieres,
+                'seasonFinales': c.tvNotificationPrefs!.seasonFinales,
+                'newEpisodes': c.tvNotificationPrefs!.newEpisodes,
+                'specials': c.tvNotificationPrefs!.specials,
+              },
+        'latestWork': c.latestWork == null
+            ? null
+            : {
+                'title': c.latestWork!.title,
+                'releaseYear': c.latestWork!.releaseYear,
+                'releaseDate': c.latestWork!.releaseDate,
+                'department': c.latestWork!.department,
+                'job': c.latestWork!.job,
+                'posterPath': c.latestWork!.posterPath,
+                'originalReleaseDate': c.latestWork!.originalReleaseDate,
+                'originalReleaseType': c.latestWork!.originalReleaseType,
+                'latestReleaseDate': c.latestWork!.latestReleaseDate,
+                'latestReleaseType': c.latestWork!.latestReleaseType,
+              },
       };
 
-  Contributor _deserializeContributor(Map<String, dynamic> m) => Contributor(
+  Contributor _deserializeContributor(Map<String, dynamic> m) {
+    final tvPrefsMap = m['tvNotificationPrefs'] as Map<String, dynamic>?;
+    final latestWorkMap = m['latestWork'] as Map<String, dynamic>?;
+    return Contributor(
         tmdbId: m['tmdbId'] as int,
         name: m['name'] as String,
         type: ContributorType.values.byName(m['type'] as String),
         profilePath: m['profilePath'] as String?,
         knownFor: m['knownFor'] as String? ?? '',
         isHidden: m['isHidden'] as bool? ?? false,
+        notificationsSnoozed: m['notificationsSnoozed'] as bool? ?? false,
         notifyForDepartments:
             List<String>.from(m['notifyForDepartments'] as List? ?? []),
         availableDepartments:
             List<String>.from(m['availableDepartments'] as List? ?? []),
-      );
+        allRolesSelected: m['allRolesSelected'] as bool?,
+        notifyTvEpisodeWork: m['notifyTvEpisodeWork'] as bool?,
+        showStatus: m['showStatus'] as String?,
+        totalSeasons: m['totalSeasons'] as int?,
+        nextEpisodeDate: m['nextEpisodeDate'] as String?,
+        imdbId: m['imdbId'] as String?,
+        followedAt: m['followedAt'] != null
+            ? DateTime.parse(m['followedAt'] as String)
+            : null,
+        tvNotificationPrefs: tvPrefsMap == null
+            ? null
+            : TvNotificationPreferences(
+                seriesPremiere: tvPrefsMap['seriesPremiere'] as bool? ?? true,
+                seasonPremieres: tvPrefsMap['seasonPremieres'] as bool? ?? true,
+                seasonFinales: tvPrefsMap['seasonFinales'] as bool? ?? false,
+                newEpisodes: tvPrefsMap['newEpisodes'] as bool? ?? false,
+                specials: tvPrefsMap['specials'] as bool? ?? false,
+              ),
+        latestWork: latestWorkMap == null
+            ? null
+            : LatestWork(
+                title: latestWorkMap['title'] as String,
+                releaseYear: latestWorkMap['releaseYear'] as String,
+                releaseDate: latestWorkMap['releaseDate'] as String,
+                department: latestWorkMap['department'] as String,
+                job: latestWorkMap['job'] as String?,
+                posterPath: latestWorkMap['posterPath'] as String?,
+                originalReleaseDate:
+                    latestWorkMap['originalReleaseDate'] as String?,
+                originalReleaseType:
+                    latestWorkMap['originalReleaseType'] as String?,
+                latestReleaseDate:
+                    latestWorkMap['latestReleaseDate'] as String?,
+                latestReleaseType:
+                    latestWorkMap['latestReleaseType'] as String?,
+              ),
+    );
+  }
 
   // ---------------------------------------------------------------------------
   // Preferences serialization (single object, not a list)

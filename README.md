@@ -31,14 +31,15 @@ An app that sends notifications when new movies and TV shows are released. Speci
 3. Create a `.env` file in the project root:
    ```
    TMDB_API_KEY=your_api_key_here
+   GOOGLE_CLIENT_ID=your_desktop_oauth_client_id
+   GOOGLE_CLIENT_SECRET=your_desktop_oauth_client_secret
    ```
 4. Set up Google Drive sync credentials (optional — required for cross-device sync):
    - Go to [Google Cloud Console](https://console.cloud.google.com) and create a project
    - Enable the **Google Drive API**
    - Configure the **OAuth consent screen** (External, add your Google account as a test user, add `drive.appdata` scope)
-   - Create two OAuth client IDs: **Desktop app** (Windows) and **Android** (your package name + SHA-1)
-   - Copy `lib/data/services/secrets.example.dart` to `lib/data/services/secrets.dart` and fill in your Desktop client ID and secret
-   - See `lib/data/services/secrets.example.dart` for full instructions
+   - Create two OAuth client IDs: **Desktop app** (Windows) → copy client ID + secret into `.env`; **Android** → enter your package name + SHA-1
+   - Android SHA-1: `keytool -list -v -keystore ~/.android/debug.keystore -alias androiddebugkey -storepass android -keypass android`
 5. Install dependencies:
    ```bash
    flutter pub get

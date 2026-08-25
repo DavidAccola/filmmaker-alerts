@@ -26,9 +26,6 @@ CSSExample/
 .env.production
 .env.staging
 
-# Google OAuth credentials (copy secrets.example.dart → secrets.dart and fill in)
-lib/data/services/secrets.dart
-
 #Images
 assets/images/Unused
 assets/images/icon.png

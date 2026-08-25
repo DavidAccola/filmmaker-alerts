@@ -1,16 +1,13 @@
 import 'dart:convert';
 import 'dart:io';
 import 'package:extension_google_sign_in_as_googleapis_auth/extension_google_sign_in_as_googleapis_auth.dart';
+import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:google_sign_in/google_sign_in.dart';
 import 'package:googleapis/drive/v3.dart' show DriveApi;
 import 'package:googleapis_auth/auth_io.dart' as gauth;
 import 'package:http/http.dart' as http;
 import 'package:url_launcher/url_launcher.dart';
-
-// Import credentials from gitignored secrets.dart.
-// Copy secrets.example.dart → secrets.dart and fill in your credentials.
-import 'secrets.dart';
 
 /// Scopes required for Drive appdata folder access.
 const _driveScopes = [DriveApi.driveAppdataScope];
@@ -120,7 +117,7 @@ class GoogleAuthService {
 
       // autoRefreshingClient will silently refresh the access token using the
       // refresh_token whenever it expires — user never needs to re-sign-in.
-      final clientId = gauth.ClientId(googleDesktopClientId, googleDesktopClientSecret);
+      final clientId = gauth.ClientId(dotenv.env['GOOGLE_CLIENT_ID']!, dotenv.env['GOOGLE_CLIENT_SECRET']!);
       client = gauth.autoRefreshingClient(clientId, creds, http.Client());
       userEmail = json['email'] as String?;
       return true;
@@ -133,7 +130,7 @@ class GoogleAuthService {
 
   Future<bool> _signInWindows() async {
     try {
-      final clientId = gauth.ClientId(googleDesktopClientId, googleDesktopClientSecret);
+      final clientId = gauth.ClientId(dotenv.env['GOOGLE_CLIENT_ID']!, dotenv.env['GOOGLE_CLIENT_SECRET']!);
 
       // Opens system browser → user signs in → OAuth code redirects to localhost
       final creds = await gauth.obtainAccessCredentialsViaUserConsent(

@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'package:flutter/foundation.dart' show visibleForTesting;
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:googleapis/drive/v3.dart' as drive;
 import 'package:hive/hive.dart';
@@ -85,6 +86,19 @@ class SyncService {
     if (stored == null) return null;
     return DateTime.tryParse(stored);
   }
+
+  // ---------------------------------------------------------------------------
+  // Test-visible accessors (not part of public API — used only in tests)
+  // ---------------------------------------------------------------------------
+
+  /// Builds the sync payload from current Hive state. Exposed for testing.
+  @visibleForTesting
+  Map<String, dynamic> buildPayloadForTest() => _buildPayload();
+
+  /// Applies a sync payload to local Hive boxes. Exposed for testing.
+  @visibleForTesting
+  Future<void> applyPayloadForTest(Map<String, dynamic> payload) =>
+      _applyPayload(payload);
 
   // ---------------------------------------------------------------------------
   // Upload

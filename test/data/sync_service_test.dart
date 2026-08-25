@@ -4,7 +4,6 @@ import 'package:hive_test/hive_test.dart';
 import 'package:mockito/mockito.dart';
 import 'package:mockito/annotations.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
-import 'dart:convert';
 
 import 'package:filmmaker_alerts/data/models/contributor.dart';
 import 'package:filmmaker_alerts/data/models/contributor_detail.dart';
@@ -463,9 +462,9 @@ void main() {
       expect(box.get(entry.uniqueKey)?.title, 'New Show');
     });
 
-    test('_replaceBox: existing data not deleted mid-way if deserialization fails', () async {
-      // Verify that build-then-apply pattern means box has content if
-      // payload has valid entries — the upsert never clears first
+    test('_replaceBox: existing data preserved when applying identical payload', () async {
+      // Verifies the build-first-then-upsert pattern: no data is cleared
+      // before new items are ready, so applying the same data is safe.
       final box = Hive.box<WatchlistEntry>(AppConstants.watchlistEntriesBox);
       final entry = WatchlistEntry(
           tmdbId: 1, type: WorkType.movie, title: 'Safe',
@@ -475,25 +474,13 @@ void main() {
       final payload = sync.buildPayloadForTest();
       await sync.applyPayloadForTest(payload);
 
-      // Entry should still be present
+      // Entry should still be present after applying the same data
       expect(box.containsKey(entry.uniqueKey), true);
     });
 
     // -------------------------------------------------------------------------
-    // Concurrency guards
+    // Early-return guards
     // -------------------------------------------------------------------------
-
-    test('uploadIfSignedIn is a no-op while _isUploading', () async {
-      int uploadCount = 0;
-      // Can't easily test internal flag without exposing it, but we can verify
-      // that calling upload twice in rapid succession only results in one upload
-      // by checking the guard prevents double-work (via the mock).
-      // This test documents expected behavior.
-      when(mockAuth.isSignedIn).thenReturn(false);
-      await sync.uploadIfSignedIn(); // not signed in → no upload
-      // No exception, no crash
-      expect(true, true);
-    });
 
     test('downloadIfNewerAndSignedIn returns false when not signed in', () async {
       when(mockAuth.isSignedIn).thenReturn(false);
@@ -503,8 +490,48 @@ void main() {
 
     test('uploadIfSignedIn is no-op when not signed in', () async {
       when(mockAuth.isSignedIn).thenReturn(false);
-      // Should not throw
+      // Should complete without throwing
       await sync.uploadIfSignedIn();
+    });
+
+    // -------------------------------------------------------------------------
+    // Preferences null-fallback behaviour
+    // -------------------------------------------------------------------------
+
+    test('Preferences: remote null for unset field preserves local value', () async {
+      // A sync from a device that never set watchlistSortOrder (null in payload)
+      // must NOT reset the receiving device's existing sort order.
+      final box = Hive.box<Preferences>(AppConstants.preferencesBox);
+      final local = Preferences(
+        watchlistSortOrder: 'myRating',
+        connectionsSortOrder: 'releaseDate',
+        connectionsGroupByRelease: true,
+        connectionsShowHiddenContributors: false,
+        connectionsShowHiddenWatchlist: true,
+        hideRatingsInDetails: false,
+      );
+      await box.add(local);
+
+      // Apply a payload that has null for all the formerly-inconsistent fields
+      final payload = sync.buildPayloadForTest();
+      final prefs = payload['preferences'] as Map<String, dynamic>;
+      prefs['watchlistSortOrder'] = null;
+      prefs['connectionsSortOrder'] = null;
+      prefs['connectionsGroupByRelease'] = null;
+      prefs['connectionsShowHiddenContributors'] = null;
+      prefs['connectionsShowHiddenWatchlist'] = null;
+      prefs['hideRatingsInDetails'] = null;
+
+      await sync.applyPayloadForTest(payload);
+
+      final restored = box.getAt(0)!;
+      // Local values must be preserved — not silently reset to null
+      expect(restored.watchlistSortOrder, 'myRating');
+      expect(restored.connectionsSortOrder, 'releaseDate');
+      expect(restored.connectionsGroupByRelease, true);
+      expect(restored.connectionsShowHiddenContributors, false);
+      expect(restored.connectionsShowHiddenWatchlist, true);
+      expect(restored.hideRatingsInDetails, false);
     });
 
     // -------------------------------------------------------------------------

@@ -563,22 +563,26 @@ class SyncService {
     p.notifyTV = m['notifyTV'] as bool? ?? p.notifyTV;
     p.scheduleTime = m['scheduleTime'] as String? ?? p.scheduleTime;
     p.useDarkMode = m['useDarkMode'] as bool? ?? p.useDarkMode;
-    p.watchlistSortOrder = m['watchlistSortOrder'] as String?;
+    // Use ?? p.existing for all nullable prefs so a remote null (e.g. from an
+    // older app version that never set the field) preserves the local value
+    // rather than silently resetting it.
+    p.watchlistSortOrder = m['watchlistSortOrder'] as String? ?? p.watchlistSortOrder;
     p.watchlistUseListView =
         m['watchlistUseListView'] as bool? ?? p.watchlistUseListView;
-    p.connectionsSortOrder = m['connectionsSortOrder'] as String?;
-    p.connectionsGroupByRelease = m['connectionsGroupByRelease'] as bool?;
+    p.connectionsSortOrder = m['connectionsSortOrder'] as String? ?? p.connectionsSortOrder;
+    p.connectionsGroupByRelease =
+        m['connectionsGroupByRelease'] as bool? ?? p.connectionsGroupByRelease;
     p.connectionsShowHiddenContributors =
-        m['connectionsShowHiddenContributors'] as bool?;
+        m['connectionsShowHiddenContributors'] as bool? ?? p.connectionsShowHiddenContributors;
     p.connectionsShowHiddenWatchlist =
-        m['connectionsShowHiddenWatchlist'] as bool?;
+        m['connectionsShowHiddenWatchlist'] as bool? ?? p.connectionsShowHiddenWatchlist;
     p.dismissedConnectionIds =
         List<String>.from(m['dismissedConnectionIds'] as List? ?? []);
     p.streamingCountry = m['streamingCountry'] as String? ?? p.streamingCountry;
     if (m['defaultDepartments'] != null) {
       p.defaultDepartments = List<String>.from(m['defaultDepartments'] as List);
     }
-    p.hideRatingsInDetails = m['hideRatingsInDetails'] as bool?;
+    p.hideRatingsInDetails = m['hideRatingsInDetails'] as bool? ?? p.hideRatingsInDetails;
     if (box.isEmpty) {
       await box.add(p);
     } else {

@@ -31,8 +31,12 @@ class SyncService {
   /// Guard against concurrent uploads (e.g. rapid watchlist changes).
   bool _isUploading = false;
 
+  /// Guard against concurrent downloads (e.g. rapid app backgrounding/foregrounding).
+  bool _isDownloading = false;
+
   /// Set to true while _applyPayload runs to prevent the watchlist listener
   /// from immediately re-uploading data that was just downloaded.
+  /// Also documents intent: while applying a download, uploads are suppressed.
   bool _isApplyingDownload = false;
 
   SyncService({
@@ -46,10 +50,11 @@ class SyncService {
   // ---------------------------------------------------------------------------
 
   /// Upload local data to Drive. Called on app close and after mutations.
-  /// Silent fail if not signed in, no network, already uploading, or
-  /// currently applying a downloaded payload (prevents echo uploads).
+  /// Silent fail if not signed in, no network, already uploading, currently
+  /// downloading, or applying a downloaded payload (prevents echo uploads and
+  /// partial-write corruption from concurrent upload/download).
   Future<void> uploadIfSignedIn() async {
-    if (!_auth.isSignedIn || _isUploading || _isApplyingDownload) return;
+    if (!_auth.isSignedIn || _isUploading || _isApplyingDownload || _isDownloading) return;
     _isUploading = true;
     try {
       await _upload();
@@ -63,11 +68,14 @@ class SyncService {
   /// Download from Drive if remote is newer. Called on app launch and resume.
   /// Returns true if local data was replaced.
   Future<bool> downloadIfNewerAndSignedIn() async {
-    if (!_auth.isSignedIn) return false;
+    if (!_auth.isSignedIn || _isDownloading || _isUploading) return false;
+    _isDownloading = true;
     try {
       return await _downloadIfNewer();
     } catch (_) {
       return false;
+    } finally {
+      _isDownloading = false;
     }
   }
 
@@ -96,31 +104,29 @@ class SyncService {
       contentType: 'application/json',
     );
 
+    drive.File uploadedFile;
     if (existingId != null) {
-      await driveApi.files.update(
+      uploadedFile = await driveApi.files.update(
         drive.File(),
         existingId,
         uploadMedia: media,
+        $fields: 'modifiedTime',
       );
     } else {
       final file = drive.File()
         ..name = _kDriveFileName
         ..parents = ['appDataFolder'];
-      await driveApi.files.create(
+      uploadedFile = await driveApi.files.create(
         file,
         uploadMedia: media,
+        $fields: 'modifiedTime',
       );
     }
 
-    // Use the server's modifiedTime so upload and download timestamps are
-    // on the same reference clock — prevents spurious downloads if the
-    // device clock is slightly ahead of Google's servers.
-    final uploaded = await driveApi.files.list(
-      spaces: 'appDataFolder',
-      q: "name = '$_kDriveFileName'",
-      $fields: 'files(id,modifiedTime)',
-    );
-    final serverTime = uploaded.files?.firstOrNull?.modifiedTime;
+    // Use the server's modifiedTime from the upload response — same reference
+    // clock as the download path, and avoids a second round-trip that could
+    // read a version written by another device in the interim.
+    final serverTime = uploadedFile.modifiedTime;
     final timestampToStore = serverTime?.toUtc().toIso8601String()
         ?? DateTime.now().toUtc().toIso8601String();
     await _storage.write(key: _kLastSyncKey, value: timestampToStore);

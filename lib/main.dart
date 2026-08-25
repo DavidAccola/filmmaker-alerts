@@ -562,11 +562,14 @@ class _AppLifecycleWrapperState extends ConsumerState<_AppLifecycleWrapper>
       imageCache.clearLiveImages();
 
       // Invalidate cached data providers so fresh data is read from Hive
+      // (handles non-sync mutations that may have occurred while backgrounded).
       ref.invalidate(contributorsProvider);
       ref.invalidate(watchlistEntriesProvider);
       ref.invalidate(connectionsDataProvider);
 
-      // Download newer sync data on foreground then refresh UI if replaced
+      // Download newer sync data then invalidate again if Drive had newer data.
+      // Intentionally unawaited — lifecycle callbacks are synchronous.
+      // downloadIfNewerAndSignedIn() swallows all exceptions internally.
       _downloadAndRefreshIfNewer();
     } else if (state == AppLifecycleState.paused) {
       // Upload on background — paused fires while the process is still alive,

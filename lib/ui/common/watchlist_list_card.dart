@@ -7,7 +7,7 @@ import '../../data/models/contributor_detail.dart';
 import '../../data/models/status_record.dart';
 import '../../providers/providers.dart';
 import 'status_colors.dart';
-import 'half_star_rating.dart';
+import 'star_rating.dart';
 import 'snackbar_utils.dart';
 import '../screens/show_configuration_screen.dart';
 import '../screens/collection_configuration_screen.dart';
@@ -455,3 +455,4 @@ class _WatchlistListCardState extends ConsumerState<WatchlistListCard> {
     );
   }
 }
+

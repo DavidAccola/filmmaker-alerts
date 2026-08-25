@@ -333,19 +333,14 @@ class _WorkWidgetState extends State<WorkWidget> {
                       Builder(builder: (context) {
                         String roleText;
                         if (widget.companyRoleFormat) {
-                          // For company detail sections (Upcoming/Latest/Biggest):
+                          // For company detail carousels (Upcoming/Latest/Biggest):
                           // 1st billed: show nothing
-                          // Others: show "(Producer X of Y, Produced by Z)"
-                          final producerLabel = WorkSortingLogic.getProducerLabel(work);
-                          if (producerLabel == null) return const SizedBox.shrink(); // 1st billed
+                          // Others: show "Produced by X"
                           final producedByRole = work.contributorRoles
                               .map((r) => r.role)
                               .firstWhere((r) => r.startsWith('Produced by '), orElse: () => '');
-                          if (producedByRole.isNotEmpty) {
-                            roleText = '($producerLabel, $producedByRole)';
-                          } else {
-                            roleText = '($producerLabel)';
-                          }
+                          if (producedByRole.isEmpty) return const SizedBox.shrink(); // 1st billed
+                          roleText = '($producedByRole)';
                         } else {
                           roleText = WorkSortingLogic.sortRoles(work.contributorRoles).map((r) => r.role).join(', ');
                         }

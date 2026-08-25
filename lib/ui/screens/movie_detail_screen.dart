@@ -22,7 +22,6 @@ import '../common/runtime_display.dart';
 import '../common/adaptive_tooltip_text.dart';
 import '../common/contributor_hover_card.dart';
 import '../common/department_selection_dialog.dart';
-import '../common/half_star_rating.dart';
 import '../common/rating_prompt.dart';
 
 class MovieDetailScreen extends ConsumerStatefulWidget {
@@ -410,33 +409,9 @@ class _MovieDetailScreenState extends ConsumerState<MovieDetailScreen> {
           ),
         
         const SizedBox(height: 12),
-        
-        // Rating and popularity
-        Row(
-          children: [
-            if (!(prefs.hideRatingsInDetails ?? false) && movieDetail.tmdbRating != null && movieDetail.voteCount != null && movieDetail.voteCount! > 0)
-              Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  const Icon(
-                    Icons.star,
-                    size: 16,
-                    color: Colors.amber,
-                  ),
-                  const SizedBox(width: 4),
-                  Text(
-                    movieDetail.tmdbRating!.toStringAsFixed(1),
-                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                      fontWeight: FontWeight.w600,
-                    ),
-                  ),
-                ],
-              ),
-          ],
-        ),
 
-        // My rating row (shown when in watchlist)
-        _buildMyRatingRow(movieDetail),
+        // Ratings row: TMDB and My rating side by side with clear labels
+        _buildRatingsRow(movieDetail),
         
         // Notification preferences chips (only shown when in watchlist)
         const SizedBox(height: 8),
@@ -448,105 +423,113 @@ class _MovieDetailScreenState extends ConsumerState<MovieDetailScreen> {
     );
   }
 
-  Widget _buildMyRatingRow(MovieDetail movieDetail) {
+  Widget _buildRatingsRow(MovieDetail movieDetail) {
+    final prefs = ref.read(preferencesProvider).value ?? Preferences();
+    final showTmdb = !(prefs.hideRatingsInDetails ?? false) &&
+        movieDetail.tmdbRating != null &&
+        (movieDetail.voteCount ?? 0) > 0;
     final watchlistLogic = ref.read(watchlistLogicProvider);
     final entry = watchlistLogic.getWork(movieDetail.tmdbId, WorkType.movie);
-    if (entry == null) return const SizedBox.shrink();
+    final myRating = entry?.userRating;
 
-    final rating = entry.userRating;
+    final theme = Theme.of(context);
+    final labelStyle = theme.textTheme.bodySmall?.copyWith(
+      color: theme.colorScheme.onSurfaceVariant,
+    );
+    final valueStyle = theme.textTheme.bodySmall?.copyWith(
+      fontWeight: FontWeight.w600,
+    );
+
+    if (!showTmdb && myRating == null && entry == null) return const SizedBox.shrink();
 
     return Padding(
-      padding: const EdgeInsets.only(top: 8),
-      child: Row(
+      padding: const EdgeInsets.only(bottom: 4),
+      child: Wrap(
+        spacing: 16,
+        runSpacing: 4,
+        crossAxisAlignment: WrapCrossAlignment.center,
         children: [
-          Text(
-            'My rating:',
-            style: Theme.of(context).textTheme.bodySmall?.copyWith(
-              color: Theme.of(context).colorScheme.onSurfaceVariant,
+          if (showTmdb)
+            Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text('TMDB: ', style: labelStyle),
+                const Icon(Icons.star_rounded, size: 14, color: Colors.amber),
+                const SizedBox(width: 2),
+                Text(movieDetail.tmdbRating!.toStringAsFixed(1), style: valueStyle),
+              ],
             ),
-          ),
-          const SizedBox(width: 8),
-          if (rating != null)
-            HalfStarRating(
-              value: rating,
-              starSize: 18,
-              onChanged: (v) async {
-                if (_ratingBusy) return;
-                _ratingBusy = true;
-                try {
-                  await ref.read(ratingLogicProvider).setWorkRating(entry, v);
-                  if (mounted) setState(() {});
-                } finally {
-                  _ratingBusy = false;
-                }
-              },
-            )
-          else
-            TextButton.icon(
-              onPressed: () async {
-                if (_ratingBusy) return;
-                _ratingBusy = true;
-                try {
-                  final result = await showRatingPrompt(
-                    context,
-                    title: movieDetail.title,
-                    ratingContext: RatingContext.movie,
-                  );
-                  if (result?.rating != null && mounted) {
-                    await ref.read(ratingLogicProvider).setWorkRating(entry, result!.rating);
-                    if (mounted) setState(() {});
-                  }
-                } finally {
-                  _ratingBusy = false;
-                }
-              },
-              icon: const Icon(Icons.star_outline, size: 16),
-              label: const Text('Rate'),
-              style: TextButton.styleFrom(
-                padding: EdgeInsets.zero,
-                tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-              ),
+          if (entry != null)
+            Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text('My rating: ', style: labelStyle),
+                if (myRating != null) ...[
+                  Text('$myRating/10',
+                      style: valueStyle?.copyWith(color: Colors.amber)),
+                  const SizedBox(width: 4),
+                  InkWell(
+                    onTap: () async {
+                      if (_ratingBusy) return;
+                      _ratingBusy = true;
+                      try {
+                        final result = await showRatingPrompt(
+                          context,
+                          title: movieDetail.title,
+                          ratingContext: RatingContext.movie,
+                          existingRating: myRating,
+                          allowClear: true,
+                        );
+                        if (result != null && mounted) {
+                          final ratingLogic = ref.read(ratingLogicProvider);
+                          if (result.cleared) {
+                            await ratingLogic.setWorkRating(entry, null);
+                          } else if (result.rating != null) {
+                            await ratingLogic.setWorkRating(entry, result.rating);
+                          }
+                          if (mounted) setState(() {});
+                        }
+                      } finally {
+                        _ratingBusy = false;
+                      }
+                    },
+                    child: Icon(Icons.edit, size: 14,
+                        color: theme.colorScheme.onSurfaceVariant),
+                  ),
+                ] else
+                  TextButton.icon(
+                    onPressed: () async {
+                      if (_ratingBusy) return;
+                      _ratingBusy = true;
+                      try {
+                        final result = await showRatingPrompt(
+                          context,
+                          title: movieDetail.title,
+                          ratingContext: RatingContext.movie,
+                        );
+                        if (result?.rating != null && mounted) {
+                          await ref.read(ratingLogicProvider)
+                              .setWorkRating(entry, result!.rating);
+                          if (mounted) setState(() {});
+                        }
+                      } finally {
+                        _ratingBusy = false;
+                      }
+                    },
+                    icon: const Icon(Icons.star_outline, size: 14),
+                    label: const Text('Rate'),
+                    style: TextButton.styleFrom(
+                      padding: EdgeInsets.zero,
+                      tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                    ),
+                  ),
+              ],
             ),
-          if (rating != null) ...[
-            const SizedBox(width: 4),
-            Text(
-              '${(rating / 2).toStringAsFixed(1).replaceAll('.0', '')} / 5',
-              style: Theme.of(context).textTheme.bodySmall,
-            ),
-            const SizedBox(width: 4),
-            InkWell(
-              onTap: () async {
-                if (_ratingBusy) return;
-                _ratingBusy = true;
-                try {
-                  final result = await showRatingPrompt(
-                    context,
-                    title: movieDetail.title,
-                    ratingContext: RatingContext.movie,
-                    existingRating: rating,
-                    allowClear: true,
-                  );
-                  if (result != null && mounted) {
-                    final ratingLogic = ref.read(ratingLogicProvider);
-                    if (result.cleared) {
-                      await ratingLogic.setWorkRating(entry, null);
-                    } else if (result.rating != null) {
-                      await ratingLogic.setWorkRating(entry, result.rating);
-                    }
-                    if (mounted) setState(() {});
-                  }
-                } finally {
-                  _ratingBusy = false;
-                }
-              },
-              child: Icon(Icons.edit, size: 14,
-                  color: Theme.of(context).colorScheme.onSurfaceVariant),
-            ),
-          ],
         ],
       ),
     );
   }
+
 
   Widget _buildSynopsisSection(MovieDetail movieDetail) {
     if (movieDetail.synopsis.isEmpty) {

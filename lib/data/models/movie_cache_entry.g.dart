@@ -22,7 +22,7 @@ class MovieCacheEntryAdapter extends TypeAdapter<MovieCacheEntry> {
       posterPath: fields[2] as String?,
       releaseDate: fields[3] as String?,
       popularity: fields[4] as double?,
-      notified: fields[5] as bool? ?? false,
+      notified: fields[5] as bool,
       imdbId: fields[6] as String?,
     );
   }

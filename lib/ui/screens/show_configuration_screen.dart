@@ -5,6 +5,7 @@ import 'package:material_symbols_icons/symbols.dart';
 import '../../data/models/episode_status_entry.dart';
 import '../../data/models/season_status_entry.dart';
 import '../../data/models/status_record.dart';
+import '../../data/models/preferences.dart';
 import '../../data/models/tv_detail.dart';
 import '../../data/models/contributor_detail.dart';
 import '../../providers/providers.dart';
@@ -55,6 +56,7 @@ class _ShowConfigurationScreenState
 
   bool _isDirty = false;
   bool _isPosterHovered = false;
+  bool _ratingBusy = false;
   
   // Track if we've already checked for auto-expand (to avoid re-expanding after user collapses)
   bool _hasCheckedAutoExpand = false;
@@ -419,7 +421,7 @@ class _ShowConfigurationScreenState
                 episodeNumber: episode.episodeNumber,
                 episodeTitle: episode.name,
                 statusRecords: markedEpisode?.statusRecords ?? [],
-              );
+              )..userRating = markedEpisode?.userRating; // preserve rating
             })
             .toList();
       } else {
@@ -511,6 +513,159 @@ class _ShowConfigurationScreenState
                 child: const Icon(Icons.check),
               )
             : null,
+      ),
+    );
+  }
+
+  /// Shows TMDB rating and my rating (show-level) side by side with an edit button.
+  Widget _buildShowRatingRow(TvShowDetail showDetail, Preferences? prefs) {
+    final theme = Theme.of(context);
+    final showTmdb = showDetail.tmdbRating != null &&
+        (showDetail.voteCount ?? 0) > 0 &&
+        !(prefs?.hideRatingsInDetails ?? false);
+    final watchlistLogic = ref.read(watchlistLogicProvider);
+    final entry = watchlistLogic.getWork(widget.showId, WorkType.tvShow);
+    final ratingLogic = ref.read(ratingLogicProvider);
+    final effectiveRating = entry != null ? ratingLogic.effectiveRating(entry) : null;
+    final isManual = entry != null && ratingLogic.isManualRating(entry);
+
+    if (!showTmdb && effectiveRating == null) return const SizedBox.shrink();
+
+    final labelStyle = theme.textTheme.bodySmall?.copyWith(
+        color: theme.colorScheme.onSurfaceVariant);
+    final valueStyle = theme.textTheme.bodySmall?.copyWith(
+        fontWeight: FontWeight.w600);
+
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 4),
+      child: Wrap(
+        spacing: 16,
+        runSpacing: 4,
+        crossAxisAlignment: WrapCrossAlignment.center,
+        children: [
+          if (showTmdb)
+            Row(mainAxisSize: MainAxisSize.min, children: [
+              Text('TMDB: ', style: labelStyle),
+              const Icon(Icons.star_rounded, size: 13, color: Colors.amber),
+              const SizedBox(width: 2),
+              Text(showDetail.tmdbRating!.toStringAsFixed(1), style: valueStyle),
+            ]),
+          Row(mainAxisSize: MainAxisSize.min, children: [
+            Text('My rating: ', style: labelStyle),
+            if (effectiveRating != null)
+              Text(
+                effectiveRating % 1 == 0
+                    ? '${effectiveRating.toInt()}/10'
+                    : '${effectiveRating.toStringAsFixed(1)}/10',
+                style: valueStyle?.copyWith(color: Colors.amber),
+              )
+            else
+              Text('—', style: labelStyle),
+            const SizedBox(width: 4),
+            if (entry != null)
+              InkWell(
+                onTap: () async {
+                  if (_ratingBusy) return;
+                  _ratingBusy = true;
+                  try {
+                    final result = await showRatingPrompt(
+                      context,
+                      title: widget.showTitle,
+                      ratingContext: RatingContext.tvShow,
+                      existingRating: entry.userRating,
+                      allowClear: isManual,
+                    );
+                    if (result != null && mounted) {
+                      if (result.cleared) {
+                        await ratingLogic.setWorkRating(entry, null);
+                      } else if (result.rating != null) {
+                        await ratingLogic.setWorkRating(entry, result.rating);
+                      }
+                      if (mounted) setState(() {});
+                    }
+                  } finally {
+                    _ratingBusy = false;
+                  }
+                },
+                child: Icon(Icons.edit, size: 13,
+                    color: theme.colorScheme.onSurfaceVariant),
+              ),
+          ]),
+        ],
+      ),
+    );
+  }
+
+  // ---------------------------------------------------------------------------
+  // Season rating helpers — computed once per build in _buildSeasonItem,
+  // not inside the hover closure.
+  // ---------------------------------------------------------------------------
+
+  double? _precomputedSeasonRating(int seasonNumber) =>
+      ref.read(ratingLogicProvider).effectiveSeasonRating(widget.showId, seasonNumber);
+
+  /// Returns the season's manual rating (null = no manual rating set).
+  /// Single Hive lookup — call once and derive both isManual and manualRating from the result.
+  int? _precomputedSeasonManualRating(int seasonNumber) =>
+      ref.read(seasonStatusRepositoryProvider)
+          .getSeason(widget.showId, seasonNumber)?.userRating;
+
+  /// Shows season rating as a compact badge; on hover shows an edit icon.
+  /// [effectiveRating] and [isManual] are precomputed by the caller to avoid
+  /// repeated repo lookups on every hover rebuild.
+  Widget _buildSeasonRatingBadge(int seasonNumber, double? effectiveRating, bool isManual, int? manualRating, bool isHovered) {
+    if (effectiveRating == null && !isHovered) return const SizedBox.shrink();
+
+    final theme = Theme.of(context);
+    return Padding(
+      padding: const EdgeInsets.only(left: 4),
+      child: InkWell(
+        onTap: () async {
+          if (_ratingBusy) return;
+          _ratingBusy = true;
+          try {
+            final ratingLogic = ref.read(ratingLogicProvider);
+            final result = await showRatingPrompt(
+              context,
+              title: 'Season $seasonNumber',
+              ratingContext: RatingContext.tvSeason,
+              existingRating: manualRating,
+              allowClear: isManual,
+            );
+            if (result != null && mounted) {
+              if (result.cleared) {
+                await ratingLogic.setSeasonRating(widget.showId, seasonNumber, null);
+              } else if (result.rating != null) {
+                await ratingLogic.setSeasonRating(widget.showId, seasonNumber, result.rating);
+              }
+              if (mounted) setState(() {});
+            }
+          } finally {
+            _ratingBusy = false;
+          }
+        },
+        borderRadius: BorderRadius.circular(4),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
+          child: effectiveRating != null
+              ? Row(mainAxisSize: MainAxisSize.min, children: [
+                  Text(
+                    effectiveRating % 1 == 0
+                        ? '★ ${effectiveRating.toInt()}/10'
+                        : '★ ${effectiveRating.toStringAsFixed(1)}/10',
+                    style: theme.textTheme.labelSmall?.copyWith(
+                      color: isManual ? Colors.amber : Colors.amber.withValues(alpha: 0.65),
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                  if (isHovered) ...[
+                    const SizedBox(width: 2),
+                    Icon(Icons.edit, size: 11, color: theme.colorScheme.onSurfaceVariant),
+                  ],
+                ])
+              : Icon(Icons.star_outline, size: 14,
+                  color: theme.colorScheme.onSurfaceVariant.withValues(alpha: 0.5)),
+        ),
       ),
     );
   }
@@ -745,22 +900,8 @@ class _ShowConfigurationScreenState
         
         const SizedBox(height: 8),
         
-        // Rating
-        if (showDetail.tmdbRating != null && 
-            (showDetail.voteCount ?? 0) > 0 && 
-            !(prefs?.hideRatingsInDetails ?? false))
-          Row(
-            children: [
-              const Icon(Icons.star, color: Colors.amber, size: 14),
-              const SizedBox(width: 4),
-              Text(
-                showDetail.tmdbRating!.toStringAsFixed(1),
-                style: theme.textTheme.bodySmall?.copyWith(
-                  fontWeight: FontWeight.w600,
-                ),
-              ),
-            ],
-          ),
+        // Ratings: TMDB + My rating side by side
+        _buildShowRatingRow(showDetail, prefs),
         
         // Notification preferences chips
         const SizedBox(height: 8),
@@ -1045,6 +1186,12 @@ class _ShowConfigurationScreenState
   ) {
     final theme = Theme.of(context);
     final statusCounts = _getSeasonStatusCounts(season.seasonNumber, episodes);
+
+    // Compute season rating once here — not inside the hover closure,
+    // which rebuilds on every mouse enter/exit.
+    final seasonRating = _precomputedSeasonRating(season.seasonNumber);
+    final seasonManualRating = _precomputedSeasonManualRating(season.seasonNumber);
+    final seasonIsManual = seasonManualRating != null;
     
     // Build status summary only if:
     // - Some episodes are marked (statusCounts not empty)
@@ -1122,6 +1269,14 @@ class _ShowConfigurationScreenState
                   Icon(
                     isExpanded ? Icons.expand_more : Icons.chevron_right,
                     color: theme.colorScheme.onSurfaceVariant,
+                  ),
+                  // Season rating — shown inline, edit on hover
+                  _buildSeasonRatingBadge(
+                    season.seasonNumber,
+                    seasonRating,
+                    seasonIsManual,
+                    seasonManualRating,
+                    isHovered,
                   ),
                 ],
               ),
@@ -1248,11 +1403,38 @@ class _ShowConfigurationScreenState
   /// Builds an episode item row with status buttons (shown on hover) and title.
   Widget _buildEpisodeItem(EpisodeStatusEntry episode) {
     final effectiveStatuses = _getEffectiveEpisodeStatuses(episode.seasonNumber, episode.episodeNumber);
-    
+
     return _EpisodeRow(
       episode: episode,
       effectiveStatuses: effectiveStatuses,
       onStatusTap: _handleStatusButtonTap,
+      userRating: episode.userRating,
+      onRateTap: () async {
+        if (_ratingBusy) return;
+        _ratingBusy = true;
+        try {
+          final ratingLogic = ref.read(ratingLogicProvider);
+          final result = await showRatingPrompt(
+            context,
+            title: 'S${episode.seasonNumber}E${episode.episodeNumber} — ${episode.episodeTitle}',
+            ratingContext: RatingContext.tvEpisode,
+            existingRating: episode.userRating,
+            allowClear: episode.userRating != null,
+          );
+          if (result != null && mounted) {
+            if (result.cleared) {
+              await ratingLogic.setEpisodeRating(
+                  widget.showId, episode.seasonNumber, episode.episodeNumber, null);
+            } else if (result.rating != null) {
+              await ratingLogic.setEpisodeRating(
+                  widget.showId, episode.seasonNumber, episode.episodeNumber, result.rating);
+            }
+            if (mounted) setState(() {});
+          }
+        } finally {
+          _ratingBusy = false;
+        }
+      },
     );
   }
 
@@ -1646,11 +1828,15 @@ class _EpisodeRow extends StatefulWidget {
   final EpisodeStatusEntry episode;
   final Set<WatchStatus> effectiveStatuses;
   final void Function(int seasonNumber, int episodeNumber, WatchStatus status) onStatusTap;
+  final int? userRating;
+  final VoidCallback? onRateTap;
 
   const _EpisodeRow({
     required this.episode,
     required this.effectiveStatuses,
     required this.onStatusTap,
+    this.userRating,
+    this.onRateTap,
   });
 
   @override
@@ -1737,6 +1923,42 @@ class _EpisodeRowState extends State<_EpisodeRow> {
                 overflow: TextOverflow.ellipsis,
               ),
             ),
+            // Rating indicator:
+            // - When not hovered: amber dot if rated (always visible, space-efficient)
+            // - When hovered/tapped: full "★ X/10" badge with edit icon
+            if (widget.userRating != null || _isHovered)
+              InkWell(
+                onTap: widget.onRateTap,
+                borderRadius: BorderRadius.circular(4),
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
+                  child: _isHovered
+                      ? Row(mainAxisSize: MainAxisSize.min, children: [
+                          Text(
+                            widget.userRating != null
+                                ? '★ ${widget.userRating}/10'
+                                : 'Rate',
+                            style: theme.textTheme.labelSmall?.copyWith(
+                              color: widget.userRating != null
+                                  ? Colors.amber
+                                  : theme.colorScheme.onSurfaceVariant,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                          const SizedBox(width: 2),
+                          Icon(Icons.edit, size: 11,
+                              color: theme.colorScheme.onSurfaceVariant),
+                        ])
+                      : Container(
+                          width: 7,
+                          height: 7,
+                          decoration: const BoxDecoration(
+                            color: Colors.amber,
+                            shape: BoxShape.circle,
+                          ),
+                        ),
+                ),
+              ),
           ],
         ),
       ),

@@ -244,9 +244,10 @@ class _ContributorCardState extends State<ContributorCard> {
                   }
                 }
               } else {
-                // PERSON LAYOUT: Latest: Title (Date)
+                // PERSON/COMPANY LAYOUT: Latest: Title (Date)
                 final formattedDate = formatDate(latestWork.releaseDate);
-                final jobOrDept = latestWork.job ?? latestWork.department;
+                final isCompany = widget.contributor.type == ContributorType.company;
+                final jobOrDept = isCompany ? '' : (latestWork.job ?? latestWork.department);
                 
                 if (isSmallScreen) {
                   // On small screens, put "Latest:" on its own line

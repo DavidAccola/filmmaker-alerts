@@ -24,10 +24,9 @@ class NotificationService {
       if (Platform.isWindows) {
         
         // Create Windows notification instance
-        // For development/debug mode, we can use an applicationId
-        // For packaged apps, applicationId should be null to use the app's display name
+        // applicationId must match the AppUserModelID set in main.cpp
         _windowsNotification = WindowsNotification(
-          applicationId: kDebugMode ? r"Filmmaker.Alerts.Debug" : r"Filmmaker Alerts",
+          applicationId: r"FilmmakerAlerts.App",
         );
         
         // Initialize callback for handling notification actions
@@ -224,7 +223,7 @@ class NotificationService {
           
           String customTemplate = '''
 <?xml version="1.0" encoding="utf-8"?>
-<toast launch="app://history" scenario="reminder" activationType="protocol">
+<toast launch="app://history" activationType="protocol">
   <visual>
     <binding template="ToastGeneric">
       <text>${_escapeXml(title)}</text>

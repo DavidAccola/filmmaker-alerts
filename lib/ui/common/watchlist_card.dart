@@ -14,7 +14,7 @@ import 'release_preferences_dialog.dart';
 import 'tv_preferences_dialog.dart';
 import 'expand_poster_button.dart';
 import 'status_colors.dart';
-import 'half_star_rating.dart';
+import 'star_rating.dart';
 import '../../providers/providers.dart';
 import '../screens/show_configuration_screen.dart';
 import '../screens/collection_configuration_screen.dart';
@@ -1309,3 +1309,4 @@ class _StatusButtonState extends State<_StatusButton>
     );
   }
 }
+

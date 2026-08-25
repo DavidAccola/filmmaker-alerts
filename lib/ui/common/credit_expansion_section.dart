@@ -765,6 +765,8 @@ class _CreditWorkItemState extends State<_CreditWorkItem> {
     rawRoles = rawRoles.where((r) => !['tv', 'movie', 'tv show', 'general'].contains(r.toLowerCase())).toList();
     
     String finalRolesString = "";
+    String? _companyProducerPrefix; // "Producer X of Y (" part — rendered in blue
+    String? _companyProducedBy; // "Produced by X" part — rendered in default color
 
     // Company-specific role formatting
     if (widget.isCompany && rawRoles.isNotEmpty) {
@@ -776,8 +778,8 @@ class _CreditWorkItemState extends State<_CreditWorkItem> {
         // For "Production" group (1st billed), show nothing
         if (producerLabel != null) {
           finalRolesString = producerLabel;
+          _companyProducerPrefix = producerLabel;
         }
-        // 1st billed under "Production" group: leave empty (no need to repeat)
       } else {
         // Not grouped: 1st billed shows nothing, others show "Producer X of Y (Produced by Z)"
         if (producerLabel != null) {
@@ -787,11 +789,13 @@ class _CreditWorkItemState extends State<_CreditWorkItem> {
           );
           if (producedByRole.isNotEmpty) {
             finalRolesString = '$producerLabel ($producedByRole)';
+            _companyProducerPrefix = '$producerLabel (';
+            _companyProducedBy = producedByRole;
           } else {
             finalRolesString = producerLabel;
+            _companyProducerPrefix = producerLabel;
           }
         }
-        // 1st billed: leave empty
       }
     } else if (rawRoles.isNotEmpty) {
         List<String> crew = [];
@@ -910,17 +914,55 @@ class _CreditWorkItemState extends State<_CreditWorkItem> {
                         if (finalRolesString.isNotEmpty && !isEpisode && !widget.hideRoles)
                          Padding(
                            padding: const EdgeInsets.only(top: 2.0),
-                           child: Text(
-                              finalRolesString,
-                              style: theme.textTheme.labelSmall?.copyWith(
-                                color: theme.colorScheme.onSurface,
-                                fontStyle: FontStyle.italic,
-                                fontSize: 11,
-                                fontWeight: FontWeight.w500,
+                           child: _companyProducerPrefix != null
+                             ? Text.rich(
+                                 TextSpan(
+                                   children: [
+                                     TextSpan(
+                                       text: _companyProducerPrefix,
+                                       style: theme.textTheme.labelSmall?.copyWith(
+                                         color: theme.colorScheme.onSurfaceVariant.withValues(alpha: 0.7),
+                                         fontStyle: FontStyle.italic,
+                                         fontSize: 11,
+                                         fontWeight: FontWeight.w500,
+                                       ),
+                                     ),
+                                     if (_companyProducedBy != null)
+                                       TextSpan(
+                                         text: _companyProducedBy,
+                                         style: theme.textTheme.labelSmall?.copyWith(
+                                           color: theme.colorScheme.onSurface,
+                                           fontStyle: FontStyle.italic,
+                                           fontSize: 11,
+                                           fontWeight: FontWeight.w500,
+                                         ),
+                                       ),
+                                     if (_companyProducedBy != null)
+                                       TextSpan(
+                                         text: ')',
+                                         style: theme.textTheme.labelSmall?.copyWith(
+                                           color: theme.colorScheme.onSurfaceVariant.withValues(alpha: 0.7),
+                                           fontStyle: FontStyle.italic,
+                                           fontSize: 11,
+                                           fontWeight: FontWeight.w500,
+                                         ),
+                                       ),
+                                   ],
+                                 ),
+                                 maxLines: 2,
+                                 overflow: TextOverflow.ellipsis,
+                               )
+                             : Text(
+                                finalRolesString,
+                                style: theme.textTheme.labelSmall?.copyWith(
+                                  color: theme.colorScheme.onSurface,
+                                  fontStyle: FontStyle.italic,
+                                  fontSize: 11,
+                                  fontWeight: FontWeight.w500,
+                                ),
+                                maxLines: 2,
+                                overflow: TextOverflow.ellipsis,
                               ),
-                              maxLines: 2,
-                              overflow: TextOverflow.ellipsis,
-                            ),
                          ),
                       ],
                     ),

@@ -1718,6 +1718,16 @@ class MockContributorDetailRepository extends _i1.Mock
       ) as bool);
 
   @override
+  _i6.Future<void> deleteContributorDetail(int? tmdbId) => (super.noSuchMethod(
+        Invocation.method(
+          #deleteContributorDetail,
+          [tmdbId],
+        ),
+        returnValue: _i6.Future<void>.value(),
+        returnValueForMissingStub: _i6.Future<void>.value(),
+      ) as _i6.Future<void>);
+
+  @override
   _i6.Future<void> clearOldCache() => (super.noSuchMethod(
         Invocation.method(
           #clearOldCache,
@@ -1748,19 +1758,19 @@ class MockContributorDetailRepository extends _i1.Mock
       ) as List<_i17.ContributorDetail>);
 
   @override
-  _i6.Future<void> deleteContributorDetail(int? tmdbId) => (super.noSuchMethod(
+  _i6.Future<void> clearAllCache() => (super.noSuchMethod(
         Invocation.method(
-          #deleteContributorDetail,
-          [tmdbId],
+          #clearAllCache,
+          [],
         ),
         returnValue: _i6.Future<void>.value(),
         returnValueForMissingStub: _i6.Future<void>.value(),
       ) as _i6.Future<void>);
 
   @override
-  _i6.Future<void> clearAllCache() => (super.noSuchMethod(
+  _i6.Future<void> migrateToStringKeys() => (super.noSuchMethod(
         Invocation.method(
-          #clearAllCache,
+          #migrateToStringKeys,
           [],
         ),
         returnValue: _i6.Future<void>.value(),

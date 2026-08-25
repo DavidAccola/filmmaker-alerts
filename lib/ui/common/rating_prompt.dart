@@ -1,5 +1,7 @@
+import 'dart:io' show Platform;
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
-import 'half_star_rating.dart';
+import 'star_rating.dart';
 
 /// The context for what is being rated — affects title/copy.
 enum RatingContext {
@@ -76,9 +78,12 @@ class _RatingPromptSheetState extends State<_RatingPromptSheet> {
   }
 
   String get _ratingLabel {
-    if (_selected == null) return 'Tap to rate';
-    // Map 1–10 to descriptive labels
-    return switch (_selected!) {
+    if (_selected == null) {
+      final isDesktop = !kIsWeb && (Platform.isWindows || Platform.isMacOS || Platform.isLinux);
+      return isDesktop ? 'Click to rate' : 'Tap to rate';
+    }
+    // Show X/10 alongside a descriptor
+    final descriptor = switch (_selected!) {
       1 || 2 => 'Awful',
       3 || 4 => 'Bad',
       5 || 6 => 'Okay',
@@ -86,6 +91,7 @@ class _RatingPromptSheetState extends State<_RatingPromptSheet> {
       9 || 10 => 'Great',
       _ => '',
     };
+    return '$_selected/10 — $descriptor';
   }
 
   @override
@@ -132,9 +138,9 @@ class _RatingPromptSheetState extends State<_RatingPromptSheet> {
           const SizedBox(height: 24),
 
           // Stars
-          HalfStarRating(
+          StarRating(
             value: _selected,
-            starSize: 40,
+            starSize: 26,
             onChanged: (v) => setState(() => _selected = v),
           ),
           const SizedBox(height: 8),
@@ -189,3 +195,4 @@ class _RatingPromptSheetState extends State<_RatingPromptSheet> {
     );
   }
 }
+

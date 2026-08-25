@@ -89,8 +89,15 @@ class HistoryRepository {
         }
       }
 
-      // Append Events
-      existingEntry.notificationEvents.addAll(newEntry.notificationEvents);
+      // Append Events (avoid duplicates by releaseType + releaseDate)
+      for (final newEvent in newEntry.notificationEvents) {
+        final exists = existingEntry.notificationEvents.any((e) =>
+          e.releaseType == newEvent.releaseType && e.releaseDate == newEvent.releaseDate
+        );
+        if (!exists) {
+          existingEntry.notificationEvents.add(newEvent);
+        }
+      }
       
       // Save changes to Hive
       await existingEntry.save();

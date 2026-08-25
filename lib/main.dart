@@ -522,10 +522,9 @@ class _AppLifecycleWrapperState extends ConsumerState<_AppLifecycleWrapper>
     // Try to restore Google session and download newer data on launch.
     WidgetsBinding.instance.addPostFrameCallback((_) async {
       final auth = ref.read(googleAuthServiceProvider);
-      final sync = ref.read(syncServiceProvider);
       final restored = await auth.tryRestoreSession();
       if (restored) {
-        await sync.downloadIfNewerAndSignedIn();
+        await _downloadAndRefreshIfNewer();
       }
     });
   }
@@ -567,15 +566,30 @@ class _AppLifecycleWrapperState extends ConsumerState<_AppLifecycleWrapper>
       ref.invalidate(watchlistEntriesProvider);
       ref.invalidate(connectionsDataProvider);
 
-      // Download newer sync data on foreground (mobile)
-      ref.read(syncServiceProvider).downloadIfNewerAndSignedIn();
+      // Download newer sync data on foreground then refresh UI if replaced
+      _downloadAndRefreshIfNewer();
     } else if (state == AppLifecycleState.paused) {
-      // Upload on background (mobile app close equivalent)
+      // Upload on background — paused fires while the process is still alive,
+      // giving enough time for the async upload to complete.
       ref.read(syncServiceProvider).uploadIfSignedIn();
     } else if (state == AppLifecycleState.detached) {
-      ref.read(syncServiceProvider).uploadIfSignedIn();
+      // paused already handles upload; detached fires too late on Android
+      // for async work to complete reliably.
       _closeHiveBoxes();
       _releaseSingleInstanceLock();
+    }
+  }
+
+  /// Downloads from Drive if remote is newer, then invalidates providers
+  /// so the UI reflects the new data without requiring a restart.
+  Future<void> _downloadAndRefreshIfNewer() async {
+    final wasReplaced =
+        await ref.read(syncServiceProvider).downloadIfNewerAndSignedIn();
+    if (wasReplaced && mounted) {
+      ref.invalidate(watchlistEntriesProvider);
+      ref.invalidate(contributorsProvider);
+      ref.invalidate(preferencesProvider);
+      ref.invalidate(connectionsDataProvider);
     }
   }
 

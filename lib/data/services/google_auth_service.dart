@@ -112,12 +112,19 @@ class GoogleAuthService {
       final stored = await _storage.read(key: _kWindowsCredsKey);
       if (stored == null) return false;
 
+      final clientIdStr = dotenv.env['GOOGLE_CLIENT_ID'];
+      final clientSecretStr = dotenv.env['GOOGLE_CLIENT_SECRET'];
+      if (clientIdStr == null || clientIdStr.isEmpty ||
+          clientSecretStr == null || clientSecretStr.isEmpty) {
+        return false; // Sync not configured — not an error
+      }
+
       final json = jsonDecode(stored) as Map<String, dynamic>;
       final creds = _credentialsFromJson(json);
 
       // autoRefreshingClient will silently refresh the access token using the
       // refresh_token whenever it expires — user never needs to re-sign-in.
-      final clientId = gauth.ClientId(dotenv.env['GOOGLE_CLIENT_ID']!, dotenv.env['GOOGLE_CLIENT_SECRET']!);
+      final clientId = gauth.ClientId(clientIdStr, clientSecretStr);
       client = gauth.autoRefreshingClient(clientId, creds, http.Client());
       userEmail = json['email'] as String?;
       return true;
@@ -130,7 +137,13 @@ class GoogleAuthService {
 
   Future<bool> _signInWindows() async {
     try {
-      final clientId = gauth.ClientId(dotenv.env['GOOGLE_CLIENT_ID']!, dotenv.env['GOOGLE_CLIENT_SECRET']!);
+      final clientIdStr = dotenv.env['GOOGLE_CLIENT_ID'];
+      final clientSecretStr = dotenv.env['GOOGLE_CLIENT_SECRET'];
+      if (clientIdStr == null || clientIdStr.isEmpty ||
+          clientSecretStr == null || clientSecretStr.isEmpty) {
+        return false; // Sync not configured
+      }
+      final clientId = gauth.ClientId(clientIdStr, clientSecretStr);
 
       // Opens system browser → user signs in → OAuth code redirects to localhost
       final creds = await gauth.obtainAccessCredentialsViaUserConsent(

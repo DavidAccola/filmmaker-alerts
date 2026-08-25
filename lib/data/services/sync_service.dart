@@ -112,8 +112,18 @@ class SyncService {
       );
     }
 
-    final now = DateTime.now().toUtc().toIso8601String();
-    await _storage.write(key: _kLastSyncKey, value: now);
+    // Use the server's modifiedTime so upload and download timestamps are
+    // on the same reference clock — prevents spurious downloads if the
+    // device clock is slightly ahead of Google's servers.
+    final uploaded = await driveApi.files.list(
+      spaces: 'appDataFolder',
+      q: "name = '$_kDriveFileName'",
+      $fields: 'files(id,modifiedTime)',
+    );
+    final serverTime = uploaded.files?.firstOrNull?.modifiedTime;
+    final timestampToStore = serverTime?.toUtc().toIso8601String()
+        ?? DateTime.now().toUtc().toIso8601String();
+    await _storage.write(key: _kLastSyncKey, value: timestampToStore);
   }
 
   // ---------------------------------------------------------------------------
@@ -266,7 +276,9 @@ class SyncService {
     }
 
     // Delete keys no longer present in the remote data.
-    final keysToDelete = box.keys.cast<String>().toSet()
+    final keysToDelete = box.keys
+        .whereType<String>()
+        .toSet()
         .difference(newItems.keys.toSet());
     for (final k in keysToDelete) {
       await box.delete(k);

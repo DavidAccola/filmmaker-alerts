@@ -24,17 +24,18 @@
   <p>All app data is stored locally on your device. This includes:</p>
   <ul>
     <li>Your watchlist (movies and TV shows you are tracking)</li>
-    <li>Watch status and ratings you assign to content</li>
+    <li>Watch status, episode progress, and ratings you assign to content</li>
     <li>Filmmakers and contributors you follow</li>
     <li>Notification preferences and app settings</li>
-    <li>Cached movie and TV show data fetched from TMDB</li>
+    <li>Dismissed discovery suggestions</li>
+    <li>Cached movie and TV show data fetched from TMDB (not synced — re-fetched as needed)</li>
   </ul>
   <p>This data never leaves your device except as described below under Google Drive Sync.</p>
 
   <h2>Google Drive Sync (optional)</h2>
   <p>If you choose to enable sync, the app uses the Google Drive API to store a copy of your app data in your Google Drive account. Specifically:</p>
   <ul>
-    <li><strong>What data is accessed:</strong> The app reads and writes a single JSON file containing your watchlist, ratings, watch statuses, followed contributors, and preferences. This file is stored in the <strong>Application Data folder</strong> — a private area of your Google Drive that is not visible in the Drive UI and is accessible only to this app.</li>
+    <li><strong>What data is accessed:</strong> The app reads and writes a single JSON file containing your watchlist, ratings, watch statuses (including episode-level progress), followed contributors, preferences, and dismissed discovery suggestions. Cached TMDB data is excluded — it is large and re-fetched on demand. This file is stored in the <strong>Application Data folder</strong> — a private area of your Google Drive that is not visible in the Drive UI and is accessible only to this app.</li>
     <li><strong>Why it is accessed:</strong> Solely to sync your app data between your devices (e.g., between a Windows PC and an Android phone).</li>
     <li><strong>What we do not do:</strong> We do not access any other files in your Google Drive. We do not read, store, or transmit your data to any server we operate. We do not sell, share, or use your data for advertising, analytics, or any purpose other than syncing between your own devices.</li>
     <li><strong>Data transmission:</strong> Data is transmitted directly between your device and Google's servers using HTTPS. We have no intermediate server.</li>

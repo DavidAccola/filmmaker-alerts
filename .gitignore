@@ -28,6 +28,8 @@ CSSExample/
 
 #Images
 assets/images/Unused
+assets/images/icon.png
+assets/images/icon_256.png
 
 # Personal data files
 *.csv

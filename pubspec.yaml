@@ -39,13 +39,16 @@ dependencies:
   # Graph Visualization (plough removed — custom implementation used instead)
 
   # Google Drive Sync
-  # google_sign_in_all_platforms handles Windows (loopback OAuth) + Android (native)
-  # with a single unified API, built-in token persistence hooks, and authenticatedClient getter.
-  # flutter_secure_storage persists OAuth tokens so users don't re-auth every launch.
-  google_sign_in_all_platforms: ^2.0.3
-  googleapis: ^14.0.0
-  http: ^1.2.2
-  flutter_secure_storage: ^9.2.2
+  # Android: google_sign_in (native) + extension bridge to get authenticated http.Client
+  # Windows: googleapis_auth loopback OAuth → autoRefreshingClient for silent token refresh
+  # flutter_secure_storage persists tokens so users never need to re-sign-in
+  # All official Google-published packages (no community wrapper constraint on googleapis version)
+  google_sign_in: ^6.2.1
+  extension_google_sign_in_as_googleapis_auth: ^2.0.12
+  googleapis_auth: ^2.3.3
+  googleapis: ^17.0.0
+  http: ^1.6.0
+  flutter_secure_storage: ^11.0.0
 
   # Utilities
   intl: ^0.20.2
@@ -86,3 +89,4 @@ dependency_overrides:
   # patched to 'on TickerProviderStateMixin<T>' which implies State<T>.
   reorderable_grid_view:
     path: packages/reorderable_grid_view
+

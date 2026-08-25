@@ -510,11 +510,27 @@ class _AppLifecycleWrapperState extends ConsumerState<_AppLifecycleWrapper>
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
+    // Try to restore Google session and download newer data on launch
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      final auth = ref.read(googleAuthServiceProvider);
+      final sync = ref.read(syncServiceProvider);
+      final restored = await auth.tryRestoreSession();
+      if (restored) {
+        await sync.downloadIfNewerAndSignedIn();
+      }
+
+      // Upload whenever the watchlist changes (add, remove, status change, rating)
+      ref.listen(watchlistEntriesProvider, (_, __) {
+        ref.read(syncServiceProvider).uploadIfSignedIn();
+      });
+    });
   }
 
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
+    // Upload on app close
+    ref.read(syncServiceProvider).uploadIfSignedIn();
     _closeHiveBoxes();
     _releaseSingleInstanceLock();
     super.dispose();
@@ -544,9 +560,14 @@ class _AppLifecycleWrapperState extends ConsumerState<_AppLifecycleWrapper>
       ref.invalidate(contributorsProvider);
       ref.invalidate(watchlistEntriesProvider);
       ref.invalidate(connectionsDataProvider);
+
+      // Download newer sync data on foreground (mobile)
+      ref.read(syncServiceProvider).downloadIfNewerAndSignedIn();
     } else if (state == AppLifecycleState.paused) {
-      // Optionally clear on pause too
+      // Upload on background (mobile app close equivalent)
+      ref.read(syncServiceProvider).uploadIfSignedIn();
     } else if (state == AppLifecycleState.detached) {
+      ref.read(syncServiceProvider).uploadIfSignedIn();
       _closeHiveBoxes();
       _releaseSingleInstanceLock();
     }

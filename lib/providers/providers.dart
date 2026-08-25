@@ -26,6 +26,8 @@ import '../data/repositories/collection_order_repository.dart';
 import '../data/services/tmdb_service.dart';
 import '../data/services/justwatch_service.dart';
 import '../data/services/streaming_service.dart';
+import '../data/services/google_auth_service.dart';
+import '../data/services/sync_service.dart';
 import '../logic/contributor_logic.dart';
 import '../logic/latest_work_logic.dart';
 import '../logic/release_checker.dart';
@@ -124,6 +126,21 @@ final notificationServiceProvider = Provider.autoDispose<NotificationService>((r
 
 final systemTrayServiceProvider = Provider.autoDispose<SystemTrayService>((ref) {
   return SystemTrayService();
+});
+
+// ---------------------------------------------------------------------------
+// Google Drive Sync
+// ---------------------------------------------------------------------------
+
+/// Singleton auth service — holds the authenticated http.Client.
+/// Not autoDispose so the client persists across screen navigations.
+final googleAuthServiceProvider = Provider<GoogleAuthService>((ref) {
+  return GoogleAuthService();
+});
+
+/// Singleton sync service.
+final syncServiceProvider = Provider<SyncService>((ref) {
+  return SyncService(auth: ref.read(googleAuthServiceProvider));
 });
 
 final justWatchServiceProvider = Provider.autoDispose<JustWatchService>((ref) {

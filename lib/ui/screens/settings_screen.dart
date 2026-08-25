@@ -101,6 +101,8 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                           _buildStreamingSection(context, ref, prefs),
                           const SizedBox(height: 24),
                           _buildMaintenanceSection(context, ref, prefs),
+                          const SizedBox(height: 24),
+                          _buildSyncSection(context),
                           if (_showDebug) ...[
                             const SizedBox(height: 24),
                             _buildDebugSection(context, ref, prefs),
@@ -478,6 +480,102 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
             },
           ),
         ],
+      ),
+    );
+  }
+
+  Widget _buildSyncSection(BuildContext context) {
+    final auth = ref.read(googleAuthServiceProvider);
+    final sync = ref.read(syncServiceProvider);
+
+    return _buildCard(
+      context,
+      title: 'Google Drive Sync',
+      icon: Icons.cloud_sync_outlined,
+      child: StatefulBuilder(
+        builder: (context, setLocalState) {
+          return Column(
+            children: [
+              ListTile(
+                dense: true,
+                leading: Icon(
+                  auth.isSignedIn ? Icons.check_circle_outline : Icons.account_circle_outlined,
+                  color: auth.isSignedIn
+                      ? Theme.of(context).colorScheme.primary
+                      : Theme.of(context).colorScheme.onSurfaceVariant,
+                ),
+                title: Text(auth.isSignedIn
+                    ? 'Signed in as ${auth.userEmail ?? 'Google account'}'
+                    : 'Not signed in'),
+                subtitle: auth.isSignedIn
+                    ? FutureBuilder<DateTime?>(
+                        future: sync.lastSyncTime(),
+                        builder: (context, snapshot) {
+                          final t = snapshot.data;
+                          if (t == null) return const Text('Never synced');
+                          final diff = DateTime.now().difference(t);
+                          final label = diff.inMinutes < 1
+                              ? 'Just now'
+                              : diff.inHours < 1
+                                  ? '${diff.inMinutes}m ago'
+                                  : diff.inDays < 1
+                                      ? '${diff.inHours}h ago'
+                                      : '${diff.inDays}d ago';
+                          return Text('Last synced $label');
+                        },
+                      )
+                    : const Text('Sign in to sync across devices'),
+              ),
+              const Divider(),
+              if (!auth.isSignedIn)
+                ListTile(
+                  dense: true,
+                  leading: const Icon(Icons.login),
+                  title: const Text('Sign in with Google'),
+                  onTap: () async {
+                    final ok = await auth.signIn();
+                    if (ok && context.mounted) {
+                      await sync.downloadIfNewerAndSignedIn();
+                      setLocalState(() {});
+                      showSimpleSnackBar(context, 'Signed in — sync enabled');
+                    } else if (context.mounted) {
+                      showSimpleSnackBar(context, 'Sign in cancelled');
+                    }
+                  },
+                )
+              else ...[
+                ListTile(
+                  dense: true,
+                  leading: const Icon(Icons.upload_outlined),
+                  title: const Text('Sync now'),
+                  onTap: () async {
+                    await sync.uploadIfSignedIn();
+                    setLocalState(() {});
+                    if (context.mounted) {
+                      showSimpleSnackBar(context, 'Synced to Drive');
+                    }
+                  },
+                ),
+                const Divider(),
+                ListTile(
+                  dense: true,
+                  leading: Icon(Icons.logout,
+                      color: Theme.of(context).colorScheme.error),
+                  title: Text('Sign out',
+                      style: TextStyle(
+                          color: Theme.of(context).colorScheme.error)),
+                  onTap: () async {
+                    await auth.signOut();
+                    setLocalState(() {});
+                    if (context.mounted) {
+                      showSimpleSnackBar(context, 'Signed out of Google');
+                    }
+                  },
+                ),
+              ],
+            ],
+          );
+        },
       ),
     );
   }

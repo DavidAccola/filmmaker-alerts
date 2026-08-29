@@ -75,12 +75,18 @@ class GoogleAuthService {
 
   Future<bool> _tryRestoreAndroid() async {
     try {
+      // Drive sync requires a Web OAuth client ID configured in .env.
+      // Without it, authenticatedClient() fails; return false so the app
+      // treats this as "not signed in" rather than crashing silently.
+      final webClientId = dotenv.env['GOOGLE_WEB_CLIENT_ID'];
+      if (webClientId == null || webClientId.isEmpty) return false;
+
       _gsi ??= GoogleSignIn(
         scopes: _driveScopes,
         // serverClientId is the Web OAuth client ID from Google Cloud Console.
         // Required on Android for signInSilently() and authenticatedClient() to
         // work reliably with googleapis. Set GOOGLE_WEB_CLIENT_ID in .env.
-        serverClientId: dotenv.env['GOOGLE_WEB_CLIENT_ID'],
+        serverClientId: webClientId,
       );
       final account = await _gsi!.signInSilently();
       if (account == null) return false;
@@ -96,9 +102,12 @@ class GoogleAuthService {
 
   Future<bool> _signInAndroid() async {
     try {
+      final webClientId = dotenv.env['GOOGLE_WEB_CLIENT_ID'];
+      if (webClientId == null || webClientId.isEmpty) return false;
+
       _gsi ??= GoogleSignIn(
         scopes: _driveScopes,
-        serverClientId: dotenv.env['GOOGLE_WEB_CLIENT_ID'],
+        serverClientId: webClientId,
       );
       final account = await _gsi!.signIn();
       if (account == null) return false; // user cancelled

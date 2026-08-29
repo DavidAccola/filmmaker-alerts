@@ -10,5 +10,4 @@
     Reference: https://developer.android.com/topic/performance/app-optimization/customize-which-resources-to-keep
 -->
 <resources xmlns:tools="http://schemas.android.com/tools"
-    tools:keep="@mipmap/ic_launcher,@drawable/*"
-    tools:discard="@layout/unused" />
+    tools:keep="@mipmap/ic_launcher,@drawable/*" />

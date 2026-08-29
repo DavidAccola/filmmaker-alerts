@@ -1,5 +1,7 @@
 import 'package:mockito/annotations.dart';
 import 'package:dio/dio.dart';
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
+import 'package:google_sign_in/google_sign_in.dart';
 import 'package:filmmaker_alerts/data/services/tmdb_service.dart';
 import 'package:filmmaker_alerts/data/repositories/contributor_repository.dart';
 import 'package:filmmaker_alerts/data/repositories/preferences_repository.dart';
@@ -25,5 +27,9 @@ import 'package:filmmaker_alerts/data/services/notification_service.dart';
   TvDetailRepository,
   NotificationService,
   WatchlistRepository,
+  GoogleSignIn,
+  GoogleSignInAuthentication,
+  GoogleSignInAccount,
+  FlutterSecureStorage,
 ])
 void main() {}

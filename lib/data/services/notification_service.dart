@@ -6,7 +6,7 @@ import 'package:windows_notification/notification_message.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:dio/dio.dart';
 import 'dart:io';
-import '../logic/notification_handlers.dart' show notificationTapBackground;
+import '../../logic/notification_handlers.dart' show notificationTapBackground;
 
 class NotificationService {
   FlutterLocalNotificationsPlugin? _flutterLocalNotificationsPlugin;

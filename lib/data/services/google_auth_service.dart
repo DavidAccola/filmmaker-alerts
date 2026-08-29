@@ -1,6 +1,6 @@
 import 'dart:convert';
-import 'dart:io';
 import 'package:extension_google_sign_in_as_googleapis_auth/extension_google_sign_in_as_googleapis_auth.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:google_sign_in/google_sign_in.dart';
@@ -19,7 +19,11 @@ const _kWindowsCredsKey = 'google_oauth_credentials';
 /// (google_sign_in). Persists tokens so users don't re-authenticate on every launch.
 class GoogleAuthService {
   final FlutterSecureStorage _storage;
-  GoogleSignIn? _gsi; // Android only
+
+  /// Android-only GoogleSignIn instance. Injected via constructor for testability;
+  /// created lazily on first use in production.
+  @visibleForTesting
+  GoogleSignIn? gsi;
 
   /// The authenticated HTTP client ready for use with googleapis DriveApi.
   /// Null if not signed in.
@@ -30,8 +34,24 @@ class GoogleAuthService {
 
   bool get isSignedIn => client != null;
 
-  GoogleAuthService({FlutterSecureStorage? storage})
-      : _storage = storage ?? const FlutterSecureStorage();
+  GoogleAuthService({
+    FlutterSecureStorage? storage,
+    /// Inject a [GoogleSignIn] instance for testing. In production leave null
+    /// and [gsi] is lazily created with the correct [serverClientId].
+    GoogleSignIn? googleSignIn,
+  })  : _storage = storage ?? const FlutterSecureStorage(),
+        gsi = googleSignIn;
+
+  /// Inject a fake [GoogleSignInAuthentication] for testing.
+  /// When set, [authenticatedClient()] uses this instead of reading
+  /// [gsi.currentUser?.authentication], bypassing the platform channel.
+  @visibleForTesting
+  GoogleSignInAuthentication? debugAuthentication;
+
+  /// Returns true when running on Android. Uses [defaultTargetPlatform] so
+  /// tests can override it via [debugDefaultTargetPlatformOverride].
+  bool get _isAndroid =>
+      !kIsWeb && defaultTargetPlatform == TargetPlatform.android;
 
   // ---------------------------------------------------------------------------
   // Public API
@@ -40,7 +60,7 @@ class GoogleAuthService {
   /// Attempt to restore a previous session silently (no browser/dialog).
   /// Returns true if session was restored, false if sign-in is needed.
   Future<bool> tryRestoreSession() async {
-    if (Platform.isAndroid) {
+    if (_isAndroid) {
       return _tryRestoreAndroid();
     } else {
       return _tryRestoreWindows();
@@ -49,7 +69,7 @@ class GoogleAuthService {
 
   /// Sign in interactively. Shows browser on Windows, Google account picker on Android.
   Future<bool> signIn() async {
-    if (Platform.isAndroid) {
+    if (_isAndroid) {
       return _signInAndroid();
     } else {
       return _signInWindows();
@@ -58,9 +78,9 @@ class GoogleAuthService {
 
   /// Sign out and clear stored credentials.
   Future<void> signOut() async {
-    if (Platform.isAndroid) {
-      await _gsi?.signOut();
-      _gsi = null;
+    if (_isAndroid) {
+      await gsi?.signOut();
+      gsi = null;
     } else {
       await _storage.delete(key: _kWindowsCredsKey);
     }
@@ -81,16 +101,18 @@ class GoogleAuthService {
       final webClientId = dotenv.env['GOOGLE_WEB_CLIENT_ID'];
       if (webClientId == null || webClientId.isEmpty) return false;
 
-      _gsi ??= GoogleSignIn(
+      gsi ??= GoogleSignIn(
         scopes: _driveScopes,
         // serverClientId is the Web OAuth client ID from Google Cloud Console.
         // Required on Android for signInSilently() and authenticatedClient() to
         // work reliably with googleapis. Set GOOGLE_WEB_CLIENT_ID in .env.
         serverClientId: webClientId,
       );
-      final account = await _gsi!.signInSilently();
+      final account = await gsi!.signInSilently();
       if (account == null) return false;
-      final authClient = await _gsi!.authenticatedClient();
+      final authClient = await gsi!.authenticatedClient(
+        debugAuthentication: debugAuthentication,
+      );
       if (authClient == null) return false;
       client = authClient;
       userEmail = account.email;
@@ -105,13 +127,15 @@ class GoogleAuthService {
       final webClientId = dotenv.env['GOOGLE_WEB_CLIENT_ID'];
       if (webClientId == null || webClientId.isEmpty) return false;
 
-      _gsi ??= GoogleSignIn(
+      gsi ??= GoogleSignIn(
         scopes: _driveScopes,
         serverClientId: webClientId,
       );
-      final account = await _gsi!.signIn();
+      final account = await gsi!.signIn();
       if (account == null) return false; // user cancelled
-      final authClient = await _gsi!.authenticatedClient();
+      final authClient = await gsi!.authenticatedClient(
+        debugAuthentication: debugAuthentication,
+      );
       if (authClient == null) return false;
       client = authClient;
       userEmail = account.email;
@@ -138,7 +162,7 @@ class GoogleAuthService {
       }
 
       final json = jsonDecode(stored) as Map<String, dynamic>;
-      final creds = _credentialsFromJson(json);
+      final creds = credentialsFromJson(json);
 
       // autoRefreshingClient will silently refresh the access token using the
       // refresh_token whenever it expires — user never needs to re-sign-in.
@@ -191,7 +215,7 @@ class GoogleAuthService {
       // Persist credentials for silent restore on next launch
       await _storage.write(
         key: _kWindowsCredsKey,
-        value: jsonEncode(_credentialsToJson(creds, email: email)),
+        value: jsonEncode(credentialsToJson(creds, email: email)),
       );
 
       client = gauth.autoRefreshingClient(clientId, creds, http.Client());
@@ -203,10 +227,11 @@ class GoogleAuthService {
   }
 
   // ---------------------------------------------------------------------------
-  // Serialization helpers
+  // Serialization helpers — @visibleForTesting so tests can verify roundtrips
   // ---------------------------------------------------------------------------
 
-  Map<String, dynamic> _credentialsToJson(
+  @visibleForTesting
+  Map<String, dynamic> credentialsToJson(
     gauth.AccessCredentials creds, {
     String? email,
   }) {
@@ -220,7 +245,8 @@ class GoogleAuthService {
     };
   }
 
-  gauth.AccessCredentials _credentialsFromJson(Map<String, dynamic> json) {
+  @visibleForTesting
+  gauth.AccessCredentials credentialsFromJson(Map<String, dynamic> json) {
     return gauth.AccessCredentials(
       gauth.AccessToken(
         json['token_type'] as String? ?? 'Bearer',

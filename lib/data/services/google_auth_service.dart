@@ -39,14 +39,18 @@ class GoogleAuthService {
     /// Inject a [GoogleSignIn] instance for testing. In production leave null
     /// and [gsi] is lazily created with the correct [serverClientId].
     GoogleSignIn? googleSignIn,
+    /// Inject a fake [GoogleSignInAuthentication] for testing.
+    /// When set, [authenticatedClient()] uses this instead of reading
+    /// [gsi.currentUser?.authentication], bypassing the platform channel.
+    /// In production this is always null — the real token is used.
+    @visibleForTesting this.debugAuthentication,
   })  : _storage = storage ?? const FlutterSecureStorage(),
         gsi = googleSignIn;
 
-  /// Inject a fake [GoogleSignInAuthentication] for testing.
-  /// When set, [authenticatedClient()] uses this instead of reading
-  /// [gsi.currentUser?.authentication], bypassing the platform channel.
+  /// @visibleForTesting — set only via constructor. Bypasses authenticatedClient()'s
+  /// platform channel in tests. Always null in production.
   @visibleForTesting
-  GoogleSignInAuthentication? debugAuthentication;
+  final GoogleSignInAuthentication? debugAuthentication;
 
   /// Returns true when running on Android. Uses [defaultTargetPlatform] so
   /// tests can override it via [debugDefaultTargetPlatformOverride].

@@ -157,7 +157,8 @@ void main() {
       final auth = GoogleAuthService(
         storage: mockStorage,
         googleSignIn: mockGsi,
-      )..debugAuthentication = mockAuth;
+        debugAuthentication: mockAuth,
+      );
 
       expect(await auth.tryRestoreSession(), isFalse);
       expect(auth.isSignedIn, isFalse);
@@ -171,7 +172,8 @@ void main() {
       final auth = GoogleAuthService(
         storage: mockStorage,
         googleSignIn: mockGsi,
-      )..debugAuthentication = mockAuth;
+        debugAuthentication: mockAuth,
+      );
 
       expect(await auth.signIn(), isFalse);
       expect(auth.isSignedIn, isFalse);
@@ -205,7 +207,8 @@ void main() {
       final auth = GoogleAuthService(
         storage: mockStorage,
         googleSignIn: mockGsi,
-      )..debugAuthentication = mockAuth;
+        debugAuthentication: mockAuth,
+      );
 
       expect(await auth.tryRestoreSession(), isTrue);
       expect(auth.isSignedIn, isTrue);
@@ -219,7 +222,8 @@ void main() {
       final auth = GoogleAuthService(
         storage: mockStorage,
         googleSignIn: mockGsi,
-      )..debugAuthentication = mockAuth;
+        debugAuthentication: mockAuth,
+      );
 
       expect(await auth.signIn(), isTrue);
       expect(auth.isSignedIn, isTrue);
@@ -250,7 +254,8 @@ void main() {
       final auth = GoogleAuthService(
         storage: mockStorage,
         googleSignIn: mockGsi,
-      )..debugAuthentication = mockAuth;
+        debugAuthentication: mockAuth,
+      );
 
       await auth.signIn();
       expect(auth.isSignedIn, isTrue);
@@ -266,14 +271,19 @@ void main() {
 
   // ---------------------------------------------------------------------------
   // Windows — missing client ID / secret
-  // These tests run on the host platform (Windows/Linux) — no override needed.
+  // Tests must override to a non-Android platform because defaultTargetPlatform
+  // is TargetPlatform.android in the flutter test environment by default.
   // ---------------------------------------------------------------------------
 
   group('Windows: missing configuration', () {
+    setUp(() {
+      debugDefaultTargetPlatformOverride = TargetPlatform.windows;
+    });
+
     test('tryRestoreSession returns false when GOOGLE_CLIENT_ID is absent', () async {
-      when(mockStorage.read(key: _kWindowsCredsKey))
+      // Stored credentials exist but GOOGLE_CLIENT_ID is not in .env.
+      when(mockStorage.read(key: anyNamed('key')))
           .thenAnswer((_) async => '{"some": "data"}');
-      // GOOGLE_CLIENT_ID not set
 
       final auth = GoogleAuthService(storage: mockStorage);
       expect(await auth.tryRestoreSession(), isFalse);
@@ -281,9 +291,8 @@ void main() {
 
     test('tryRestoreSession returns false when GOOGLE_CLIENT_SECRET is absent', () async {
       dotenv.env['GOOGLE_CLIENT_ID'] = 'client-id';
-      when(mockStorage.read(key: _kWindowsCredsKey))
+      when(mockStorage.read(key: anyNamed('key')))
           .thenAnswer((_) async => '{"some": "data"}');
-      // GOOGLE_CLIENT_SECRET not set
 
       final auth = GoogleAuthService(storage: mockStorage);
       expect(await auth.tryRestoreSession(), isFalse);
@@ -304,30 +313,43 @@ void main() {
   // ---------------------------------------------------------------------------
 
   group('Windows: malformed stored credentials', () {
+    setUp(() {
+      debugDefaultTargetPlatformOverride = TargetPlatform.windows;
+    });
+
     test('clears storage and returns false', () async {
       dotenv.env['GOOGLE_CLIENT_ID'] = 'client-id';
       dotenv.env['GOOGLE_CLIENT_SECRET'] = 'client-secret';
-      when(mockStorage.read(key: anyNamed('key')))
-          .thenAnswer((_) async => 'not-valid-json{{{');
 
-      final auth = GoogleAuthService(storage: mockStorage);
+      // Fresh mock so verify counts are isolated from setUp stub registrations
+      final freshStorage = MockFlutterSecureStorage();
+      when(freshStorage.read(key: anyNamed('key')))
+          .thenAnswer((_) async => 'not-valid-json{{{');
+      when(freshStorage.delete(key: anyNamed('key')))
+          .thenAnswer((_) async {});
+
+      final auth = GoogleAuthService(storage: freshStorage);
       expect(await auth.tryRestoreSession(), isFalse);
       expect(auth.isSignedIn, isFalse);
-      // Malformed JSON throws → catch block deletes stored creds
-      untilCalled(mockStorage.delete(key: anyNamed('key')));
+      // Malformed JSON → jsonDecode throws → catch block deletes stored creds
+      verify(freshStorage.delete(key: anyNamed('key'))).called(1);
     });
 
     test('clears storage and returns false for empty JSON object', () async {
       dotenv.env['GOOGLE_CLIENT_ID'] = 'client-id';
       dotenv.env['GOOGLE_CLIENT_SECRET'] = 'client-secret';
       // Missing required 'access_token' field → credentialsFromJson throws
-      when(mockStorage.read(key: anyNamed('key')))
-          .thenAnswer((_) async => '{}');
 
-      final auth = GoogleAuthService(storage: mockStorage);
+      final freshStorage = MockFlutterSecureStorage();
+      when(freshStorage.read(key: anyNamed('key')))
+          .thenAnswer((_) async => '{}');
+      when(freshStorage.delete(key: anyNamed('key')))
+          .thenAnswer((_) async {});
+
+      final auth = GoogleAuthService(storage: freshStorage);
       expect(await auth.tryRestoreSession(), isFalse);
       expect(auth.isSignedIn, isFalse);
-      untilCalled(mockStorage.delete(key: anyNamed('key')));
+      verify(freshStorage.delete(key: anyNamed('key'))).called(1);
     });
   });
 

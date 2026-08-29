@@ -1,4 +1,4 @@
-package com.example.filmmaker_alerts_flutter
+package app.filmmaker_alerts
 
 import io.flutter.embedding.android.FlutterActivity
 

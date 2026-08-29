@@ -6,6 +6,7 @@ import 'package:windows_notification/notification_message.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:dio/dio.dart';
 import 'dart:io';
+import '../logic/notification_handlers.dart' show notificationTapBackground;
 
 class NotificationService {
   FlutterLocalNotificationsPlugin? _flutterLocalNotificationsPlugin;
@@ -67,7 +68,7 @@ class NotificationService {
           // iOS settings can be added here
         );
 
-        final result = await _flutterLocalNotificationsPlugin!.initialize(
+        await _flutterLocalNotificationsPlugin!.initialize(
           settings: initializationSettings,
           onDidReceiveNotificationResponse: (NotificationResponse response) async {
             final String? payload = response.payload;
@@ -82,12 +83,35 @@ class NotificationService {
               }
             }
           },
+          // Handles action button taps while the app is backgrounded / terminated.
+          // Must be a top-level @pragma('vm:entry-point') function.
+          onDidReceiveBackgroundNotificationResponse: notificationTapBackground,
         );
+
+        // Android: create notification channel (required Android 8+)
+        if (Platform.isAndroid) {
+          const AndroidNotificationChannel channel = AndroidNotificationChannel(
+            'release_alerts',
+            'Release Alerts',
+            description: 'New movie and TV release notifications',
+            importance: Importance.high,
+          );
+          await _flutterLocalNotificationsPlugin!
+              .resolvePlatformSpecificImplementation<
+                  AndroidFlutterLocalNotificationsPlugin>()
+              ?.createNotificationChannel(channel);
+
+          // Request POST_NOTIFICATIONS permission (Android 13+)
+          await _flutterLocalNotificationsPlugin!
+              .resolvePlatformSpecificImplementation<
+                  AndroidFlutterLocalNotificationsPlugin>()
+              ?.requestNotificationsPermission();
+        }
         
       }
       
       _isInitialized = true;
-    } catch (e, stackTrace) {
+    } catch (e) {
       rethrow;
     }
   }
@@ -98,127 +122,72 @@ class NotificationService {
     required String body,
     String? payload,
     String? imagePath,
-    List<String>? imagePaths, // New parameter for multiple images
-    List<String>? releaseDates, // New parameter for release dates above posters
-    int? totalMovieCount, // Total number of movies for "+X more" logic
+    List<String>? imagePaths,
+    List<String>? releaseDates,
+    int? totalMovieCount,
   }) async {
     try {
-      // Initialize logger
-      // await DebugLogger.instance.init();
-      
-      // DebugLogger.instance.logNotification('=== SHOW NOTIFICATION DEBUG ===');
-      // DebugLogger.instance.logNotification('ID: $id');
-      // DebugLogger.instance.logNotification('Title: "$title"');
-      // DebugLogger.instance.logNotification('Body: "$body"');
-      // DebugLogger.instance.logNotification('Payload: $payload');
-      // DebugLogger.instance.logNotification('ImagePath: $imagePath');
-      // DebugLogger.instance.logNotification('ImagePaths: $imagePaths');
-      // DebugLogger.instance.logNotification('ReleaseDates: $releaseDates');
-      // DebugLogger.instance.logNotification('TotalMovieCount: $totalMovieCount');
-      // DebugLogger.instance.logNotification('Platform.isWindows: ${Platform.isWindows}');
-      // DebugLogger.instance.logNotification('_isInitialized: $_isInitialized');
-      
       if (!_isInitialized) {
-        // DebugLogger.instance.logNotification('Not initialized, calling init...');
         await init();
       }
       
       if (Platform.isWindows) {
-        // DebugLogger.instance.logNotification('Using windows_notification for Windows...');
-        // DebugLogger.instance.logNotification('_windowsNotification == null: ${_windowsNotification == null}');
-        
         if (_windowsNotification == null) {
-          // DebugLogger.instance.logNotification('ERROR: Windows notification not initialized');
           throw StateError('Windows notification not initialized');
         }
-        
-        // Download images locally if provided
-        List<String> localImagePaths = [];
-        
-        // Handle multiple images (up to 4)
+
+        // Download images to local temp files (Windows Toast requires file:// paths)
+        final List<String> localImagePaths = [];
         if (imagePaths != null && imagePaths.isNotEmpty) {
-          // DebugLogger.instance.logNotification('Processing ${imagePaths.length} image paths...');
           for (int i = 0; i < imagePaths.length && i < 4; i++) {
             final imageUrl = imagePaths[i];
-            // DebugLogger.instance.logNotification('Processing image $i: $imageUrl');
             if (imageUrl.startsWith('http')) {
               try {
-                final localPath = await _downloadImageForNotification(imageUrl);
-                localImagePaths.add(localPath);
-                // DebugLogger.instance.logNotification('Downloaded image ${i + 1} to: $localPath');
-              } catch (e) {
-                // DebugLogger.instance.logNotification('Failed to download image ${i + 1}: $e');
+                localImagePaths.add(await _downloadImageForNotification(imageUrl));
+              } catch (_) {
+                // Skip image on download failure — notification still shows without it
               }
             } else {
               localImagePaths.add(imageUrl);
-              // DebugLogger.instance.logNotification('Using local image path: $imageUrl');
             }
           }
         } else if (imagePath != null) {
-          // DebugLogger.instance.logNotification('Processing single image path: $imagePath');
-          // Handle single image (backward compatibility)
+          // Single image (backward compatibility)
           if (imagePath.startsWith('http')) {
             try {
-              final localPath = await _downloadImageForNotification(imagePath);
-              localImagePaths.add(localPath);
-              // DebugLogger.instance.logNotification('Downloaded image to: $localPath');
-            } catch (e) {
-              // DebugLogger.instance.logNotification('Failed to download image: $e');
-            }
+              localImagePaths.add(await _downloadImageForNotification(imagePath));
+            } catch (_) {}
           } else {
             localImagePaths.add(imagePath);
-            // DebugLogger.instance.logNotification('Using local image path: $imagePath');
           }
-        } else {
-          // DebugLogger.instance.logNotification('No images to process');
         }
-        
+
         try {
-          // Use custom XML template with text first, then release dates, then images below
           String releaseDatesXml = '';
           String imagesXml = '';
-          
-          // DebugLogger.instance.logNotification('Building notification template...');
-          
+
           if (localImagePaths.isNotEmpty) {
-            // DebugLogger.instance.logNotification('Adding ${localImagePaths.length} images to template');
-            
-            // Add release dates grid above posters if provided
             if (releaseDates != null && releaseDates.isNotEmpty) {
-              // DebugLogger.instance.logNotification('Adding ${releaseDates.length} release dates');
               releaseDatesXml = '<group>';
-              
-              // Show release dates for actual movie columns
               for (int i = 0; i < localImagePaths.length && i < 4; i++) {
                 final releaseText = i < releaseDates.length ? releaseDates[i] : '';
                 releaseDatesXml += '<subgroup hint-weight="25" hint-textStacking="center"><text hint-align="center" hint-style="captionSubtle">$releaseText</text></subgroup>';
               }
-              
-              // Add empty cell above "+X more" indicator if present
               if (totalMovieCount != null && totalMovieCount > localImagePaths.length) {
                 releaseDatesXml += '<subgroup hint-weight="25" hint-textStacking="center"><text hint-align="center" hint-style="captionSubtle"></text></subgroup>';
               }
-              
               releaseDatesXml += '</group>';
             }
-            
-            // Add poster images grid
+
             imagesXml = '<group>';
             for (int i = 0; i < localImagePaths.length && i < 4; i++) {
-              // DebugLogger.instance.logNotification('Adding image $i: ${localImagePaths[i]}');
               imagesXml += '<subgroup hint-weight="25"><image src="${localImagePaths[i]}" hint-removeMargin="true"/></subgroup>';
             }
-            
-            // Add "+X more" text in poster grid if there are more movies than posters
             if (totalMovieCount != null && totalMovieCount > localImagePaths.length) {
               final moreCount = totalMovieCount - localImagePaths.length;
-              // DebugLogger.instance.logNotification('Adding +$moreCount more indicator');
               imagesXml += '<subgroup hint-weight="25" hint-textStacking="center"><text hint-align="center" hint-style="captionSubtle">+$moreCount more</text></subgroup>';
             }
-            
             imagesXml += '</group>';
-          } else {
-            // DebugLogger.instance.logNotification('No images to add to template');
           }
           
           String customTemplate = '''
@@ -238,26 +207,16 @@ class NotificationService {
   </actions>
 </toast>''';
 
-          // DebugLogger.instance.logNotification('Custom template created (${customTemplate.length} chars)');
-          // DebugLogger.instance.logNotification('Attempting to send notification...');
-
           final message = NotificationMessage.fromCustomTemplate(
             id.toString(),
             group: "filmmaker_alerts",
           );
           
           await _windowsNotification!.showNotificationCustomTemplate(message, customTemplate);
-          // DebugLogger.instance.logNotification('✅ Windows notification sent successfully with custom template');
         } catch (e, _) {
-          // DebugLogger.instance.logNotification('❌ Custom template failed: $e');
-          // DebugLogger.instance.logNotification('Stack trace: ${stackTrace.toString().substring(0, 500)}...');
-          
+          // Custom template failed — fall back to the simpler plugin template with first image
           try {
-            // Fallback to plugin template with first image
-            // DebugLogger.instance.logNotification('Attempting fallback to plugin template...');
             final firstImage = localImagePaths.isNotEmpty ? localImagePaths.first : null;
-            // DebugLogger.instance.logNotification('Using fallback image: $firstImage');
-            
             final message = NotificationMessage.fromPluginTemplate(
               id.toString(),
               title,
@@ -266,36 +225,108 @@ class NotificationService {
               image: firstImage,
             );
             await _windowsNotification!.showNotificationPluginTemplate(message);
-            // DebugLogger.instance.logNotification('✅ Windows notification sent with plugin template');
           } catch (fallbackError) {
-            // DebugLogger.instance.logNotification('❌ Fallback also failed: $fallbackError');
             rethrow;
           }
         }
       } else {
-        // DebugLogger.instance.logNotification('Using flutter_local_notifications for non-Windows...');
-        
         if (_flutterLocalNotificationsPlugin == null) {
-          // DebugLogger.instance.logNotification('ERROR: Notification plugin not initialized for this platform');
           throw StateError('Notification plugin not initialized for this platform');
         }
-        
-        // Try with minimal notification details first
-        const NotificationDetails notificationDetails = NotificationDetails();
 
-        // DebugLogger.instance.logNotification('Calling plugin show with minimal details...');
+        // --- Android: download poster image(s) for rich notification ---
+        String? firstLocalImagePath;
+        if (Platform.isAndroid && imagePaths != null && imagePaths.isNotEmpty) {
+          try {
+            firstLocalImagePath = await _downloadImageForNotification(imagePaths.first);
+          } catch (_) {
+            // Proceed without image if download fails
+          }
+        }
+
+        // Build the appropriate Android style depending on number of releases
+        StyleInformation? styleInformation;
+
+        if (Platform.isAndroid) {
+          final isSingleRelease = totalMovieCount == null || totalMovieCount == 1;
+
+          if (isSingleRelease && firstLocalImagePath != null) {
+            // BigPictureStyle: poster shown as hero image when expanded,
+            // also as the largeIcon in the collapsed drawer row.
+            final bitmap = FilePathAndroidBitmap(firstLocalImagePath);
+            styleInformation = BigPictureStyleInformation(
+              bitmap,
+              largeIcon: bitmap,
+              hideExpandedLargeIcon: true,  // don't show duplicate small icon when expanded
+              contentTitle: title,
+              summaryText: body,
+              htmlFormatSummaryText: false,
+            );
+          } else if (!isSingleRelease) {
+            // InboxStyle: one line per release with title + release date.
+            // Combine movie titles with their release dates so each line reads:
+            //   "Movie Title   💻 08/15/2026"
+            final List<String> inboxLines = _buildInboxLines(body, releaseDates, totalMovieCount!);
+            styleInformation = InboxStyleInformation(
+              inboxLines,
+              contentTitle: title,
+              summaryText: 'Filmmaker Alerts',
+            );
+          }
+        }
+
+        // --- Build AndroidNotificationDetails ---
+        final androidDetails = AndroidNotificationDetails(
+          'release_alerts',
+          'Release Alerts',
+          channelDescription: 'New movie and TV release notifications',
+          importance: Importance.high,
+          priority: Priority.high,
+          styleInformation: styleInformation,
+          // Large icon (poster thumbnail in collapsed row) for multi-release
+          largeIcon: (Platform.isAndroid && firstLocalImagePath != null && styleInformation is! BigPictureStyleInformation)
+              ? FilePathAndroidBitmap(firstLocalImagePath)
+              : null,
+          // Action buttons — mirror the Windows notification actions
+          actions: Platform.isAndroid
+              ? const <AndroidNotificationAction>[
+                  AndroidNotificationAction(
+                    'see_details',
+                    'See Details',
+                    showsUserInterface: true,   // brings app to foreground
+                    cancelNotification: true,
+                  ),
+                  AndroidNotificationAction(
+                    'dismiss',
+                    'Dismiss',
+                    showsUserInterface: false,
+                    cancelNotification: true,
+                  ),
+                ]
+              : null,
+        );
+
         await _flutterLocalNotificationsPlugin!.show(
           id: id,
           title: title,
           body: body,
-          notificationDetails: notificationDetails,
+          notificationDetails: NotificationDetails(
+            android: androidDetails,
+            linux: const LinuxNotificationDetails(),
+          ),
           payload: payload,
         );
-        // DebugLogger.instance.logNotification('✅ Non-Windows notification sent successfully');
       }
     } catch (e, _) {
       rethrow;
     }
+  }
+
+  /// Returns details about the notification that launched the app (Android/iOS).
+  /// Returns null if the app was not launched via a notification, or on Windows.
+  Future<NotificationAppLaunchDetails?> getNotificationLaunchDetails() async {
+    if (Platform.isWindows || _flutterLocalNotificationsPlugin == null) return null;
+    return _flutterLocalNotificationsPlugin!.getNotificationAppLaunchDetails();
   }
 
   Future<void> showTestNotification() async {
@@ -352,6 +383,41 @@ class NotificationService {
     }
     
     return localPath;
+  }
+
+  /// Builds InboxStyle lines for multi-release Android notifications.
+  /// Each line: "Movie Title   💻 08/15/2026" or just "Movie Title" if no date.
+  /// Shows up to 5 lines; any excess becomes a "+N more" summary line.
+  List<String> _buildInboxLines(
+    String body,
+    List<String>? releaseDates,
+    int totalMovieCount,  // must equal newReleases.length; non-nullable to prevent silent truncation
+  ) {
+    // body for multi-release: "Movie A • Movie B • Movie C [• +N more]"
+    final rawParts = body.split(' • ').map((s) => s.trim()).where((s) => s.isNotEmpty).toList();
+    // Drop a trailing "+N more" fragment that may have been appended in formatBody
+    final titles = rawParts.where((s) => !s.startsWith('+')).toList();
+
+    const int maxLines = 5;
+    final int showCount = titles.length.clamp(0, maxLines);
+
+    final List<String> lines = [];
+    for (int i = 0; i < showCount; i++) {
+      final movieTitle = titles[i];
+      // releaseDates[i] may contain newlines (multiple dates for one movie) — flatten to single line
+      final date = (releaseDates != null && i < releaseDates.length)
+          ? releaseDates[i].replaceAll('\n', ' ').trim()
+          : '';
+      lines.add(date.isNotEmpty ? '$movieTitle  $date' : movieTitle);
+    }
+
+    // Add "+N more" summary line if there are more releases than shown
+    final remaining = totalMovieCount - lines.length;
+    if (remaining > 0) {
+      lines.add('+$remaining more');
+    }
+
+    return lines;
   }
 
   /// Escape XML special characters to prevent XML parsing errors

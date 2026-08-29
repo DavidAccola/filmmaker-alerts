@@ -134,6 +134,45 @@ class Preferences extends HiveObject {
     List<String>? dismissedConnectionIds,
   }) : dismissedConnectionIds = dismissedConnectionIds ?? [];
 
+  /// Returns a copy of this Preferences with only [lastCheckTime] changed.
+  /// All other fields are preserved exactly as-is, so background services
+  /// can safely update the check timestamp without clobbering user settings.
+  Preferences copyWithLastCheckTime(String lastCheckTime) {
+    return Preferences(
+      notifyTheatre: notifyTheatre,
+      notifyStreaming: notifyStreaming,
+      scheduleTime: scheduleTime,
+      defaultDepartments: defaultDepartments,
+      notifyPhysical: notifyPhysical,
+      notifyTV: notifyTV,
+      pretendToday: pretendToday,
+      includeCollectionsInMovieSearch: includeCollectionsInMovieSearch,
+      useGridView: useGridView,
+      homeSortOrder: homeSortOrder,
+      groupByType: groupByType,
+      allRolesSelected: allRolesSelected,
+      allReleaseTypesSelected: allReleaseTypesSelected,
+      autoFollowNewRoles: autoFollowNewRoles,
+      lastCheckTime: lastCheckTime,
+      lastViewedHistoryTime: lastViewedHistoryTime,
+      movieDetailsPreference: movieDetailsPreference,
+      defaultTvNotificationPrefs: defaultTvNotificationPrefs,
+      notifyPersonTvEpisodes: notifyPersonTvEpisodes,
+      useDarkMode: useDarkMode,
+      hidePopularityInDetails: hidePopularityInDetails,
+      hideRatingsInDetails: hideRatingsInDetails,
+      streamingCountry: streamingCountry,
+      reduceAnimations: reduceAnimations,
+      watchlistSortOrder: watchlistSortOrder,
+      watchlistUseListView: watchlistUseListView,
+      connectionsSortOrder: connectionsSortOrder,
+      connectionsGroupByRelease: connectionsGroupByRelease,
+      connectionsShowHiddenContributors: connectionsShowHiddenContributors,
+      connectionsShowHiddenWatchlist: connectionsShowHiddenWatchlist,
+      dismissedConnectionIds: dismissedConnectionIds,
+    );
+  }
+
   // Helper getters for "True All" logic
   // Only honor 'True All' if the feature is enabled
   List<String> get effectiveDefaultDepartments => 

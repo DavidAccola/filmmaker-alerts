@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart';
+import 'dart:io';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../data/models/contributor_detail.dart';
 import '../../data/models/contributor.dart'; // For TvNotificationPreferences
@@ -71,7 +73,10 @@ class _WatchlistButtonState extends ConsumerState<WatchlistButton> {
         final isInWatchlist = entries.any((e) =>
             e.tmdbId == widget.tmdbId && e.type == widget.workType);
 
-        final shouldShow = widget.showOnHoverOnly ? (widget.isHovered ?? false) : true;
+        // On mobile (no hover), always show the button regardless of showOnHoverOnly.
+        // On desktop, respect showOnHoverOnly and the parent's hover state.
+        final isMobile = !kIsWeb && (Platform.isAndroid || Platform.isIOS);
+        final shouldShow = isMobile || !widget.showOnHoverOnly || (widget.isHovered ?? false);
         
         final button = HoverActionButton(
           onPressed: _isLoading ? () {} : () => _handleWatchlistToggle(isInWatchlist),

@@ -1,10 +1,12 @@
 import 'dart:io';
 import 'dart:async';
+import 'package:flutter/foundation.dart';
 import 'package:tray_manager/tray_manager.dart';
 import 'package:window_manager/window_manager.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../providers/providers.dart';
 import '../../logic/notification_logic.dart';
+import '../../data/models/contributor.dart';
 import '../../data/models/preferences.dart';
 
 class SystemTrayService with TrayListener {
@@ -233,7 +235,11 @@ class SystemTrayService with TrayListener {
         _startScheduledCheckTimer();
       });
       
-    } catch (e) {
+    } catch (e, stack) {
+      assert(() {
+        debugPrint('[SystemTray] Failed to start scheduled check timer: $e\n$stack');
+        return true;
+      }());
     }
   }
 
@@ -255,35 +261,55 @@ class SystemTrayService with TrayListener {
       
       // Update last check time (like the background service does)
       final currentPrefs = prefsRepo.getPreferences();
-      final updatedPrefs = Preferences(
-        notifyTheatre: currentPrefs.notifyTheatre,
-        notifyStreaming: currentPrefs.notifyStreaming,
-        scheduleTime: currentPrefs.scheduleTime,
-        defaultDepartments: currentPrefs.defaultDepartments,
-        notifyPhysical: currentPrefs.notifyPhysical,
-        notifyTV: currentPrefs.notifyTV,
-        pretendToday: currentPrefs.pretendToday,
-        includeCollectionsInMovieSearch: currentPrefs.includeCollectionsInMovieSearch,
-        useGridView: currentPrefs.useGridView,
-        homeSortOrder: currentPrefs.homeSortOrder,
-        groupByType: currentPrefs.groupByType,
-        allRolesSelected: currentPrefs.allRolesSelected,
-        allReleaseTypesSelected: currentPrefs.allReleaseTypesSelected,
-        autoFollowNewRoles: currentPrefs.autoFollowNewRoles,
-        lastCheckTime: DateTime.now().toIso8601String(),
-        lastViewedHistoryTime: currentPrefs.lastViewedHistoryTime,
-        movieDetailsPreference: currentPrefs.movieDetailsPreference,
-        defaultTvNotificationPrefs: currentPrefs.defaultTvNotificationPrefs,
-        notifyPersonTvEpisodes: currentPrefs.notifyPersonTvEpisodes,
+      final updatedPrefs = currentPrefs.copyWithLastCheckTime(
+        DateTime.now().toIso8601String(),
       );
       await prefsRepo.savePreferences(updatedPrefs);
       
       // Send notifications for new releases
       if (newReleases.isNotEmpty) {
-        // Add to history (like the background service does)
+        // Add to history and update contributor latest work (mirrors background_service.dart)
         final historyRepo = _container!.read(historyRepositoryProvider);
+        final contributorRepo = _container!.read(contributorRepositoryProvider);
         for (final release in newReleases) {
           await historyRepo.addNotificationToHistory(release);
+
+          // Update latestWork for movie contributors so contributor cards stay current.
+          // Skipped for TV shows — the show itself is the "latest work" in that case.
+          if (release.mediaType != 'tv') {
+            final movie = movieCacheRepo.getMovie(release.tmdbId);
+            for (final reason in release.reasons) {
+              final contributor = contributorRepo.getContributor(reason.contributorId);
+              if (contributor != null && movie != null) {
+                final releaseDate = movie.releaseDate;
+                final releaseYear = releaseDate != null && releaseDate.contains('-')
+                    ? releaseDate.split('-').first
+                    : 'Unknown';
+                final newLatestWork = LatestWork(
+                  title: movie.title,
+                  releaseYear: releaseYear,
+                  releaseDate: releaseDate ?? 'Unknown',
+                  department: reason.department,
+                  job: reason.job,
+                  posterPath: movie.posterPath,
+                );
+                final updatedContributor = Contributor(
+                  tmdbId: contributor.tmdbId,
+                  name: contributor.name,
+                  type: contributor.type,
+                  profilePath: contributor.profilePath,
+                  notifyForDepartments: contributor.notifyForDepartments,
+                  availableDepartments: contributor.availableDepartments,
+                  knownFor: contributor.knownFor,
+                  latestWork: newLatestWork,
+                  followedAt: contributor.followedAt,
+                  allRolesSelected: contributor.allRolesSelected,
+                  isHidden: contributor.isHidden,
+                );
+                await contributorRepo.updateContributor(updatedContributor);
+              }
+            }
+          }
         }
         
         // Get titles from cache like the background service does
@@ -339,9 +365,10 @@ class SystemTrayService with TrayListener {
           }
         }
         
-        // Get priority-based release dates for 2-3 movie notifications
+        // Release dates for multi-release notifications.
+        // Windows uses the first 4 entries (poster grid); Android InboxStyle uses all.
         List<String>? releaseDates;
-        if (newReleases.length >= 2 && newReleases.length <= 3) {
+        if (newReleases.length >= 2) {
           releaseDates = NotificationLogic.getPriorityReleaseDates(movieTitles, newReleases);
         }
         
@@ -365,11 +392,13 @@ class SystemTrayService with TrayListener {
           releaseDates: releaseDates,
           totalMovieCount: newReleases.length,
         );
-        
-      } else {
       }
-      
-    } catch (e) {
+
+    } catch (e, stack) {
+      assert(() {
+        debugPrint('[SystemTray] Release check failed: $e\n$stack');
+        return true;
+      }());
     }
   }
 

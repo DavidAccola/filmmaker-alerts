@@ -1,15 +1,21 @@
 import 'dart:io';
+import 'package:flutter/foundation.dart';
 import 'package:path_provider/path_provider.dart';
 
 /// Manages single-instance enforcement for the application.
-/// Prevents multiple instances from running simultaneously.
+/// Only active on desktop platforms — Android enforces single-instance at the OS level.
 class SingleInstanceManager {
   static const String _lockFileName = 'filmmaker_alerts.lock';
   static File? _lockFile;
 
   /// Attempts to acquire a lock for this instance.
-  /// Returns true if this is the only instance, false if another instance is already running.
+  /// Returns true if this is the only instance (or if on Android/iOS where it's always true).
   static Future<bool> acquireLock() async {
+    // Android/iOS: OS already enforces single-instance — nothing to do.
+    if (!kIsWeb && (Platform.isAndroid || Platform.isIOS)) {
+      return true;
+    }
+
     try {
       final appSupportDir = await getApplicationSupportDirectory();
       _lockFile = File('${appSupportDir.path}/$_lockFileName');
@@ -35,6 +41,9 @@ class SingleInstanceManager {
 
   /// Releases the lock when the app exits.
   static Future<void> releaseLock() async {
+    if (!kIsWeb && (Platform.isAndroid || Platform.isIOS)) {
+      return; // No lock to release on mobile
+    }
     try {
       if (_lockFile != null && await _lockFile!.exists()) {
         await _lockFile!.delete();

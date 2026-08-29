@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import 'dart:io';
+import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:material_symbols_icons/symbols.dart';
@@ -1289,8 +1291,11 @@ class _MovieStatusButtonState extends State<_MovieStatusButton> {
       icon = widget.icon;
       color = theme.colorScheme.onSurfaceVariant.withValues(alpha: 0.6);
     } else {
+      // On mobile (no hover), show at readable opacity so buttons are discoverable.
+      // On desktop, fade to near-invisible — hover reveals them.
+      final isMobile = !kIsWeb && (Platform.isAndroid || Platform.isIOS);
       icon = widget.icon;
-      color = theme.colorScheme.onSurfaceVariant.withValues(alpha: 0.15);
+      color = theme.colorScheme.onSurfaceVariant.withValues(alpha: isMobile ? 0.6 : 0.15);
     }
     
     Widget iconWidget = GestureDetector(

@@ -413,54 +413,30 @@ class _HistoryScreenState extends ConsumerState<HistoryScreen> {
   /// Get TV episode widgets for display in history (returns multiple widgets for grouped episodes)
   List<Widget> _getTvEpisodeWidgets(BuildContext context, NotificationHistoryEntry entry) {
     if (entry.mediaType != 'tv') return [];
-    
-    // Initialize logger and log entry details
-    // DebugLogger.instance.init();
-    // DebugLogger.instance.logHistory('=== TV Episode Debug ===');
-    // DebugLogger.instance.logHistory('tmdbId: ${entry.tmdbId}');
-    // DebugLogger.instance.logHistory('mediaType: ${entry.mediaType}');
-    // DebugLogger.instance.logHistory('tvNotificationType: ${entry.tvNotificationType}');
-    // DebugLogger.instance.logHistory('seasonNumber: ${entry.seasonNumber}');
-    // DebugLogger.instance.logHistory('episodeNumber: ${entry.episodeNumber}');
-    // DebugLogger.instance.logHistory('episodeTitle: "${entry.episodeTitle}"');
-    // DebugLogger.instance.logHistory('notificationEvents.length: ${entry.notificationEvents.length}');
-    // for (int i = 0; i < entry.notificationEvents.length; i++) {
-    //   final event = entry.notificationEvents[i];
-    //   DebugLogger.instance.logHistory('event[$i]: releaseType="${event.releaseType}", releaseDate="${event.releaseDate}"');
-    // }
-    
+
     final List<Widget> episodeWidgets = [];
-    
+
     // Handle grouped episodes differently
     final isGroupedByType = entry.tvNotificationType == 'grouped_episodes';
     final isGroupedByCount = entry.notificationEvents.length > 1;
     final isGroupedByTitle = entry.episodeTitle != null && entry.episodeTitle!.contains('episodes');
     
-    // DebugLogger.instance.logHistory('isGroupedByType: $isGroupedByType');
-    // DebugLogger.instance.logHistory('isGroupedByCount: $isGroupedByCount');
-    // DebugLogger.instance.logHistory('isGroupedByTitle: $isGroupedByTitle');
-    
     if ((isGroupedByType || isGroupedByCount || isGroupedByTitle) && 
         entry.notificationEvents.isNotEmpty) {
-      // DebugLogger.instance.logHistory('Using GROUPED episode logic');
       
       // For grouped episodes, create one widget per episode
       if (entry.notificationEvents.length > 1) {
-        // DebugLogger.instance.logHistory('Multiple events format (${entry.notificationEvents.length} events)');
         // New format: multiple notification events with individual episode data
         for (int i = 0; i < entry.notificationEvents.length; i++) {
           final event = entry.notificationEvents[i];
-          // DebugLogger.instance.logHistory('Processing event $i: ${event.releaseType}');
           
           // Parse episode info from releaseType: "episode_type|season|episode|title"
           final releaseTypeParts = event.releaseType.split('|');
           if (releaseTypeParts.length >= 4) {
-            // DebugLogger.instance.logHistory('Using pipe format parsing');
             final seasonNum = int.tryParse(releaseTypeParts[1]) ?? 1;
             final episodeNum = int.tryParse(releaseTypeParts[2]) ?? 1;
             final episodeTitle = releaseTypeParts[3];
             
-            // DebugLogger.instance.logHistory('Parsed: S${seasonNum}E${episodeNum} - "$episodeTitle"');
             
             // Format the air date
             final formattedDate = _formatDateForHistory(event.releaseDate);
@@ -476,11 +452,9 @@ class _HistoryScreenState extends ConsumerState<HistoryScreen> {
               ),
             );
           } else {
-            // DebugLogger.instance.logHistory('Using underscore format parsing');
             // Fallback for old format or unparseable data
             final underscoreParts = event.releaseType.split('_');
             if (underscoreParts.length >= 4) {
-              // DebugLogger.instance.logHistory('Underscore parts: $underscoreParts');
               
               // Handle different old formats:
               // Format 1: episode_37_14_Title
@@ -494,16 +468,13 @@ class _HistoryScreenState extends ConsumerState<HistoryScreen> {
                 seasonNum = int.tryParse(underscoreParts[1]) ?? 1;
                 episodeNum = int.tryParse(underscoreParts[2]) ?? 1;
                 titleStartIndex = 3;
-                // DebugLogger.instance.logHistory('Format 1: episode_season_episode_title');
               } else if (underscoreParts.length >= 5 && 
                          (underscoreParts[0] == 'season' || underscoreParts[0] == 'series')) {
                 // Format: season_finale_37_15_Title or series_premiere_1_1_Title
                 seasonNum = int.tryParse(underscoreParts[2]) ?? 1;
                 episodeNum = int.tryParse(underscoreParts[3]) ?? 1;
                 titleStartIndex = 4;
-                // DebugLogger.instance.logHistory('Format 2: season_type_season_episode_title');
               } else {
-                // DebugLogger.instance.logHistory('Format 3: fallback numeric search');
                 // Fallback: assume last two numeric parts are season/episode
                 for (int j = 1; j < underscoreParts.length - 1; j++) {
                   final num1 = int.tryParse(underscoreParts[j]);
@@ -512,7 +483,6 @@ class _HistoryScreenState extends ConsumerState<HistoryScreen> {
                     seasonNum = num1;
                     episodeNum = num2;
                     titleStartIndex = j + 2;
-                    // DebugLogger.instance.logHistory('Found numbers at positions $j,${j+1}: $seasonNum,$episodeNum');
                     break;
                   }
                 }
@@ -524,7 +494,6 @@ class _HistoryScreenState extends ConsumerState<HistoryScreen> {
                 episodeTitle = underscoreParts.sublist(titleStartIndex).join(' ');
               }
               
-              // DebugLogger.instance.logHistory('Final parsed: S${seasonNum}E${episodeNum} - "$episodeTitle"');
               
               // Format the air date
               final formattedDate = _formatDateForHistory(event.releaseDate);
@@ -540,12 +509,10 @@ class _HistoryScreenState extends ConsumerState<HistoryScreen> {
                 ),
               );
             } else {
-              // DebugLogger.instance.logHistory('Could not parse event: ${event.releaseType}');
             }
           }
         }
       } else {
-        // DebugLogger.instance.logHistory('Single event format, generating from episode count');
         // Old format: single notification event but multiple episodes
         // Generate episode widgets based on episode count
         final episodeCount = entry.episodeNumber ?? 1;
@@ -554,7 +521,6 @@ class _HistoryScreenState extends ConsumerState<HistoryScreen> {
         final airDate = entry.notificationEvents.first.releaseDate;
         final formattedDate = _formatDateForHistory(airDate);
         
-        // DebugLogger.instance.logHistory('Generating $episodeCount episodes starting from S${seasonNum}E${baseEpisodeNum}');
         
         for (int i = 0; i < episodeCount; i++) {
           final episodeNum = baseEpisodeNum + i;
@@ -581,10 +547,8 @@ class _HistoryScreenState extends ConsumerState<HistoryScreen> {
         }
       }
       
-      // DebugLogger.instance.logHistory('Created ${spacedWidgets.length} widgets (${episodeWidgets.length} episodes + spacing)');
       return spacedWidgets;
     } else {
-      // DebugLogger.instance.logHistory('Using SINGLE episode logic');
       // Single episode - create one widget
       final List<String> parts = [];
       
@@ -592,26 +556,21 @@ class _HistoryScreenState extends ConsumerState<HistoryScreen> {
           entry.episodeTitle!.isNotEmpty && 
           !entry.episodeTitle!.contains('episodes')) {
         parts.add('"${entry.episodeTitle}"');
-        // DebugLogger.instance.logHistory('Added episode title: "${entry.episodeTitle}"');
       } else {
-        // DebugLogger.instance.logHistory('No episode title (empty or contains "episodes")');
       }
       
       // Add episode format (S#E#)
       if (entry.seasonNumber != null && entry.episodeNumber != null) {
         parts.add('S${entry.seasonNumber}E${entry.episodeNumber.toString().padLeft(2, '0')}');
-        // DebugLogger.instance.logHistory('Added S#E#: S${entry.seasonNumber}E${entry.episodeNumber}');
       }
       
       // Add the air date
       if (entry.notificationEvents.isNotEmpty) {
         final formattedDate = _formatDateForHistory(entry.notificationEvents.first.releaseDate);
         parts.add(formattedDate);
-        // DebugLogger.instance.logHistory('Added date: $formattedDate');
       }
       
       final finalText = parts.join(' - ');
-      // DebugLogger.instance.logHistory('Final single episode text: "$finalText"');
       
       if (parts.isNotEmpty) {
         return [
@@ -626,7 +585,6 @@ class _HistoryScreenState extends ConsumerState<HistoryScreen> {
       }
     }
     
-    // DebugLogger.instance.logHistory('Returning empty widget list');
     return [];
   }
 

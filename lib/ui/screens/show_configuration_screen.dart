@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import 'dart:io';
+import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:material_symbols_icons/symbols.dart';
@@ -1924,30 +1926,33 @@ class _EpisodeRowState extends State<_EpisodeRow> {
               ),
             ),
             // Rating indicator:
-            // - When not hovered: amber dot if rated (always visible, space-efficient)
-            // - When hovered/tapped: full "★ X/10" badge with edit icon
-            if (widget.userRating != null || _isHovered)
-              InkWell(
+            // - Desktop: amber dot if rated (hover reveals full badge + edit)
+            // - Mobile: always show full "★ X/10" badge (or "Rate" if unrated) — no hover
+            Builder(builder: (context) {
+              final isMobile = !kIsWeb && (Platform.isAndroid || Platform.isIOS);
+              final showFull = _isHovered || isMobile;
+              if (widget.userRating == null && !showFull) return const SizedBox.shrink();
+              return InkWell(
                 onTap: widget.onRateTap,
                 borderRadius: BorderRadius.circular(4),
                 child: Padding(
                   padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
-                  child: _isHovered
+                  child: showFull
                       ? Row(mainAxisSize: MainAxisSize.min, children: [
                           Text(
                             widget.userRating != null
                                 ? '★ ${widget.userRating}/10'
                                 : 'Rate',
-                            style: theme.textTheme.labelSmall?.copyWith(
+                            style: Theme.of(context).textTheme.labelSmall?.copyWith(
                               color: widget.userRating != null
                                   ? Colors.amber
-                                  : theme.colorScheme.onSurfaceVariant,
+                                  : Theme.of(context).colorScheme.onSurfaceVariant,
                               fontWeight: FontWeight.w600,
                             ),
                           ),
                           const SizedBox(width: 2),
                           Icon(Icons.edit, size: 11,
-                              color: theme.colorScheme.onSurfaceVariant),
+                              color: Theme.of(context).colorScheme.onSurfaceVariant),
                         ])
                       : Container(
                           width: 7,
@@ -1958,7 +1963,8 @@ class _EpisodeRowState extends State<_EpisodeRow> {
                           ),
                         ),
                 ),
-              ),
+              );
+            }),
           ],
         ),
       ),
@@ -2029,9 +2035,12 @@ class _EpisodeStatusButtonState extends State<_EpisodeStatusButton> {
       icon = widget.icon;
       color = theme.colorScheme.onSurfaceVariant.withValues(alpha: 0.6);
     } else {
-      // Default - outline icon, very subtle/faded
+      // Default - outline icon.
+      // On mobile (no hover), show at readable opacity so buttons are discoverable.
+      // On desktop, fade to near-invisible — hover reveals them.
+      final isMobile = !kIsWeb && (Platform.isAndroid || Platform.isIOS);
       icon = widget.icon;
-      color = theme.colorScheme.onSurfaceVariant.withValues(alpha: 0.15);
+      color = theme.colorScheme.onSurfaceVariant.withValues(alpha: isMobile ? 0.6 : 0.15);
     }
     
     // Build the icon with appropriate padding

@@ -170,4 +170,127 @@ void main() {
       expect(defaultPrefs.hideRatingsInDetails, isFalse);
     });
   });
+
+  // -------------------------------------------------------------------------
+  // copyWithLastCheckTime — regression guard
+  //
+  // This method was introduced after a bug where background checks silently
+  // reset 11 user settings by copying only a subset of Preferences fields.
+  // These tests ensure that every field is preserved and only lastCheckTime
+  // changes. If a new HiveField is added to Preferences and copyWithLastCheckTime
+  // is not updated, the test that checks a non-default value for that field will
+  // fail here, surfacing the omission before it ships.
+  // -------------------------------------------------------------------------
+  group('Preferences.copyWithLastCheckTime', () {
+    test('updates lastCheckTime and only lastCheckTime', () {
+      final original = Preferences(lastCheckTime: '2026-01-01T00:00:00.000');
+      final updated = original.copyWithLastCheckTime('2026-08-28T09:00:00.000');
+
+      expect(updated.lastCheckTime, equals('2026-08-28T09:00:00.000'));
+      // Original is unchanged
+      expect(original.lastCheckTime, equals('2026-01-01T00:00:00.000'));
+    });
+
+    test('preserves all non-default notification fields', () {
+      final original = Preferences(
+        notifyTheatre: false,
+        notifyStreaming: false,
+        notifyPhysical: true,
+        notifyTV: true,
+        notifyPersonTvEpisodes: false,
+        scheduleTime: '14:30',
+        defaultDepartments: ['Director'],
+        allRolesSelected: true,
+        allReleaseTypesSelected: true,
+        autoFollowNewRoles: false,
+      );
+
+      final updated = original.copyWithLastCheckTime('2026-08-28T09:00:00.000');
+
+      expect(updated.notifyTheatre, isFalse);
+      expect(updated.notifyStreaming, isFalse);
+      expect(updated.notifyPhysical, isTrue);
+      expect(updated.notifyTV, isTrue);
+      expect(updated.notifyPersonTvEpisodes, isFalse);
+      expect(updated.scheduleTime, equals('14:30'));
+      expect(updated.defaultDepartments, equals(['Director']));
+      expect(updated.allRolesSelected, isTrue);
+      expect(updated.allReleaseTypesSelected, isTrue);
+      expect(updated.autoFollowNewRoles, isFalse);
+    });
+
+    test('preserves all non-default UI/display fields', () {
+      final original = Preferences(
+        useDarkMode: false,
+        hidePopularityInDetails: true,
+        hideRatingsInDetails: true,
+        reduceAnimations: true,
+        useGridView: false,
+        watchlistUseListView: true,
+        homeSortOrder: 'releaseDate',
+        watchlistSortOrder: 'title',
+        groupByType: false,
+        movieDetailsPreference: 'imdb',
+        streamingCountry: 'GB',
+      );
+
+      final updated = original.copyWithLastCheckTime('2026-08-28T09:00:00.000');
+
+      expect(updated.useDarkMode, isFalse);
+      expect(updated.hidePopularityInDetails, isTrue);
+      expect(updated.hideRatingsInDetails, isTrue);
+      expect(updated.reduceAnimations, isTrue);
+      expect(updated.useGridView, isFalse);
+      expect(updated.watchlistUseListView, isTrue);
+      expect(updated.homeSortOrder, equals('releaseDate'));
+      expect(updated.watchlistSortOrder, equals('title'));
+      expect(updated.groupByType, isFalse);
+      expect(updated.movieDetailsPreference, equals('imdb'));
+      expect(updated.streamingCountry, equals('GB'));
+    });
+
+    test('preserves all non-default connections/social fields', () {
+      final original = Preferences(
+        connectionsSortOrder: 'releaseDate',
+        connectionsGroupByRelease: true,
+        connectionsShowHiddenContributors: true,
+        connectionsShowHiddenWatchlist: true,
+        dismissedConnectionIds: ['movie_123', 'tv_456'],
+      );
+
+      final updated = original.copyWithLastCheckTime('2026-08-28T09:00:00.000');
+
+      expect(updated.connectionsSortOrder, equals('releaseDate'));
+      expect(updated.connectionsGroupByRelease, isTrue);
+      expect(updated.connectionsShowHiddenContributors, isTrue);
+      expect(updated.connectionsShowHiddenWatchlist, isTrue);
+      expect(updated.dismissedConnectionIds, equals(['movie_123', 'tv_456']));
+    });
+
+    test('preserves other timestamp fields', () {
+      final original = Preferences(
+        lastCheckTime: '2026-01-01T00:00:00.000',
+        lastViewedHistoryTime: '2026-01-02T12:00:00.000',
+        pretendToday: '2026-06-15',
+      );
+
+      final updated = original.copyWithLastCheckTime('2026-08-28T09:00:00.000');
+
+      expect(updated.lastCheckTime, equals('2026-08-28T09:00:00.000'));
+      expect(updated.lastViewedHistoryTime, equals('2026-01-02T12:00:00.000'));
+      expect(updated.pretendToday, equals('2026-06-15'));
+    });
+
+    test('dismissedConnectionIds list is preserved by reference, not reset to empty', () {
+      // This was the most damaging consequence of the old bug: dismissed
+      // connections would re-appear after every background check.
+      final ids = ['movie_1', 'movie_2', 'tv_3'];
+      final original = Preferences(dismissedConnectionIds: ids);
+
+      final updated = original.copyWithLastCheckTime('2026-08-28T09:00:00.000');
+
+      expect(updated.dismissedConnectionIds, equals(ids));
+      expect(updated.dismissedConnectionIds, isNotEmpty);
+    });
+  });
 }

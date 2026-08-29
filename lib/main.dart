@@ -153,6 +153,20 @@ void main() async {
     },
   );
 
+  // 7b. Android: check if the app was launched by tapping a notification
+  // (cold-start case — app was terminated when user tapped).
+  if (!kIsWeb && Platform.isAndroid) {
+    final launchDetails = await notificationService.getNotificationLaunchDetails();
+    if (launchDetails != null && launchDetails.didNotificationLaunchApp) {
+      final payload = launchDetails.notificationResponse?.payload;
+      if (payload == 'app://history') {
+        container.read(selectedTabProvider.notifier).setTab(2);
+      }
+      // http:// payloads (TMDB URLs) are opened by notificationTapBackground
+      // in the background isolate, so no action needed here for those.
+    }
+  }
+
   // 8. Initialize System Tray (Windows only)
   if (Platform.isWindows) {
     final systemTrayService = container.read(systemTrayServiceProvider);

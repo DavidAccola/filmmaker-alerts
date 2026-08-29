@@ -6,7 +6,7 @@ plugins {
 }
 
 android {
-    namespace = "com.example.filmmaker_alerts_flutter"
+    namespace = "app.filmmaker_alerts"
     compileSdk = flutter.compileSdkVersion
     ndkVersion = flutter.ndkVersion
 
@@ -21,11 +21,11 @@ android {
     }
 
     defaultConfig {
-        // TODO: Specify your own unique Application ID (https://developer.android.com/studio/build/application-id.html).
-        applicationId = "com.example.filmmaker_alerts_flutter"
-        // You can update the following values to match your application needs.
-        // For more information, see: https://flutter.dev/to/review-gradle-config.
-        minSdk = flutter.minSdkVersion
+        applicationId = "app.filmmaker_alerts"
+        // flutter_secure_storage v11+ requires minSdk 23 (Android 6.0+).
+        // flutter.minSdkVersion defaults to 16 or 21 depending on Flutter version,
+        // so we override explicitly here.
+        minSdk = 23
         targetSdk = flutter.targetSdkVersion
         versionCode = flutter.versionCode
         versionName = flutter.versionName

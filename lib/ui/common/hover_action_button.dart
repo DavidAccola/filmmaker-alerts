@@ -1,7 +1,10 @@
 import 'dart:async';
+import 'dart:io';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
-/// Reusable wrapper for action buttons with white color, subtle shadow, and hover-controlled visibility
+/// Reusable wrapper for action buttons with white color, subtle shadow, and hover-controlled visibility.
+/// On mobile platforms (Android/iOS) where hover doesn't exist, the button is always visible.
 class HoverActionButton extends StatefulWidget {
   final VoidCallback onPressed;
   final IconData icon;
@@ -26,10 +29,20 @@ class _HoverActionButtonState extends State<HoverActionButton> {
   Timer? _hoverTimer;
   bool _showButton = false;
 
+  /// On mobile (no hover support), always treat as "hovered" so buttons are visible.
+  bool get _effectiveHovered {
+    if (!kIsWeb && (Platform.isAndroid || Platform.isIOS)) return true;
+    return widget.isCardHovered;
+  }
+
   @override
   void didUpdateWidget(HoverActionButton oldWidget) {
     super.didUpdateWidget(oldWidget);
-    
+
+    // On mobile, _effectiveHovered is always true — no transitions to handle.
+    if (!kIsWeb && (Platform.isAndroid || Platform.isIOS)) return;
+
+    // On desktop, check whether the hovered state actually changed.
     if (widget.isCardHovered != oldWidget.isCardHovered) {
       if (widget.isCardHovered) {
         // Start timer when hover begins
@@ -49,8 +62,8 @@ class _HoverActionButtonState extends State<HoverActionButton> {
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
-    // If already hovering when widget is built/updated, ensure button shows
-    if (widget.isCardHovered && !_showButton) {
+    // If already hovering (or on mobile) when widget is built/updated, ensure button shows
+    if (_effectiveHovered && !_showButton) {
       _hoverTimer?.cancel();
       _hoverTimer = Timer(const Duration(milliseconds: 250), () {
         if (mounted) {

@@ -432,36 +432,9 @@ class DebugScreen extends ConsumerWidget {
                   final newReleases = await releaseChecker.findNewReleases();
                   
                   // Update last check time (like the real background service does)
-                  debugPrint('[DebugScreen] DEBUG: Before updating preferences - notifyTV: ${currentPrefs.notifyTV}');
-                  debugPrint('[DebugScreen] DEBUG: Before updating preferences - defaultTvNotificationPrefs: ${currentPrefs.defaultTvNotificationPrefs}');
-                  debugPrint('[DebugScreen] DEBUG: Before updating preferences - notifyPersonTvEpisodes: ${currentPrefs.notifyPersonTvEpisodes}');
-                  
-                  final updatedPrefs = Preferences(
-                    notifyTheatre: currentPrefs.notifyTheatre,
-                    notifyStreaming: currentPrefs.notifyStreaming,
-                    scheduleTime: currentPrefs.scheduleTime,
-                    defaultDepartments: currentPrefs.defaultDepartments,
-                    notifyPhysical: currentPrefs.notifyPhysical,
-                    notifyTV: currentPrefs.notifyTV,
-                    pretendToday: currentPrefs.pretendToday,
-                    includeCollectionsInMovieSearch: currentPrefs.includeCollectionsInMovieSearch,
-                    useGridView: currentPrefs.useGridView,
-                    homeSortOrder: currentPrefs.homeSortOrder,
-                    groupByType: currentPrefs.groupByType,
-                    allRolesSelected: currentPrefs.allRolesSelected,
-                    allReleaseTypesSelected: currentPrefs.allReleaseTypesSelected,
-                    autoFollowNewRoles: currentPrefs.autoFollowNewRoles,
-                    lastCheckTime: DateTime.now().toIso8601String(),
-                    lastViewedHistoryTime: currentPrefs.lastViewedHistoryTime, // MISSING!
-                    movieDetailsPreference: currentPrefs.movieDetailsPreference, // MISSING!
-                    defaultTvNotificationPrefs: currentPrefs.defaultTvNotificationPrefs, // MISSING!
-                    notifyPersonTvEpisodes: currentPrefs.notifyPersonTvEpisodes, // MISSING!
+                  final updatedPrefs = currentPrefs.copyWithLastCheckTime(
+                    DateTime.now().toIso8601String(),
                   );
-                  
-                  debugPrint('[DebugScreen] DEBUG: After creating updated preferences - notifyTV: ${updatedPrefs.notifyTV}');
-                  debugPrint('[DebugScreen] DEBUG: After creating updated preferences - defaultTvNotificationPrefs: ${updatedPrefs.defaultTvNotificationPrefs}');
-                  debugPrint('[DebugScreen] DEBUG: After creating updated preferences - notifyPersonTvEpisodes: ${updatedPrefs.notifyPersonTvEpisodes}');
-                  
                   await prefsRepo.savePreferences(updatedPrefs);
                   ref.invalidate(preferencesProvider);
                   
@@ -646,7 +619,6 @@ class DebugScreen extends ConsumerWidget {
             ElevatedButton.icon(
               onPressed: () async {
                 try {
-                  // await DebugLogger.instance.init();
                   final logPath = 'Debug log not available';
                   final logContent = 'Debug logging is temporarily disabled';
                   
@@ -772,7 +744,6 @@ class DebugScreen extends ConsumerWidget {
                           if (crashLogs.isNotEmpty)
                             TextButton(
                               onPressed: () async {
-                                // await DebugLogger.instance.clearCrashLogs();
                                 if (context.mounted) {
                                   Navigator.of(context).pop();
                                   ScaffoldMessenger.of(context).showSnackBar(
@@ -867,7 +838,6 @@ class DebugScreen extends ConsumerWidget {
                           if (perfLogs.isNotEmpty)
                             TextButton(
                               onPressed: () async {
-                                // await DebugLogger.instance.clearPerformanceLogs();
                                 if (context.mounted) {
                                   Navigator.of(context).pop();
                                   ScaffoldMessenger.of(context).showSnackBar(
@@ -958,7 +928,6 @@ class DebugScreen extends ConsumerWidget {
                           if (freezes.isNotEmpty)
                             TextButton(
                               onPressed: () async {
-                                // await DebugLogger.instance.clearPerformanceLogs();
                                 if (context.mounted) {
                                   Navigator.of(context).pop();
                                   ScaffoldMessenger.of(context).showSnackBar(

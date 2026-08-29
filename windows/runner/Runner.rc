@@ -89,13 +89,13 @@ BEGIN
     BEGIN
         BLOCK "040904e4"
         BEGIN
-            VALUE "CompanyName", "com.example" "\0"
-            VALUE "FileDescription", "filmmaker_alerts_flutter" "\0"
+            VALUE "CompanyName", "Filmmaker Alerts" "\0"
+            VALUE "FileDescription", "Filmmaker Alerts" "\0"
             VALUE "FileVersion", VERSION_AS_STRING "\0"
-            VALUE "InternalName", "filmmaker_alerts_flutter" "\0"
-            VALUE "LegalCopyright", "Copyright (C) 2025 com.example. All rights reserved." "\0"
-            VALUE "OriginalFilename", "filmmaker_alerts_flutter.exe" "\0"
-            VALUE "ProductName", "filmmaker_alerts_flutter" "\0"
+            VALUE "InternalName", "filmmaker_alerts" "\0"
+            VALUE "LegalCopyright", "Copyright (C) 2025 Filmmaker Alerts. All rights reserved." "\0"
+            VALUE "OriginalFilename", "filmmaker_alerts.exe" "\0"
+            VALUE "ProductName", "Filmmaker Alerts" "\0"
             VALUE "ProductVersion", VERSION_AS_STRING "\0"
         END
     END

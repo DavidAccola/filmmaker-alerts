@@ -26,12 +26,41 @@ class MainScreen extends ConsumerStatefulWidget {
 class _MainScreenState extends ConsumerState<MainScreen> with WindowListener {
   bool _hasCheckedOnboarding = false;
 
-  final List<Widget> _screens = const [
-    HomeScreen(),
-    ConnectionsScreen(),
-    HistoryScreen(),
-    DebugScreen(),
-    SettingsScreen(),
+  List<Widget> get _screens => [
+    const HomeScreen(),
+    const ConnectionsScreen(),
+    const HistoryScreen(),
+    if (kDebugMode) const DebugScreen(),
+    const SettingsScreen(),
+  ];
+
+  List<NavigationDestination> get _destinations => [
+    const NavigationDestination(
+      icon: Icon(Icons.home_outlined),
+      selectedIcon: Icon(Icons.home),
+      label: 'Home',
+    ),
+    const NavigationDestination(
+      icon: Icon(Icons.hub_outlined),
+      selectedIcon: Icon(Icons.hub),
+      label: 'Watchlist Connections',
+    ),
+    const NavigationDestination(
+      icon: Icon(Icons.history_outlined),
+      selectedIcon: Icon(Icons.history),
+      label: 'History',
+    ),
+    if (kDebugMode)
+      const NavigationDestination(
+        icon: Icon(Icons.bug_report_outlined),
+        selectedIcon: Icon(Icons.bug_report),
+        label: 'Debug',
+      ),
+    const NavigationDestination(
+      icon: Icon(Icons.settings_outlined),
+      selectedIcon: Icon(Icons.settings),
+      label: 'Settings',
+    ),
   ];
 
   @override
@@ -137,33 +166,7 @@ class _MainScreenState extends ConsumerState<MainScreen> with WindowListener {
           onDestinationSelected: (index) {
             ref.read(selectedTabProvider.notifier).setTab(index);
           },
-          destinations: const [
-            NavigationDestination(
-              icon: Icon(Icons.home_outlined),
-              selectedIcon: Icon(Icons.home),
-              label: 'Home',
-            ),
-            NavigationDestination(
-              icon: Icon(Icons.hub_outlined),
-              selectedIcon: Icon(Icons.hub),
-              label: 'Watchlist Connections',
-            ),
-            NavigationDestination(
-              icon: Icon(Icons.history_outlined),
-              selectedIcon: Icon(Icons.history),
-              label: 'History',
-            ),
-            NavigationDestination(
-              icon: Icon(Icons.bug_report_outlined),
-              selectedIcon: Icon(Icons.bug_report),
-              label: 'Debug',
-            ),
-            NavigationDestination(
-              icon: Icon(Icons.settings_outlined),
-              selectedIcon: Icon(Icons.settings),
-              label: 'Settings',
-            ),
-          ],
+          destinations: _destinations,
           body: _screens[selectedIndex],
           floatingActionButton: showFab ? _buildFab(context) : null,
         ),

@@ -75,7 +75,13 @@ class GoogleAuthService {
 
   Future<bool> _tryRestoreAndroid() async {
     try {
-      _gsi ??= GoogleSignIn(scopes: _driveScopes);
+      _gsi ??= GoogleSignIn(
+        scopes: _driveScopes,
+        // serverClientId is the Web OAuth client ID from Google Cloud Console.
+        // Required on Android for signInSilently() and authenticatedClient() to
+        // work reliably with googleapis. Set GOOGLE_WEB_CLIENT_ID in .env.
+        serverClientId: dotenv.env['GOOGLE_WEB_CLIENT_ID'],
+      );
       final account = await _gsi!.signInSilently();
       if (account == null) return false;
       final authClient = await _gsi!.authenticatedClient();
@@ -90,7 +96,10 @@ class GoogleAuthService {
 
   Future<bool> _signInAndroid() async {
     try {
-      _gsi ??= GoogleSignIn(scopes: _driveScopes);
+      _gsi ??= GoogleSignIn(
+        scopes: _driveScopes,
+        serverClientId: dotenv.env['GOOGLE_WEB_CLIENT_ID'],
+      );
       final account = await _gsi!.signIn();
       if (account == null) return false; // user cancelled
       final authClient = await _gsi!.authenticatedClient();

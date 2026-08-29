@@ -1,6 +1,7 @@
 import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:hive_flutter/hive_flutter.dart';
@@ -480,8 +481,14 @@ class MyApp extends ConsumerWidget {
                     const SizedBox(height: 24),
                     ElevatedButton(
                       onPressed: () {
-                        // Restart the app by exiting
-                        exit(0);
+                        // On Android, SystemNavigator.pop() is the correct way to
+                        // close the app. exit(0) works on desktop but is not
+                        // recommended on Android (bypasses lifecycle callbacks).
+                        if (Platform.isAndroid || Platform.isIOS) {
+                          SystemNavigator.pop();
+                        } else {
+                          exit(0);
+                        }
                       },
                       child: const Text('Exit App'),
                     ),

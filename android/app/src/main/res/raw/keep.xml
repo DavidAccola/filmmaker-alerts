@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    Tells R8/ProGuard which resources to keep in release builds.
+
+    Without this file, the R8 compiler may strip:
+      - @mipmap/ic_launcher used as the notification small icon
+      - Drawable resources referenced by flutter_local_notifications
+
+    The flutter_local_notifications README explicitly requires this file.
+    Reference: https://developer.android.com/topic/performance/app-optimization/customize-which-resources-to-keep
+-->
+<resources xmlns:tools="http://schemas.android.com/tools"
+    tools:keep="@mipmap/ic_launcher,@drawable/*"
+    tools:discard="@layout/unused" />

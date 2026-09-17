@@ -535,7 +535,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                   onTap: () async {
                     final ok = await auth.signIn();
                     if (ok && context.mounted) {
-                      await sync.downloadIfNewerAndSignedIn();
+                      await sync.syncOnFirstSignIn();
                       setLocalState(() {});
                       showSimpleSnackBar(context, 'Signed in — sync enabled');
                     } else if (context.mounted) {
@@ -547,12 +547,49 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                 ListTile(
                   dense: true,
                   leading: const Icon(Icons.upload_outlined),
-                  title: const Text('Sync now'),
+                  title: const Text('Push to Drive'),
+                  subtitle: const Text('Upload this device\'s data to Drive'),
                   onTap: () async {
                     await sync.uploadIfSignedIn();
                     setLocalState(() {});
                     if (context.mounted) {
-                      showSimpleSnackBar(context, 'Synced to Drive');
+                      showSimpleSnackBar(context, 'Pushed to Drive');
+                    }
+                  },
+                ),
+                const Divider(),
+                ListTile(
+                  dense: true,
+                  leading: const Icon(Icons.download_outlined),
+                  title: const Text('Pull from Drive'),
+                  subtitle: const Text('Replace this device\'s data with Drive'),
+                  onTap: () async {
+                    // Force a pull regardless of timestamp by clearing local sync time.
+                    final confirmed = await showDialog<bool>(
+                      context: context,
+                      builder: (context) => AlertDialog(
+                        title: const Text('Pull from Drive?'),
+                        content: const Text(
+                          'This will replace all local data (contributors, watchlist, statuses) with what\'s on Drive. This cannot be undone.',
+                        ),
+                        actions: [
+                          TextButton(
+                            onPressed: () => Navigator.of(context).pop(false),
+                            child: const Text('Cancel'),
+                          ),
+                          FilledButton(
+                            onPressed: () => Navigator.of(context).pop(true),
+                            child: const Text('Pull'),
+                          ),
+                        ],
+                      ),
+                    );
+                    if (confirmed == true && context.mounted) {
+                      await sync.forcePullFromDrive();
+                      setLocalState(() {});
+                      if (context.mounted) {
+                        showSimpleSnackBar(context, 'Pulled from Drive');
+                      }
                     }
                   },
                 ),

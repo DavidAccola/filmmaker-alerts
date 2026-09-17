@@ -7,7 +7,7 @@
 // 3. Create OAuth consent screen (External)
 // 4. Create OAuth client IDs:
 //    - Desktop app (for Windows) → copy client ID + secret below as
-//      GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET in .env
+//      GOOGLE_DESKTOP_CLIENT_ID and GOOGLE_DESKTOP_CLIENT_SECRET in .env
 //    - Web application → copy client ID below as GOOGLE_WEB_CLIENT_ID in .env
 //      (used by google_sign_in on Android for silent session restore)
 //    - Android (for Android) → enter package name (app.filmmaker_alerts)
@@ -18,8 +18,8 @@
 // 6. Add your Google account as a test user
 //
 // The .env file (gitignored) should contain:
-//   GOOGLE_CLIENT_ID=YOUR_DESKTOP_CLIENT_ID.apps.googleusercontent.com
-//   GOOGLE_CLIENT_SECRET=YOUR_DESKTOP_CLIENT_SECRET
+//   GOOGLE_DESKTOP_CLIENT_ID=YOUR_DESKTOP_CLIENT_ID.apps.googleusercontent.com
+//   GOOGLE_DESKTOP_CLIENT_SECRET=YOUR_DESKTOP_CLIENT_SECRET
 //   GOOGLE_WEB_CLIENT_ID=YOUR_WEB_CLIENT_ID.apps.googleusercontent.com
 //   TMDB_API_KEY=YOUR_TMDB_API_KEY
 

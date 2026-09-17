@@ -51,6 +51,42 @@ class SyncService {
   // ---------------------------------------------------------------------------
 
   /// Upload local data to Drive. Called on app close and after mutations.
+  /// Force a pull from Drive regardless of timestamp.
+  /// Used by the "Pull from Drive" button — clears the local sync timestamp
+  /// so the next download always applies, even if local appears newer.
+  Future<void> forcePullFromDrive() async {
+    if (!_auth.isSignedIn) return;
+    // Clear local timestamp so _downloadIfNewer skips the "local is newer" guard.
+    await _storage.delete(key: _kLastSyncKey);
+    await downloadIfNewerAndSignedIn();
+  }
+
+  /// Called immediately after the user signs in for the first time on a device.
+  ///
+  /// Strategy:
+  /// - If Drive already has a sync file → download it (respect data from other devices).
+  /// - If Drive has no file yet → upload local data (this is the first device to sync).
+  ///
+  /// This prevents two bad outcomes:
+  /// 1. Signing in on a new device downloads nothing and then uploads stale/empty local data.
+  /// 2. Signing in on a device with real local data gets overwritten by an empty Drive file.
+  Future<void> syncOnFirstSignIn() async {
+    if (!_auth.isSignedIn) return;
+    try {
+      final driveApi = drive.DriveApi(_auth.client!);
+      final existingId = await _findExistingFileId(driveApi);
+      if (existingId != null) {
+        // Drive has data — download it.
+        await downloadIfNewerAndSignedIn();
+      } else {
+        // Drive is empty — upload local data.
+        await uploadIfSignedIn();
+      }
+    } catch (_) {
+      // Non-fatal — sync is best-effort.
+    }
+  }
+
   /// Silent fail if not signed in, no network, already uploading, currently
   /// downloading, or applying a downloaded payload (prevents echo uploads and
   /// partial-write corruption from concurrent upload/download).
@@ -185,6 +221,24 @@ class SyncService {
     }
 
     final payload = jsonDecode(utf8.decode(bytes)) as Map<String, dynamic>;
+
+    // Safety guard: never overwrite real local data with an empty remote payload.
+    // An empty payload has no contributors and no watchlist entries — this happens
+    // when a fresh device syncs before any data is added (e.g. first app launch
+    // on mobile before following anyone). If local has real data, skip the apply.
+    final remoteContributors = (payload['contributors'] as List?)?.length ?? 0;
+    final remoteWatchlist = (payload['watchlistEntries'] as List?)?.length ?? 0;
+    if (remoteContributors == 0 && remoteWatchlist == 0) {
+      final localContributors = Hive.box<Contributor>(AppConstants.contributorsBox).length;
+      final localWatchlist = Hive.box<WatchlistEntry>(AppConstants.watchlistEntriesBox).length;
+      if (localContributors > 0 || localWatchlist > 0) {
+        // Remote is empty but local has data — upload local instead of wiping it.
+        // This corrects the race condition where a new device syncs before adding data.
+        await _upload();
+        return true;
+      }
+    }
+
     _isApplyingDownload = true;
     try {
       await _applyPayload(payload);

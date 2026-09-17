@@ -99,9 +99,10 @@ class GoogleAuthService {
 
   Future<bool> _tryRestoreAndroid() async {
     try {
-      // Drive sync requires a Web OAuth client ID configured in .env.
-      // Without it, authenticatedClient() fails; return false so the app
-      // treats this as "not signed in" rather than crashing silently.
+      // Drive sync requires a Web application OAuth client ID configured in .env.
+      // GOOGLE_WEB_CLIENT_ID must be a Web application client (NOT Desktop, NOT Android).
+      // The Android client ID only covers the sign-in UI; the Web client ID is what
+      // google_sign_in uses as serverClientId to get a token usable with googleapis.
       final webClientId = dotenv.env['GOOGLE_WEB_CLIENT_ID'];
       if (webClientId == null || webClientId.isEmpty) return false;
 
@@ -109,7 +110,7 @@ class GoogleAuthService {
         scopes: _driveScopes,
         // serverClientId is the Web OAuth client ID from Google Cloud Console.
         // Required on Android for signInSilently() and authenticatedClient() to
-        // work reliably with googleapis. Set GOOGLE_WEB_CLIENT_ID in .env.
+        // work reliably with googleapis. Set GOOGLE_DESKTOP_CLIENT_ID in .env.
         serverClientId: webClientId,
       );
       final account = await gsi!.signInSilently();
@@ -158,8 +159,8 @@ class GoogleAuthService {
       final stored = await _storage.read(key: _kWindowsCredsKey);
       if (stored == null) return false;
 
-      final clientIdStr = dotenv.env['GOOGLE_CLIENT_ID'];
-      final clientSecretStr = dotenv.env['GOOGLE_CLIENT_SECRET'];
+      final clientIdStr = dotenv.env['GOOGLE_DESKTOP_CLIENT_ID'];
+      final clientSecretStr = dotenv.env['GOOGLE_DESKTOP_CLIENT_SECRET'];
       if (clientIdStr == null || clientIdStr.isEmpty ||
           clientSecretStr == null || clientSecretStr.isEmpty) {
         return false; // Sync not configured — not an error
@@ -183,8 +184,8 @@ class GoogleAuthService {
 
   Future<bool> _signInWindows() async {
     try {
-      final clientIdStr = dotenv.env['GOOGLE_CLIENT_ID'];
-      final clientSecretStr = dotenv.env['GOOGLE_CLIENT_SECRET'];
+      final clientIdStr = dotenv.env['GOOGLE_DESKTOP_CLIENT_ID'];
+      final clientSecretStr = dotenv.env['GOOGLE_DESKTOP_CLIENT_SECRET'];
       if (clientIdStr == null || clientIdStr.isEmpty ||
           clientSecretStr == null || clientSecretStr.isEmpty) {
         return false; // Sync not configured

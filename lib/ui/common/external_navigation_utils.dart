@@ -79,6 +79,15 @@ class ExternalNavigationUtils {
     await _launchUrl(context, url, 'TMDB');
   }
 
+  /// Launch TMDB URL for a keyword (franchise)
+  static Future<void> launchTmdbKeyword(
+    BuildContext context, {
+    required int keywordId,
+  }) async {
+    final url = 'https://www.themoviedb.org/keyword/$keywordId';
+    await _launchUrl(context, url, 'TMDB');
+  }
+
   /// Launch IMDB URL for a title (movie or TV show)
   static Future<void> launchImdbTitle(
     BuildContext context, {

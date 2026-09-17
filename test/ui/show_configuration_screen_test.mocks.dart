@@ -463,7 +463,7 @@ class MockWatchlistLogic extends _i1.Mock implements _i11.WatchlistLogic {
     DateTime? releaseDate,
     _i12.ReleaseType? releaseType,
     List<_i4.ContributorSnapshot>? followedContributors,
-    _i4.ReleaseNotificationPreferences? releaseNotificationPrefs,
+    _i13.ReleaseNotificationPreferences? releaseNotificationPrefs,
     _i13.TvNotificationPreferences? tvNotificationPrefs,
   }) =>
       (super.noSuchMethod(
@@ -687,7 +687,7 @@ class MockWatchlistLogic extends _i1.Mock implements _i11.WatchlistLogic {
   _i6.Future<void> updateReleaseNotificationPreferences(
     int? tmdbId,
     _i12.WorkType? type,
-    _i4.ReleaseNotificationPreferences? preferences,
+    _i13.ReleaseNotificationPreferences? preferences,
   ) =>
       (super.noSuchMethod(
         Invocation.method(

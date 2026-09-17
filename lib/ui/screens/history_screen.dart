@@ -169,7 +169,7 @@ class _HistoryScreenState extends ConsumerState<HistoryScreen> {
                 // Check if this is a watchlist entry
                 if (reason.department == 'Watchlist' && reason.job == 'Watchlist Entry') {
                   isWatchlistOnly = true;
-                  continue; // Skip adding to reasonsByContributor, we'll handle it separately
+                  continue;
                 }
                 
                 // Skip "Followed Show" entries (TV shows)
@@ -177,9 +177,15 @@ class _HistoryScreenState extends ConsumerState<HistoryScreen> {
                   continue;
                 }
                 
-                // Collect all jobs for this contributor
-                if (reason.job != null) {
-                  reasonsByContributor.putIfAbsent(reason.contributorName, () => []).add(reason.job!);
+                // Collect all jobs for this contributor.
+                // If job is null, add the contributor name with no specific role so the
+                // name at least appears (prevents silent blank reason line).
+                final job = reason.job;
+                if (job != null && job.isNotEmpty) {
+                  reasonsByContributor.putIfAbsent(reason.contributorName, () => []).add(job);
+                } else {
+                  // Ensure the contributor name appears even without a specific role.
+                  reasonsByContributor.putIfAbsent(reason.contributorName, () => []);
                 }
               }
               
@@ -188,6 +194,7 @@ class _HistoryScreenState extends ConsumerState<HistoryScreen> {
                 reasonsText = 'On Watchlist';
               } else if (reasonsByContributor.isNotEmpty) {
                 reasonsText = reasonsByContributor.entries.map((e) {
+                  if (e.value.isEmpty) return e.key; // contributor name only, no specific role
                   return '${e.key} - ${e.value.join(", ")}';
                 }).join("\n");
               }

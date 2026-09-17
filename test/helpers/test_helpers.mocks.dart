@@ -323,6 +323,66 @@ class MockTmdbService extends _i1.Mock implements _i7.TmdbService {
       ) as _i8.Future<Map<String, dynamic>>);
 
   @override
+  _i8.Future<Map<String, dynamic>> searchKeyword(
+    String? query, {
+    int? page = 1,
+  }) =>
+      (super.noSuchMethod(
+        Invocation.method(
+          #searchKeyword,
+          [query],
+          {#page: page},
+        ),
+        returnValue:
+            _i8.Future<Map<String, dynamic>>.value(<String, dynamic>{}),
+      ) as _i8.Future<Map<String, dynamic>>);
+
+  @override
+  _i8.Future<Map<String, dynamic>> getKeywordDetails(int? keywordId) =>
+      (super.noSuchMethod(
+        Invocation.method(
+          #getKeywordDetails,
+          [keywordId],
+        ),
+        returnValue:
+            _i8.Future<Map<String, dynamic>>.value(<String, dynamic>{}),
+      ) as _i8.Future<Map<String, dynamic>>);
+
+  @override
+  _i8.Future<Map<String, dynamic>> getKeywordWorks(
+    int? keywordId,
+    String? type, {
+    String? since,
+    int? page = 1,
+  }) =>
+      (super.noSuchMethod(
+        Invocation.method(
+          #getKeywordWorks,
+          [
+            keywordId,
+            type,
+          ],
+          {
+            #since: since,
+            #page: page,
+          },
+        ),
+        returnValue:
+            _i8.Future<Map<String, dynamic>>.value(<String, dynamic>{}),
+      ) as _i8.Future<Map<String, dynamic>>);
+
+  @override
+  _i8.Future<Map<String, dynamic>> getKeywordTopWorks(int? keywordId) =>
+      (super.noSuchMethod(
+        Invocation.method(
+          #getKeywordTopWorks,
+          [keywordId],
+        ),
+        returnValue:
+            _i8.Future<Map<String, dynamic>>.value(<String, dynamic>{}),
+      ) as _i8.Future<Map<String, dynamic>>);
+
+  @override
   _i8.Future<Map<String, dynamic>> getTrendingMovies() => (super.noSuchMethod(
         Invocation.method(
           #getTrendingMovies,
@@ -2180,7 +2240,7 @@ class MockWatchlistRepository extends _i1.Mock
     DateTime? releaseDate,
     _i19.ReleaseType? releaseType,
     List<_i4.ContributorSnapshot>? followedContributors,
-    _i4.ReleaseNotificationPreferences? releaseNotificationPrefs,
+    _i10.ReleaseNotificationPreferences? releaseNotificationPrefs,
     _i10.TvNotificationPreferences? tvNotificationPrefs,
   }) =>
       (super.noSuchMethod(
@@ -2374,7 +2434,7 @@ class MockWatchlistRepository extends _i1.Mock
   _i8.Future<void> updateReleaseNotificationPreferences(
     int? tmdbId,
     _i19.WorkType? type,
-    _i4.ReleaseNotificationPreferences? preferences,
+    _i10.ReleaseNotificationPreferences? preferences,
   ) =>
       (super.noSuchMethod(
         Invocation.method(

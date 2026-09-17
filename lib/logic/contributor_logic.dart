@@ -66,6 +66,8 @@ class ContributorLogic {
       return ['Collection'];
     } else if (contributor.type == ContributorType.tvShow) {
       return ['TV Show'];
+    } else if (contributor.type == ContributorType.franchise) {
+      return ['Franchise'];
     }
     return [];
   }
@@ -91,6 +93,51 @@ class ContributorLogic {
       credits = [...upcomingWorks, ...topWorks];
     } else if (contributor.type == ContributorType.movie) {
       credits = [await _tmdbService.getMovieDetails(contributor.tmdbId)];
+    } else if (contributor.type == ContributorType.franchise) {
+      // Fetch top works (for Biggest Hits / Latest Releases / poster refresh)
+      final topWorksData = await _tmdbService.getKeywordTopWorks(contributor.tmdbId);
+      var topWorks = List<Map<String, dynamic>>.from(
+          topWorksData['results'] as List? ?? []);
+
+      // Also fetch recent works (last ~6 months) for Upcoming / Latest sections
+      final today = DateTime.now();
+      final sixMonthsAgo = today.subtract(const Duration(days: 180));
+      final sinceStr =
+          '${sixMonthsAgo.year}-${sixMonthsAgo.month.toString().padLeft(2, '0')}-${sixMonthsAgo.day.toString().padLeft(2, '0')}';
+
+      final recentMovies = await _tmdbService.getKeywordWorks(
+          contributor.tmdbId, 'movie',
+          since: sinceStr);
+      final recentTv = await _tmdbService.getKeywordWorks(
+          contributor.tmdbId, 'tv',
+          since: sinceStr);
+
+      final recentMovieResults =
+          List<Map<String, dynamic>>.from(recentMovies['results'] as List? ?? []);
+      for (final r in recentMovieResults) {
+        r['media_type'] = 'movie';
+      }
+      final recentTvResults =
+          List<Map<String, dynamic>>.from(recentTv['results'] as List? ?? []);
+      for (final r in recentTvResults) {
+        r['title'] = r['name'];
+        r['media_type'] = 'tv';
+      }
+
+      // Deduplicate by id — top works may overlap with recent
+      final seen = <int>{};
+      final combined = <Map<String, dynamic>>[];
+      for (final w in [...recentMovieResults, ...recentTvResults, ...topWorks]) {
+        final id = w['id'] as int?;
+        if (id != null && seen.add(id)) combined.add(w);
+      }
+      credits = combined;
+
+      // Refresh poster: use most popular work's poster_path
+      if (topWorks.isNotEmpty && topWorks.first['poster_path'] != null) {
+        contributor.profilePath = topWorks.first['poster_path'] as String?;
+        await _contributorRepository.updateContributor(contributor);
+      }
     } else if (contributor.type == ContributorType.tvShow) {
       final data = await _tmdbService.getTvDetails(contributor.tmdbId);
       final List<Map<String, dynamic>> showCredits = [];
@@ -169,14 +216,27 @@ class ContributorLogic {
       pretendToday: prefs.pretendToday,
     );
 
-    // 4. Apply global TV preferences if needed
+    // 4. Determine TV notification preferences
     TvNotificationPreferences? finalTvPrefs = sparseContributor.tvNotificationPrefs;
     if (sparseContributor.type == ContributorType.tvShow && finalTvPrefs == null) {
-      // Apply global TV preferences as defaults
+      // Apply global TV preferences as defaults for TV shows
       finalTvPrefs = prefs.defaultTvNotificationPrefs ?? TvNotificationPreferences();
+    } else if (sparseContributor.type == ContributorType.franchise && finalTvPrefs == null) {
+      // Franchise TV default: series premiere only (not the global default which may have more on)
+      finalTvPrefs = TvNotificationPreferences(
+        seriesPremiere: true,
+        seasonPremieres: false,
+        seasonFinales: false,
+        newEpisodes: false,
+        specials: false,
+      );
     }
 
-    // 5. Create Final Enriched Contributor
+    // 5. Determine release notification preferences
+    // Franchise/company default: theatrical + streaming (same as watchlist default)
+    final finalReleasePrefs = sparseContributor.releaseNotificationPrefs;
+
+    // 6. Create Final Enriched Contributor
     final enrichedContributor = Contributor(
       tmdbId: sparseContributor.tmdbId,
       name: sparseContributor.name,
@@ -193,9 +253,10 @@ class ContributorLogic {
       showStatus: sparseContributor.showStatus,
       totalSeasons: sparseContributor.totalSeasons,
       nextEpisodeDate: sparseContributor.nextEpisodeDate,
+      releaseNotificationPrefs: finalReleasePrefs,
     );
 
-    // Update contributor detail if repository is available
+    // 7. Populate contributor detail
     if (sparseContributor.type == ContributorType.person) {
       try {
         final creditData = await _tmdbService.getPersonCombinedCredits(sparseContributor.tmdbId);
@@ -211,6 +272,13 @@ class ContributorLogic {
          await updateContributorDetail(enrichedContributor, topWorks);
        } catch (e) {
        }
+    } else if (sparseContributor.type == ContributorType.franchise) {
+      try {
+        final topWorksData = await _tmdbService.getKeywordTopWorks(sparseContributor.tmdbId);
+        final topWorks = topWorksData['results'] as List? ?? [];
+        await updateContributorDetail(enrichedContributor, topWorks);
+      } catch (e) {
+      }
     }
 
     return await _contributorRepository.addContributor(enrichedContributor);

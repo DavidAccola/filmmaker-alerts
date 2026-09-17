@@ -18,11 +18,17 @@ class TvPreferencesDialog extends StatefulWidget {
   final TvNotificationPreferences initialPreferences;
   final bool initialNotificationsPaused;
 
+  /// When true, saving with high-volume types (Season Premieres, Season Finales,
+  /// New Episodes, Specials) selected shows a confirmation dialog warning the
+  /// user that this franchise may produce many notifications.
+  final bool showHighVolumeWarning;
+
   const TvPreferencesDialog({
     super.key,
     required this.workTitle,
     required this.initialPreferences,
     this.initialNotificationsPaused = false,
+    this.showHighVolumeWarning = false,
   });
 
   @override
@@ -117,23 +123,70 @@ class _TvPreferencesDialogState extends State<TvPreferencesDialog> {
         ElevatedButton(
           onPressed: _selectedTypes.isEmpty
               ? null
-              : () {
-                  final preferences = TvNotificationPreferences(
-                    seriesPremiere: _selectedTypes.contains('Series Premiere'),
-                    seasonPremieres: _selectedTypes.contains('Season Premieres'),
-                    seasonFinales: _selectedTypes.contains('Season Finales'),
-                    newEpisodes: _selectedTypes.contains('New Episodes'),
-                    specials: _selectedTypes.contains('Specials'),
-                  );
-                  Navigator.pop(context, TvPreferencesResult(
-                    preferences: preferences,
-                    notificationsPaused: _notificationsPaused,
-                  ));
-                },
+              : () => _handleSave(context),
           child: const Text('Save'),
         ),
       ],
     );
+  }
+
+  TvPreferencesResult _buildResult() {
+    return TvPreferencesResult(
+      preferences: TvNotificationPreferences(
+        seriesPremiere: _selectedTypes.contains('Series Premiere'),
+        seasonPremieres: _selectedTypes.contains('Season Premieres'),
+        seasonFinales: _selectedTypes.contains('Season Finales'),
+        newEpisodes: _selectedTypes.contains('New Episodes'),
+        specials: _selectedTypes.contains('Specials'),
+      ),
+      notificationsPaused: _notificationsPaused,
+    );
+  }
+
+  /// High-volume types that warrant a warning for franchise follows.
+  static const _highVolumeTypes = [
+    'Season Premieres',
+    'Season Finales',
+    'New Episodes',
+    'Specials',
+  ];
+
+  Future<void> _handleSave(BuildContext context) async {
+    if (widget.showHighVolumeWarning) {
+      final initialTypes = widget.initialPreferences.selectedTypes;
+      final newlyEnabled = _selectedTypes
+          .where((t) => _highVolumeTypes.contains(t) && !initialTypes.contains(t))
+          .toList();
+
+      if (newlyEnabled.isNotEmpty) {
+        final typeList = newlyEnabled.join(', ');
+        final confirmed = await showDialog<bool>(
+          context: context,
+          builder: (ctx) => AlertDialog(
+            title: const Text('High notification volume'),
+            content: Text(
+              'This franchise may have many works. Enabling "$typeList" could '
+              'result in a large number of notifications. Are you sure?',
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(ctx, false),
+                child: const Text('Cancel'),
+              ),
+              ElevatedButton(
+                onPressed: () => Navigator.pop(ctx, true),
+                child: const Text('Enable anyway'),
+              ),
+            ],
+          ),
+        );
+        if (confirmed != true) return;
+      }
+    }
+
+    if (context.mounted) {
+      Navigator.pop(context, _buildResult());
+    }
   }
 }
 

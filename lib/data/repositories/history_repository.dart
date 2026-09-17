@@ -1,8 +1,11 @@
 import 'package:hive_flutter/hive_flutter.dart';
+import 'package:collection/collection.dart';
 import '../../core/constants.dart';
 import '../models/notification_history.dart';
 import '../models/movie_cache_entry.dart';
 import '../models/tv_cache.dart';
+import '../models/tv_detail.dart';
+import '../models/movie_detail.dart';
 
 /// A DTO that combines the history entry with cached movie details for the UI.
 class EnrichedHistoryEntry {
@@ -22,6 +25,14 @@ class HistoryRepository {
   Box<MovieCacheEntry> get _movieCacheBox => Hive.box<MovieCacheEntry>(AppConstants.movieCacheBox);
   Box<TvShowCacheEntry> get _tvCacheBox => Hive.box<TvShowCacheEntry>(AppConstants.tvCacheBox);
 
+  // Fallback detail boxes (may not be open in background isolate — caught safely below).
+  Box<TvShowDetail>? get _tvDetailsBox {
+    try { return Hive.box<TvShowDetail>(AppConstants.tvDetailsBox); } catch (_) { return null; }
+  }
+  Box<MovieDetail>? get _movieDetailsBox {
+    try { return Hive.box<MovieDetail>(AppConstants.movieDetailsBox); } catch (_) { return null; }
+  }
+
   /// Get full history, sorted by most recent notification, with titles populated.
   List<EnrichedHistoryEntry> getHistory() {
     final history = _historyBox.values.toList();
@@ -39,26 +50,55 @@ class HistoryRepository {
       String? posterPath;
       
       if (entry.mediaType == 'tv') {
-        // Look in TV cache
+        // 1. Try the lightweight TV show cache (populated by release checker).
+        // TvCacheRepository stores entries with put(show.tmdbId, show) so this
+        // is an O(1) key lookup — not a values scan.
         try {
-          final tvEntry = _tvCacheBox.values.firstWhere(
-            (tv) => tv.tmdbId == entry.tmdbId,
-            orElse: () => TvShowCacheEntry(tmdbId: entry.tmdbId, name: 'Unknown Title'),
-          );
-          title = tvEntry.name;
-          posterPath = tvEntry.posterPath;
-        } catch (e) {
-          // TV cache box might not be open, fallback to Unknown Title
-          title = 'Unknown Title';
+          final tvEntry = _tvCacheBox.get(entry.tmdbId);
+          if (tvEntry != null && tvEntry.name.isNotEmpty) {
+            title = tvEntry.name;
+            posterPath = tvEntry.posterPath;
+          }
+        } catch (_) {}
+
+        // 2. Fall back to the full TV detail cache (populated when user visits the show).
+        if (title == 'Unknown Title') {
+          try {
+            final detail = _tvDetailsBox?.values.firstWhereOrNull(
+              (d) => d.tmdbId == entry.tmdbId,
+            );
+            if (detail != null && detail.name.isNotEmpty) {
+              title = detail.name;
+              posterPath ??= detail.posterPath;
+            }
+          } catch (_) {}
         }
       } else {
-        // Look in movie cache (default for movies and other content)
-        final movieEntry = _movieCacheBox.values.firstWhere(
-          (m) => m.tmdbId == entry.tmdbId,
-          orElse: () => MovieCacheEntry(tmdbId: entry.tmdbId, title: 'Unknown Title'),
-        );
-        title = movieEntry.title;
-        posterPath = movieEntry.posterPath;
+        // 1. Try the movie cache (populated by release checker).
+        // MovieCacheRepository uses sequential int keys via _box.add(), so we
+        // cannot use .get(tmdbId) — a values scan is required here.
+        try {
+          final movieEntry = _movieCacheBox.values.firstWhereOrNull(
+            (m) => m.tmdbId == entry.tmdbId,
+          );
+          if (movieEntry != null && movieEntry.title.isNotEmpty) {
+            title = movieEntry.title;
+            posterPath = movieEntry.posterPath;
+          }
+        } catch (_) {}
+
+        // 2. Fall back to the full movie detail cache.
+        if (title == 'Unknown Title') {
+          try {
+            final detail = _movieDetailsBox?.values.firstWhereOrNull(
+              (d) => d.tmdbId == entry.tmdbId,
+            );
+            if (detail != null && detail.title.isNotEmpty) {
+              title = detail.title;
+              posterPath ??= detail.posterPath;
+            }
+          } catch (_) {}
+        }
       }
 
       return EnrichedHistoryEntry(

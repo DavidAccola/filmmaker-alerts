@@ -91,6 +91,88 @@ class TmdbService {
     return response.data;
   }
 
+  /// Fetch movies or TV shows associated with a keyword via Discover.
+  ///
+  /// [type] must be 'movie' or 'tv'.
+  /// [since] is an optional ISO date string (yyyy-MM-dd) for filtering by
+  /// primary release date (movie) or first air date (tv).
+  /// Results are sorted by primary_release_date / first_air_date descending
+  /// so the newest content comes first.
+  Future<Map<String, dynamic>> getKeywordWorks(
+    int keywordId,
+    String type, {
+    String? since,
+    int page = 1,
+  }) async {
+    assert(type == 'movie' || type == 'tv', 'type must be movie or tv');
+    final endpoint = '/discover/$type';
+    final params = <String, dynamic>{
+      'with_keywords': keywordId,
+      'sort_by': type == 'movie'
+          ? 'primary_release_date.desc'
+          : 'first_air_date.desc',
+      'page': page,
+    };
+    if (since != null) {
+      if (type == 'movie') {
+        params['primary_release_date.gte'] = since;
+      } else {
+        params['first_air_date.gte'] = since;
+      }
+    }
+    _logApiCall(endpoint, params);
+    final response = await _dio.get(endpoint, queryParameters: params);
+    return response.data;
+  }
+
+  /// Fetch the top works (movies + TV shows) for a keyword, sorted by
+  /// popularity descending. Used to populate the franchise detail screen
+  /// and to derive the franchise poster (most popular work's poster_path).
+  ///
+  /// Returns a combined {results: [...], total_results: N} map where each
+  /// result has a 'media_type' field of 'movie' or 'tv'.
+  Future<Map<String, dynamic>> getKeywordTopWorks(int keywordId) async {
+    try {
+      final movieResponse = await _dio.get('/discover/movie', queryParameters: {
+        'with_keywords': keywordId,
+        'sort_by': 'popularity.desc',
+        'page': 1,
+      });
+      final movieResults = List<Map<String, dynamic>>.from(
+          movieResponse.data['results'] as List? ?? []);
+      for (final r in movieResults) {
+        r['media_type'] = 'movie';
+      }
+
+      final tvResponse = await _dio.get('/discover/tv', queryParameters: {
+        'with_keywords': keywordId,
+        'sort_by': 'popularity.desc',
+        'page': 1,
+      });
+      final tvResults = List<Map<String, dynamic>>.from(
+          tvResponse.data['results'] as List? ?? []);
+      for (final r in tvResults) {
+        r['title'] = r['name']; // normalise to 'title' key
+        r['media_type'] = 'tv';
+      }
+
+      // Combine and sort by popularity descending
+      final allResults = [...movieResults, ...tvResults];
+      allResults.sort((a, b) {
+        final popA = (a['popularity'] as num?)?.toDouble() ?? 0.0;
+        final popB = (b['popularity'] as num?)?.toDouble() ?? 0.0;
+        return popB.compareTo(popA);
+      });
+
+      return {
+        'results': allResults,
+        'total_results': allResults.length,
+      };
+    } catch (_) {
+      return {'results': []};
+    }
+  }
+
   // --- Trending ---
   Future<Map<String, dynamic>> getTrendingMovies() async {
     final response = await _dio.get('/trending/movie/week');

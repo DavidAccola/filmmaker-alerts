@@ -7,6 +7,7 @@ import '../../providers/providers.dart';
 import '../common/contributor_card.dart';
 import '../common/department_selection_dialog.dart';
 import '../common/snackbar_utils.dart';
+import '../common/tv_preferences_dialog.dart';
 import '../common/tmdb_attribution.dart';
 import 'contributor_detail_screen.dart';
 import 'movie_detail_screen.dart';
@@ -31,10 +32,11 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with TickerProviderStat
   // People filter state
   bool _showFilmmakers = true;
   bool _showCompanies = true;
+  bool _showFranchises = true;
   bool _showHidden = false;
 
   /// Whether any filter is actively hiding items.
-  bool get _hasActiveFilters => !_showFilmmakers || !_showCompanies;
+  bool get _hasActiveFilters => !_showFilmmakers || !_showCompanies || !_showFranchises;
 
   /// Helper to update FAB raised state via provider
   void _setFabRaised(bool raised) {
@@ -70,6 +72,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with TickerProviderStat
   void _navigateToDetail(Contributor contributor) {
     if (contributor.type == ContributorType.person ||
         contributor.type == ContributorType.company ||
+        contributor.type == ContributorType.franchise ||
         contributor.type == ContributorType.collection) {
       Navigator.push(
         context,
@@ -217,6 +220,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with TickerProviderStat
     final filteredActive = activeContributors.where((c) {
       if (c.type == ContributorType.person && !_showFilmmakers) return false;
       if (c.type == ContributorType.company && !_showCompanies) return false;
+      if (c.type == ContributorType.franchise && !_showFranchises) return false;
       return true;
     }).toList();
 
@@ -227,6 +231,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with TickerProviderStat
     int filteredOutCount = 0;
     if (!_showFilmmakers) filteredOutCount += activeContributors.where((c) => c.type == ContributorType.person).length;
     if (!_showCompanies) filteredOutCount += activeContributors.where((c) => c.type == ContributorType.company).length;
+    if (!_showFranchises) filteredOutCount += activeContributors.where((c) => c.type == ContributorType.franchise).length;
     if (!_showHidden) filteredOutCount += hiddenContributors.length;
 
     return Column(
@@ -251,6 +256,8 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with TickerProviderStat
                       _showFilmmakers = !_showFilmmakers;
                     } else if (value == 'companies') {
                       _showCompanies = !_showCompanies;
+                    } else if (value == 'franchises') {
+                      _showFranchises = !_showFranchises;
                     } else if (value == 'showHidden') {
                       _showHidden = !_showHidden;
                     }
@@ -259,6 +266,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with TickerProviderStat
                 itemBuilder: (context) {
                   final filmmakersCount = _showFilmmakers ? 0 : activeContributors.where((c) => c.type == ContributorType.person).length;
                   final companiesCount = _showCompanies ? 0 : activeContributors.where((c) => c.type == ContributorType.company).length;
+                  final franchisesCount = _showFranchises ? 0 : activeContributors.where((c) => c.type == ContributorType.franchise).length;
                   final hiddenCount = _showHidden ? 0 : hiddenContributors.length;
 
                   return [
@@ -292,6 +300,26 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with TickerProviderStat
                             const Spacer(),
                             Text(
                               '+$companiesCount',
+                              style: TextStyle(
+                                color: Theme.of(context).colorScheme.primary,
+                                fontWeight: FontWeight.bold,
+                                fontSize: 12,
+                              ),
+                            ),
+                          ],
+                        ],
+                      ),
+                    ),
+                    CheckedPopupMenuItem(
+                      value: 'franchises',
+                      checked: _showFranchises,
+                      child: Row(
+                        children: [
+                          const Text('Franchises'),
+                          if (franchisesCount > 0) ...[
+                            const Spacer(),
+                            Text(
+                              '+$franchisesCount',
                               style: TextStyle(
                                 color: Theme.of(context).colorScheme.primary,
                                 fontWeight: FontWeight.bold,
@@ -478,6 +506,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with TickerProviderStat
             ContributorType.collection,
             ContributorType.tvShow,
             ContributorType.company,
+            ContributorType.franchise,
           ].where((t) => groups.containsKey(t)).toList();
 
           return CustomScrollView(
@@ -768,7 +797,8 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with TickerProviderStat
   List<Contributor> _filterPeopleContributors(List<Contributor> contributors) {
     return contributors.where((c) => 
       c.type == ContributorType.person || 
-      c.type == ContributorType.company
+      c.type == ContributorType.company ||
+      c.type == ContributorType.franchise
     ).toList();
   }
 
@@ -806,6 +836,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with TickerProviderStat
       case ContributorType.collection: return 'Collections';
       case ContributorType.tvShow: return 'TV Shows';
       case ContributorType.company: return 'Companies';
+      case ContributorType.franchise: return 'Franchises';
     }
   }
 
@@ -840,18 +871,18 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with TickerProviderStat
     
     if (contributor.type == ContributorType.tvShow) {
       // Handle TV show preferences editing
-      final result = await showDialog<Map<String, dynamic>>(
+      final result = await showDialog<TvPreferencesResult>(
         context: context,
-        builder: (context) => _TvNotificationPreferencesDialog(
-          showName: contributor.name,
-          currentPrefs: contributor.tvNotificationPrefs ?? TvNotificationPreferences(),
+        builder: (context) => TvPreferencesDialog(
+          workTitle: contributor.name,
+          initialPreferences: contributor.tvNotificationPrefs ?? TvNotificationPreferences(),
           initialNotificationsPaused: contributor.notificationsSnoozed,
         ),
       );
 
       if (result != null) {
-        final newPrefs = result['preferences'] as TvNotificationPreferences;
-        final newNotificationsPaused = result['notificationsPaused'] as bool;
+        final newPrefs = result.preferences;
+        final newNotificationsPaused = result.notificationsPaused;
         final oldPrefs = contributor.tvNotificationPrefs ?? TvNotificationPreferences();
         
         // Check if preferences actually changed
@@ -990,130 +1021,3 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with TickerProviderStat
   }
 }
 
-class _TvNotificationPreferencesDialog extends StatefulWidget {
-  final String showName;
-  final TvNotificationPreferences currentPrefs;
-  final bool initialNotificationsPaused;
-
-  const _TvNotificationPreferencesDialog({
-    required this.showName,
-    required this.currentPrefs,
-    this.initialNotificationsPaused = false,
-  });
-
-  @override
-  State<_TvNotificationPreferencesDialog> createState() => _TvNotificationPreferencesDialogState();
-}
-
-class _TvNotificationPreferencesDialogState extends State<_TvNotificationPreferencesDialog> {
-  late bool seriesPremiere;
-  late bool seasonPremieres;
-  late bool seasonFinales;
-  late bool newEpisodes;
-  late bool specials;
-  late bool notificationsPaused;
-
-  @override
-  void initState() {
-    super.initState();
-    seriesPremiere = widget.currentPrefs.seriesPremiere;
-    seasonPremieres = widget.currentPrefs.seasonPremieres;
-    seasonFinales = widget.currentPrefs.seasonFinales;
-    newEpisodes = widget.currentPrefs.newEpisodes;
-    specials = widget.currentPrefs.specials;
-    notificationsPaused = widget.initialNotificationsPaused;
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    
-    return AlertDialog(
-      title: Text('Notification preferences for ${widget.showName}'),
-      content: SingleChildScrollView(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            // Pause notifications toggle
-            SwitchListTile(
-              title: const Text('Pause notifications'),
-              subtitle: Text(
-                notificationsPaused 
-                    ? 'Notifications are paused' 
-                    : 'Notifications are active',
-                style: TextStyle(
-                  color: theme.colorScheme.onSurfaceVariant,
-                  fontSize: 12,
-                ),
-              ),
-              value: notificationsPaused,
-              onChanged: (value) {
-                setState(() {
-                  notificationsPaused = value;
-                });
-              },
-              contentPadding: EdgeInsets.zero,
-            ),
-            const Divider(),
-            const SizedBox(height: 8),
-            const Text('Choose which types of notifications you want for this show:'),
-            const SizedBox(height: 16),
-            CheckboxListTile(
-              title: const Text('Series Premiere'),
-              subtitle: const Text('First episode of brand new shows'),
-              value: seriesPremiere,
-              onChanged: (value) => setState(() => seriesPremiere = value ?? false),
-            ),
-            CheckboxListTile(
-              title: const Text('Season Premieres'),
-              subtitle: const Text('First episode of any season'),
-              value: seasonPremieres,
-              onChanged: (value) => setState(() => seasonPremieres = value ?? false),
-            ),
-            CheckboxListTile(
-              title: const Text('Season Finales'),
-              subtitle: const Text('Last episode of any season'),
-              value: seasonFinales,
-              onChanged: (value) => setState(() => seasonFinales = value ?? false),
-            ),
-            CheckboxListTile(
-              title: const Text('New Episodes'),
-              subtitle: const Text('All episodes as they air'),
-              value: newEpisodes,
-              onChanged: (value) => setState(() => newEpisodes = value ?? false),
-            ),
-            CheckboxListTile(
-              title: const Text('Specials'),
-              subtitle: const Text('Holiday specials and one-offs'),
-              value: specials,
-              onChanged: (value) => setState(() => specials = value ?? false),
-            ),
-          ],
-        ),
-      ),
-      actions: [
-        TextButton(
-          onPressed: () => Navigator.pop(context),
-          child: const Text('Cancel'),
-        ),
-        TextButton(
-          onPressed: () {
-            final preferences = TvNotificationPreferences(
-              seriesPremiere: seriesPremiere,
-              seasonPremieres: seasonPremieres,
-              seasonFinales: seasonFinales,
-              newEpisodes: newEpisodes,
-              specials: specials,
-            );
-            
-            Navigator.pop(context, {
-              'preferences': preferences,
-              'notificationsPaused': notificationsPaused,
-            });
-          },
-          child: const Text('Save'),
-        ),
-      ],
-    );
-  }
-}

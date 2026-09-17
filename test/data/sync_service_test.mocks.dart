@@ -135,17 +135,6 @@ class MockGoogleAuthService extends _i1.Mock implements _i4.GoogleAuthService {
       );
 
   @override
-  set debugAuthentication(
-          _i5.GoogleSignInAuthentication? _debugAuthentication) =>
-      super.noSuchMethod(
-        Invocation.setter(
-          #debugAuthentication,
-          _debugAuthentication,
-        ),
-        returnValueForMissingStub: null,
-      );
-
-  @override
   bool get isSignedIn => (super.noSuchMethod(
         Invocation.getter(#isSignedIn),
         returnValue: false,

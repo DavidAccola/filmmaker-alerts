@@ -2,6 +2,53 @@ import 'package:hive/hive.dart';
 
 part 'contributor.g.dart';
 
+@HiveType(typeId: 48)
+class ReleaseNotificationPreferences {
+  @HiveField(0)
+  final bool theatrical;
+
+  @HiveField(1)
+  final bool streaming;
+
+  @HiveField(2)
+  final bool physical;
+
+  @HiveField(3)
+  final bool tv;
+
+  ReleaseNotificationPreferences({
+    this.theatrical = true,
+    this.streaming = true,
+    this.physical = false,
+    this.tv = false,
+  });
+
+  ReleaseNotificationPreferences copyWith({
+    bool? theatrical,
+    bool? streaming,
+    bool? physical,
+    bool? tv,
+  }) {
+    return ReleaseNotificationPreferences(
+      theatrical: theatrical ?? this.theatrical,
+      streaming: streaming ?? this.streaming,
+      physical: physical ?? this.physical,
+      tv: tv ?? this.tv,
+    );
+  }
+
+  List<String> get selectedTypes {
+    final types = <String>[];
+    if (theatrical) types.add('Theatrical');
+    if (streaming) types.add('Streaming');
+    if (physical) types.add('Physical');
+    if (tv) types.add('TV');
+    return types;
+  }
+
+  bool get hasAnySelected => theatrical || streaming || physical || tv;
+}
+
 @HiveType(typeId: 8)
 class TvNotificationPreferences {
   @HiveField(0)
@@ -40,6 +87,8 @@ enum ContributorType {
   collection,
   @HiveField(4)
   tvShow,
+  @HiveField(5)
+  franchise,
 }
 
 @HiveType(typeId: 1)
@@ -144,6 +193,9 @@ class Contributor extends HiveObject {
   @HiveField(17)
   bool isHidden;
 
+  @HiveField(18)
+  ReleaseNotificationPreferences? releaseNotificationPrefs;
+
   /// Transient field (not persisted in Hive) — raw release date string from TMDB search.
   /// Used to pass release date through to watchlist entry creation.
   String? releaseDateRaw;
@@ -167,6 +219,7 @@ class Contributor extends HiveObject {
     this.imdbId,
     this.notificationsSnoozed = false,
     this.isHidden = false,
+    this.releaseNotificationPrefs,
     this.releaseDateRaw,
   });
 }

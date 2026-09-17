@@ -148,8 +148,8 @@ class ReleaseChecker {
     
     for (final contributor in nonTvContributors) {
       
-      // Only process people and companies
-      if (contributor.type != ContributorType.person && contributor.type != ContributorType.company && contributor.type != ContributorType.movie) {
+      // Only process people, companies, movies and franchises
+      if (contributor.type != ContributorType.person && contributor.type != ContributorType.company && contributor.type != ContributorType.movie && contributor.type != ContributorType.franchise) {
         continue;
       }
       
@@ -202,6 +202,42 @@ class ReleaseChecker {
              
              // Update detail for the movie itself
              await _updateContributorDetail(contributor, credits);
+        } else if (contributor.type == ContributorType.franchise) {
+          // Franchises: fetch movies and TV released in the check window
+          final movies = await _tmdbService.getKeywordWorks(
+              contributor.tmdbId, 'movie', since: startDateStr);
+          final tv = await _tmdbService.getKeywordWorks(
+              contributor.tmdbId, 'tv', since: startDateStr);
+          final movieResults = List<Map<String, dynamic>>.from(
+              movies['results'] as List? ?? []);
+          for (final r in movieResults) {
+            r['media_type'] = 'movie';
+          }
+          final tvResults = List<Map<String, dynamic>>.from(
+              tv['results'] as List? ?? []);
+          for (final r in tvResults) {
+            r['title'] = r['name'];
+            r['media_type'] = 'tv';
+          }
+          credits = [...movieResults, ...tvResults];
+
+          // Also update detail with top works so detail screen stays fresh
+          final topWorksData = await _tmdbService.getKeywordTopWorks(contributor.tmdbId);
+          final topWorks = topWorksData['results'] as List? ?? [];
+          // Deduplicate by id — credits and topWorks may overlap
+          final seenDetailIds = <int>{};
+          final detailCredits = <dynamic>[];
+          for (final w in [...credits, ...topWorks]) {
+            final wId = w['id'] as int?;
+            if (wId != null && seenDetailIds.add(wId)) detailCredits.add(w);
+          }
+          await _updateContributorDetail(contributor, detailCredits);
+
+          // Refresh poster from most popular work
+          if (topWorks.isNotEmpty && topWorks.first['poster_path'] != null) {
+            contributor.profilePath = topWorks.first['poster_path'] as String?;
+            await _contributorRepository.updateContributor(contributor);
+          }
         }
 
         // --- GROUPING & OPTIMIZATION ---
@@ -209,7 +245,8 @@ class ReleaseChecker {
         // (e.g. Director and Editor) on the same film.
         final Map<int, List<dynamic>> moviesMap = {};
         for (final credit in credits) {
-          final int id = credit['id'];
+          final int? id = credit['id'] as int?;
+          if (id == null) continue; // Discover results should always have id, but be safe
           if (!moviesMap.containsKey(id)) {
             moviesMap[id] = [];
           }
@@ -233,10 +270,11 @@ class ReleaseChecker {
              
              return isTrueAll || 
                     interestedDepartments.contains(role) || 
-                    // Company and Movie type contributors don't have department/job fields
+                    // Company, Movie and Franchise type contributors don't have department/job fields
                     // in discover results, so bypass the department filter for them.
                     contributor.type == ContributorType.movie ||
-                    contributor.type == ContributorType.company;
+                    contributor.type == ContributorType.company ||
+                    contributor.type == ContributorType.franchise;
           }).toList();
 
           final credit = groupCredits.first; // Representative credit for metadata
@@ -284,6 +322,25 @@ class ReleaseChecker {
           }
 
           if (mediaType == 'tv') {
+             // Franchise TV Logic: notify based on contributor.tvNotificationPrefs (series premiere only by default)
+             if (contributor.type == ContributorType.franchise) {
+               final tvPrefs = contributor.tvNotificationPrefs ?? TvNotificationPreferences(
+                 seriesPremiere: true,
+                 seasonPremieres: false,
+                 seasonFinales: false,
+                 newEpisodes: false,
+                 specials: false,
+               );
+               if (tvPrefs.seriesPremiere) {
+                 // Only notify if this show hasn't been notified before (series premiere = first time)
+                 if (!_hasBeenNotified(movieId, 'Series Premiere')) {
+                   _addNotification(newNotifications, contributor, groupCredits, 'Series Premiere', todayStr);
+                 }
+               }
+               processedMovieIds.add(movieId);
+               continue;
+             }
+
              // TV Logic - Enhanced for person contributors
              if (prefs.effectiveNotifyTV) {
                // For person contributors, we process TV shows even if already processed by _checkTvReleases
@@ -361,8 +418,12 @@ class ReleaseChecker {
             // Window Check for specific release
             if (rDate.compareTo(startDateStr) < 0 || rDate.compareTo(todayStr) > 0) continue;
 
-            // Preference Check
-            if (!_isNotificationEnabled(type, prefs)) continue;
+            // Preference Check — use per-contributor prefs for company/franchise, global for others
+            final notifEnabled = (contributor.type == ContributorType.company ||
+                    contributor.type == ContributorType.franchise)
+                ? _isNotificationEnabledForContributor(type, contributor, prefs)
+                : _isNotificationEnabled(type, prefs);
+            if (!notifEnabled) continue;
 
             // History Check
             final typeStr = _getReleaseTypeString(type);
@@ -407,6 +468,31 @@ class ReleaseChecker {
         return prefs.effectiveNotifyPhysical;
       case 6: // TV
         return prefs.effectiveNotifyTV;
+      default:
+        return false;
+    }
+  }
+
+  /// Checks release type notification preference for a contributor, using
+  /// per-contributor [ReleaseNotificationPreferences] if set, otherwise
+  /// falling back to global [Preferences]. Used for company and franchise types.
+  bool _isNotificationEnabledForContributor(
+      int type, Contributor contributor, Preferences prefs) {
+    final perContrib = contributor.releaseNotificationPrefs;
+    if (perContrib == null) {
+      return _isNotificationEnabled(type, prefs);
+    }
+    switch (type) {
+      case 1: // Premiere
+      case 2: // Theatrical Limited
+      case 3: // Theatrical
+        return perContrib.theatrical;
+      case 4: // Digital
+        return perContrib.streaming;
+      case 5: // Physical
+        return perContrib.physical;
+      case 6: // TV
+        return perContrib.tv;
       default:
         return false;
     }

@@ -172,6 +172,33 @@ class _AddContributorScreenState extends ConsumerState<AddContributorScreen> {
         );
         
         tvNotificationPrefs = defaultPrefs;
+      } else if (contributor.type == ContributorType.franchise) {
+        // Franchise: set default prefs — theatrical+streaming for movies,
+        // series premiere only for TV. No dialog shown.
+        contributor = Contributor(
+          tmdbId: contributor.tmdbId,
+          name: contributor.name,
+          type: contributor.type,
+          profilePath: contributor.profilePath,
+          notifyForDepartments: ['Franchise'],
+          availableDepartments: ['Franchise'],
+          knownFor: contributor.knownFor,
+          releaseNotificationPrefs: ReleaseNotificationPreferences(
+            theatrical: true,
+            streaming: true,
+            physical: false,
+            tv: false,
+          ),
+          tvNotificationPrefs: TvNotificationPreferences(
+            seriesPremiere: true,
+            seasonPremieres: false,
+            seasonFinales: false,
+            newEpisodes: false,
+            specials: false,
+          ),
+        );
+        selectedDepts = ['Franchise'];
+        availableDepts = ['Franchise'];
       }
 
       setState(() => _isLoading = true);
@@ -309,9 +336,13 @@ class _AddContributorScreenState extends ConsumerState<AddContributorScreen> {
                 const SizedBox(height: 16),
                 SegmentedButton<ContributorType>(
                   showSelectedIcon: false,
+                  style: const ButtonStyle(
+                    tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                    visualDensity: VisualDensity(horizontal: -2),
+                  ),
                   segments: const [
                     ButtonSegment(value: ContributorType.person, label: Text('Person')),
-                    ButtonSegment(value: ContributorType.company, label: Text('Company')),
+                    ButtonSegment(value: ContributorType.company, label: Text('Studio')),
                     ButtonSegment(value: ContributorType.movie, label: Text('Movie')),
                     ButtonSegment(value: ContributorType.tvShow, label: Text('TV Show')),
                   ],

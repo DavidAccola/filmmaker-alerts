@@ -1,56 +1,9 @@
 import 'package:hive/hive.dart';
 import 'contributor_detail.dart'; // For WorkType and ReleaseType
-import 'contributor.dart'; // For TvNotificationPreferences
+import 'contributor.dart'; // For TvNotificationPreferences, ReleaseNotificationPreferences
 import 'status_record.dart'; // For StatusRecord and WatchStatus
 
 part 'watchlist_entry.g.dart';
-
-@HiveType(typeId: 48)
-class ReleaseNotificationPreferences {
-  @HiveField(0)
-  final bool theatrical;
-
-  @HiveField(1)
-  final bool streaming;
-
-  @HiveField(2)
-  final bool physical;
-
-  @HiveField(3)
-  final bool tv;
-
-  ReleaseNotificationPreferences({
-    this.theatrical = true,
-    this.streaming = true,
-    this.physical = false,
-    this.tv = false,
-  });
-
-  ReleaseNotificationPreferences copyWith({
-    bool? theatrical,
-    bool? streaming,
-    bool? physical,
-    bool? tv,
-  }) {
-    return ReleaseNotificationPreferences(
-      theatrical: theatrical ?? this.theatrical,
-      streaming: streaming ?? this.streaming,
-      physical: physical ?? this.physical,
-      tv: tv ?? this.tv,
-    );
-  }
-
-  List<String> get selectedTypes {
-    final types = <String>[];
-    if (theatrical) types.add('Theatrical');
-    if (streaming) types.add('Streaming');
-    if (physical) types.add('Physical');
-    if (tv) types.add('TV');
-    return types;
-  }
-
-  bool get hasAnySelected => theatrical || streaming || physical || tv;
-}
 
 @HiveType(typeId: 42)
 class ContributorSnapshot {

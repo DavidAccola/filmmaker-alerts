@@ -6,6 +6,50 @@ part of 'contributor.dart';
 // TypeAdapterGenerator
 // **************************************************************************
 
+class ReleaseNotificationPreferencesAdapter
+    extends TypeAdapter<ReleaseNotificationPreferences> {
+  @override
+  final int typeId = 48;
+
+  @override
+  ReleaseNotificationPreferences read(BinaryReader reader) {
+    final numOfFields = reader.readByte();
+    final fields = <int, dynamic>{
+      for (int i = 0; i < numOfFields; i++) reader.readByte(): reader.read(),
+    };
+    return ReleaseNotificationPreferences(
+      theatrical: fields[0] as bool,
+      streaming: fields[1] as bool,
+      physical: fields[2] as bool,
+      tv: fields[3] as bool,
+    );
+  }
+
+  @override
+  void write(BinaryWriter writer, ReleaseNotificationPreferences obj) {
+    writer
+      ..writeByte(4)
+      ..writeByte(0)
+      ..write(obj.theatrical)
+      ..writeByte(1)
+      ..write(obj.streaming)
+      ..writeByte(2)
+      ..write(obj.physical)
+      ..writeByte(3)
+      ..write(obj.tv);
+  }
+
+  @override
+  int get hashCode => typeId.hashCode;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is ReleaseNotificationPreferencesAdapter &&
+          runtimeType == other.runtimeType &&
+          typeId == other.typeId;
+}
+
 class TvNotificationPreferencesAdapter
     extends TypeAdapter<TvNotificationPreferences> {
   @override
@@ -143,13 +187,14 @@ class ContributorAdapter extends TypeAdapter<Contributor> {
       imdbId: fields[15] as String?,
       notificationsSnoozed: fields[16] as bool,
       isHidden: fields[17] as bool,
+      releaseNotificationPrefs: fields[18] as ReleaseNotificationPreferences?,
     );
   }
 
   @override
   void write(BinaryWriter writer, Contributor obj) {
     writer
-      ..writeByte(18)
+      ..writeByte(19)
       ..writeByte(0)
       ..write(obj.tmdbId)
       ..writeByte(1)
@@ -185,7 +230,9 @@ class ContributorAdapter extends TypeAdapter<Contributor> {
       ..writeByte(16)
       ..write(obj.notificationsSnoozed)
       ..writeByte(17)
-      ..write(obj.isHidden);
+      ..write(obj.isHidden)
+      ..writeByte(18)
+      ..write(obj.releaseNotificationPrefs);
   }
 
   @override
@@ -216,6 +263,8 @@ class ContributorTypeAdapter extends TypeAdapter<ContributorType> {
         return ContributorType.collection;
       case 4:
         return ContributorType.tvShow;
+      case 5:
+        return ContributorType.franchise;
       default:
         return ContributorType.person;
     }
@@ -238,6 +287,9 @@ class ContributorTypeAdapter extends TypeAdapter<ContributorType> {
         break;
       case ContributorType.tvShow:
         writer.writeByte(4);
+        break;
+      case ContributorType.franchise:
+        writer.writeByte(5);
         break;
     }
   }

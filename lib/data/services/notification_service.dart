@@ -192,7 +192,7 @@ class NotificationService {
           
           String customTemplate = '''
 <?xml version="1.0" encoding="utf-8"?>
-<toast launch="app://history" activationType="protocol">
+<toast launch="app://history" activationType="protocol" duration="long">
   <visual>
     <binding template="ToastGeneric">
       <text>${_escapeXml(title)}</text>

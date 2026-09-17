@@ -21,6 +21,7 @@ import '../common/external_navigation_utils.dart';
 import '../common/shelf_with_arrows.dart';
 import '../common/filter_toggle_widget.dart';
 import '../common/snackbar_utils.dart';
+import '../common/contributor_notification_prefs_widget.dart';
 import '../../core/tmdb_mapping.dart';
 import '../../core/crew_constants.dart';
 
@@ -42,6 +43,9 @@ class _ContributorDetailScreenState extends ConsumerState<ContributorDetailScree
   late bool _filterBiggestHits;
   late String _lastFollowedRoles;
   bool _isPosterHovered = false;
+
+  // All Works filter for franchise: 'all', 'movie', 'tv'
+  String _allWorksFilter = 'all';
 
   // Refresh state
   bool _isRefreshing = false;
@@ -131,7 +135,7 @@ class _ContributorDetailScreenState extends ConsumerState<ContributorDetailScree
         child: Column(
           children: [
              // Header with contributor info (now scrolls)
-            _buildHeader(prefs),
+            _buildHeader(prefs, detail),
             
             Padding(
               padding: const EdgeInsets.all(16.0),
@@ -161,15 +165,19 @@ class _ContributorDetailScreenState extends ConsumerState<ContributorDetailScree
 
                   const SizedBox(height: 16),
 
-                  // Television Credits Section (integrates Shows Created)
-                  _buildTvCreditsSection(prefs, detail),
+                  // All Works (franchise) or TV + Movie Credits (person/company)
+                  if (widget.contributor.type == ContributorType.franchise)
+                    _buildAllWorksSection(prefs, detail)
+                  else ...[
+                    // Television Credits Section (integrates Shows Created)
+                    _buildTvCreditsSection(prefs, detail),
 
-                  const SizedBox(height: 16),
+                    const SizedBox(height: 16),
 
-                  // Movie Credits Section
-                  _buildMovieCreditsSection(prefs, detail),
-                  
-                  
+                    // Movie Credits Section
+                    _buildMovieCreditsSection(prefs, detail),
+                  ],
+
                   const SizedBox(height: 24),
                   
                   // External Links
@@ -183,7 +191,7 @@ class _ContributorDetailScreenState extends ConsumerState<ContributorDetailScree
     );
   }
 
-  Widget _buildHeader(Preferences prefs) {
+  Widget _buildHeader(Preferences prefs, ContributorDetail? detail) {
     return Container(
       padding: const EdgeInsets.all(16.0),
       decoration: BoxDecoration(
@@ -233,7 +241,9 @@ class _ContributorDetailScreenState extends ConsumerState<ContributorDetailScree
                                   ),
                                 ),
                               )
-                            : const Icon(Icons.person, size: 40),
+                            : widget.contributor.type == ContributorType.franchise
+                                ? const Icon(Icons.local_offer, size: 36)
+                                : const Icon(Icons.person, size: 40),
                       ),
                       // Follow button overlay
                       if (widget.contributor.type == ContributorType.person)
@@ -260,9 +270,19 @@ class _ContributorDetailScreenState extends ConsumerState<ContributorDetailScree
                         color: Theme.of(context).colorScheme.onSurfaceVariant,
                       ),
                     ),
+                    // Entry count badge for franchise
+                    if (widget.contributor.type == ContributorType.franchise &&
+                        detail?.allWorks != null) ...[
+                      const SizedBox(height: 4),
+                      _buildFranchiseCountBadge(detail!.allWorks!),
+                    ],
                     const SizedBox(height: 8),
-                    // Followed Roles Indicator
-                    _buildFollowedRolesChips(),
+                    // Notification prefs for company/franchise, role chips for person
+                    if (widget.contributor.type == ContributorType.company ||
+                        widget.contributor.type == ContributorType.franchise)
+                      ContributorNotificationPrefsWidget(contributor: widget.contributor)
+                    else
+                      _buildFollowedRolesChips(),
                   ],
                 ),
               ),
@@ -795,6 +815,164 @@ class _ContributorDetailScreenState extends ConsumerState<ContributorDetailScree
     );
   }
 
+  /// Shows "82 movies · 15 TV shows" count badge for franchise detail header.
+  Widget _buildFranchiseCountBadge(List<Work> allWorks) {
+    final movieCount = allWorks.where((w) => w.type == WorkType.movie).length;
+    // Franchise credits from Discover always map to tvShow — never tvEpisode
+    // (episodes require episode_number in the credit, which Discover never provides).
+    final tvCount = allWorks.where((w) => w.type == WorkType.tvShow).length;
+
+    final parts = <String>[];
+    if (movieCount > 0) parts.add('$movieCount ${movieCount == 1 ? 'movie' : 'movies'}');
+    if (tvCount > 0) parts.add('$tvCount ${tvCount == 1 ? 'TV show' : 'TV shows'}');
+    if (parts.isEmpty) return const SizedBox.shrink();
+
+    return Text(
+      parts.join(' · '),
+      style: Theme.of(context).textTheme.labelSmall?.copyWith(
+        color: Theme.of(context).colorScheme.onSurfaceVariant,
+      ),
+    );
+  }
+
+  /// All Works section for franchise — chronological timeline of movies + TV shows
+  /// with filter toggles: All / Movies only / TV only.
+  Widget _buildAllWorksSection(Preferences prefs, ContributorDetail? detail) {
+    if (detail == null || detail.allWorks == null) {
+      return _buildSection(
+        title: 'All Works',
+        icon: Icons.library_books_outlined,
+        child: _buildLoadingContent(),
+      );
+    }
+
+    final allWorks = detail.allWorks!;
+    if (allWorks.isEmpty) return const SizedBox.shrink();
+
+    // Split by type
+    final movieWorks = allWorks.where((w) => w.type == WorkType.movie).toList();
+    final tvWorks = allWorks
+        .where((w) => w.type == WorkType.tvShow || w.type == WorkType.tvEpisode)
+        .toList();
+
+    // Apply filter
+    List<Work> filtered;
+    switch (_allWorksFilter) {
+      case 'movie':
+        filtered = movieWorks;
+        break;
+      case 'tv':
+        filtered = tvWorks;
+        break;
+      default:
+        filtered = allWorks;
+    }
+
+    // Sort chronologically descending (most recent first)
+    filtered = List.from(filtered)..sort((a, b) {
+      final dateA = a.releaseDate;
+      final dateB = b.releaseDate;
+      if (dateA == null && dateB == null) return 0;
+      if (dateA == null) return 1;
+      if (dateB == null) return -1;
+      return dateB.compareTo(dateA);
+    });
+
+    // Filter toggle widget (only show if both movie and TV content exist)
+    Widget? filterToggle;
+    if (movieWorks.isNotEmpty && tvWorks.isNotEmpty) {
+      filterToggle = _buildAllWorksFilterToggle(movieWorks.length, tvWorks.length);
+    }
+
+    final sectionHeight = 310.0;
+
+    return _buildSection(
+      title: 'All Works',
+      icon: Icons.library_books_outlined,
+      filterToggle: filterToggle,
+      child: filtered.isEmpty
+          ? _buildPlaceholderContent('No works match the current filter')
+          : ShelfWithArrows(
+              height: sectionHeight,
+              builder: (context, controller) => ListView.builder(
+                controller: controller,
+                scrollDirection: Axis.horizontal,
+                physics: const AlwaysScrollableScrollPhysics(),
+                itemCount: filtered.length,
+                itemBuilder: (context, index) {
+                  final work = filtered[index];
+                  return Padding(
+                    padding: EdgeInsets.only(
+                        right: index < filtered.length - 1 ? 12 : 0),
+                    child: SizedBox(
+                      width: 150,
+                      child: WorkWidget(
+                        work: work,
+                        hideRatings: prefs.hideRatingsInDetails ?? false,
+                        onTap: () => _onWorkTapped(work),
+                        onAddToWatchlist: () => _onAddToWatchlist(work),
+                        watchlistButtonPosition: WatchlistButtonPosition.topRight,
+                        showWatchlistOnHover: true,
+                        showDateInPoster: true,
+                        showRating: false,
+                        showDate: false,
+                      ),
+                    ),
+                  );
+                },
+              ),
+            ),
+    );
+  }
+
+  Widget _buildAllWorksFilterToggle(int movieCount, int tvCount) {
+    final theme = Theme.of(context);
+    final options = <Map<String, dynamic>>[
+      {'value': 'all', 'label': 'All'},
+      {'value': 'movie', 'label': 'Movies ($movieCount)'},
+      {'value': 'tv', 'label': 'TV ($tvCount)'},
+    ];
+
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: options.map((opt) {
+        final value = opt['value'] as String;
+        final label = opt['label'] as String;
+        final isSelected = _allWorksFilter == value;
+        return Padding(
+          padding: const EdgeInsets.only(left: 6),
+          child: GestureDetector(
+            onTap: () => setState(() => _allWorksFilter = value),
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+              decoration: BoxDecoration(
+                color: isSelected
+                    ? theme.colorScheme.primary.withValues(alpha: 0.15)
+                    : Colors.transparent,
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(
+                  color: isSelected
+                      ? theme.colorScheme.primary.withValues(alpha: 0.5)
+                      : theme.colorScheme.outline.withValues(alpha: 0.3),
+                ),
+              ),
+              child: Text(
+                label,
+                style: theme.textTheme.labelSmall?.copyWith(
+                  color: isSelected
+                      ? theme.colorScheme.primary
+                      : theme.colorScheme.onSurfaceVariant,
+                  fontWeight:
+                      isSelected ? FontWeight.bold : FontWeight.normal,
+                ),
+              ),
+            ),
+          ),
+        );
+      }).toList(),
+    );
+  }
+
   Widget _buildExternalLinks() {
     return Consumer(
       builder: (context, ref, child) {
@@ -833,10 +1011,19 @@ class _ContributorDetailScreenState extends ConsumerState<ContributorDetailScree
                           child: Material(
                             color: Colors.transparent,
                             child: InkWell(
-                              onTap: () => ExternalNavigationUtils.launchTmdbPerson(
-                                context,
-                                tmdbId: widget.contributor.tmdbId,
-                              ),
+                              onTap: () {
+                                if (widget.contributor.type == ContributorType.franchise) {
+                                  ExternalNavigationUtils.launchTmdbKeyword(
+                                    context,
+                                    keywordId: widget.contributor.tmdbId,
+                                  );
+                                } else {
+                                  ExternalNavigationUtils.launchTmdbPerson(
+                                    context,
+                                    tmdbId: widget.contributor.tmdbId,
+                                  );
+                                }
+                              },
                               borderRadius: BorderRadius.circular(8),
                               child: Container(
                                 width: 48,

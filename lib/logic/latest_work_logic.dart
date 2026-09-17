@@ -17,6 +17,7 @@ class LatestWorkLogic {
           return _getLatestForMovie(contributor);
         case ContributorType.person:
         case ContributorType.company:
+        case ContributorType.franchise:
           return _getLatestForPersonOrCompany(contributor, pretendToday);
         case ContributorType.tvShow:
           return _getLatestForTvShow(contributor);

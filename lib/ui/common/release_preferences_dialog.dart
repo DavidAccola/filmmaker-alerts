@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import '../../data/models/watchlist_entry.dart';
+import '../../data/models/contributor.dart'; // For ReleaseNotificationPreferences
 import 'multi_select_chip_group.dart';
 
 /// Result from the ReleasePreferencesDialog containing both preferences and pause state

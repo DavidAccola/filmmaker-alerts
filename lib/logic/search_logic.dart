@@ -1,6 +1,7 @@
 import '../data/models/contributor.dart';
 import '../data/services/tmdb_service.dart';
 import '../core/tmdb_mapping.dart';
+import '../core/franchise_constants.dart';
 
 class SearchPageResult {
   final List<Contributor> results;
@@ -25,6 +26,13 @@ class SearchLogic {
   Map<String, dynamic>? _cachedUpcomingMovies;
   List<Map<String, dynamic>>? _cachedFeaturedPeople;
   DateTime? _cacheTime;
+
+  // Per-keyword enrichment cache — avoids re-fetching top works on every keystroke.
+  // Keyed by keywordId. Each entry stores its own timestamp so expiry is per-entry,
+  // not per-batch (a shared batch timestamp would expire early entries too soon).
+  final Map<int, ({Map<String, dynamic> data, DateTime cachedAt})> _franchiseEnrichmentCache = {};
+
+  static const _franchiseCacheTtl = Duration(minutes: 60);
 
   SearchLogic(this._tmdbService);
 
@@ -83,6 +91,10 @@ class SearchLogic {
             }
             rawResults.addAll(collections);
           }
+
+          // Inject matching franchises (movie tab)
+          final movieFranchises = await _enrichFranchisesForTab(query, forMovie: true);
+          rawResults.addAll(movieFranchises);
           break;
 
         case ContributorType.collection:
@@ -100,6 +112,15 @@ class SearchLogic {
           rawResults = data['results'] ?? [];
           totalPages = data['total_pages'] ?? 1;
           totalResults = data['total_results'] ?? 0;
+
+          // Inject matching franchises (tv tab)
+          final tvFranchises = await _enrichFranchisesForTab(query, forMovie: false);
+          rawResults = List.from(rawResults)..addAll(tvFranchises);
+          break;
+
+        case ContributorType.franchise:
+          // Franchise results are injected into movie/tv tabs — not searched directly.
+          // This case is handled by _injectFranchiseResults called from movie/tv branches.
           break;
       }
     } catch (e) {
@@ -160,8 +181,13 @@ class SearchLogic {
 
       switch (type) {
         case ContributorType.movie:
+          // 20% chance to show a franchise example
+          if (random % 5 == 0) {
+            final franchiseExamples = ['Marvel Cinematic Universe', 'DC Universe', 'Claymation'];
+            return "e.g., ${franchiseExamples[random % franchiseExamples.length]}";
+          }
           // 20% chance to show a collection example if enabled
-          if (collectionsEnabled && (random % 5 == 0)) {
+          if (collectionsEnabled && (random % 5 == 1)) {
             final examples = ["The Avengers Collection", "Spider-Man (MCU) Collection"];
             return "e.g., ${examples[random % examples.length]}";
           }
@@ -237,8 +263,13 @@ class SearchLogic {
           return "e.g., ${examples[random % examples.length]}";
 
         case ContributorType.tvShow:
-          final examples = ["Breaking Bad", "The Office", "Stranger Things"];
-          return "e.g., ${examples[random % examples.length]}";
+          // 20% chance to show a franchise example
+          if (random % 5 == 0) {
+            final franchiseExamples = ['Marvel Cinematic Universe', 'DC Animated Universe', 'Claymation'];
+            return "e.g., ${franchiseExamples[random % franchiseExamples.length]}";
+          }
+          final tvExamples = ["Breaking Bad", "The Office", "Stranger Things"];
+          return "e.g., ${tvExamples[random % tvExamples.length]}";
           
         default:
           return "e.g., Greta Gerwig";
@@ -301,6 +332,10 @@ class SearchLogic {
         case ContributorType.tvShow:
           data = await _tmdbService.searchTv(query, page: page);
           break;
+        case ContributorType.franchise:
+          // Franchise is not directly searchable — returns empty.
+          data = {'results': [], 'total_pages': 0, 'page': 1, 'total_results': 0};
+          break;
       }
 
       final results = (data['results'] as List? ?? [])
@@ -320,7 +355,8 @@ class SearchLogic {
 
   Contributor _mapToContributor(dynamic json, ContributorType type) {
     final isCollection = json['media_type'] == 'collection' || type == ContributorType.collection;
-    
+    final isFranchise = json['media_type'] == 'franchise' || type == ContributorType.franchise;
+
     // Determine Known For text
     String knownFor = '';
     if (type == ContributorType.person) {
@@ -344,6 +380,9 @@ class SearchLogic {
       if (json['top_work_titles'] != null) {
         knownFor = json['top_work_titles'];
       }
+    } else if (isFranchise) {
+      // top_work_titles is populated by _enrichFranchisesForTab
+      knownFor = json['top_work_titles'] as String? ?? 'Franchise';
     } else if (isCollection) {
       knownFor = 'Collection';
     } else if (type == ContributorType.tvShow) {
@@ -355,10 +394,14 @@ class SearchLogic {
     return Contributor(
       tmdbId: json['id'],
       name: json['name'] ?? json['title'] ?? 'Unknown',
-      type: isCollection ? ContributorType.collection : type,
+      type: isFranchise
+          ? ContributorType.franchise
+          : isCollection
+              ? ContributorType.collection
+              : type,
       profilePath: json['profile_path'] ?? json['logo_path'] ?? json['poster_path'],
-      notifyForDepartments: [], // Set later
-      availableDepartments: [], // Set later
+      notifyForDepartments: [],
+      availableDepartments: [],
       knownFor: knownFor,
       releaseDateRaw: json['release_date'] as String? ?? json['first_air_date'] as String?,
     );
@@ -380,8 +423,15 @@ class SearchLogic {
     final effectivePopB = (b['max_popularity'] as num?) ?? popB;
 
     final isMajorType = type == ContributorType.company || type == ContributorType.collection || type == ContributorType.movie;
-    final validExactA = exactA && (effectivePopA > 0 || isMajorType);
-    final validExactB = exactB && (effectivePopB > 0 || isMajorType);
+    // Franchise results are injected with media_type:'franchise' but sorted under
+    // type = movie or tvShow (the surrounding tab's type). Treat them as major so
+    // exact-name matches (e.g. "MCU") get the priority boost.
+    final aIsFranchise = (a['media_type'] as String?) == 'franchise';
+    final bIsFranchise = (b['media_type'] as String?) == 'franchise';
+    final effectiveIsMajorA = isMajorType || aIsFranchise;
+    final effectiveIsMajorB = isMajorType || bIsFranchise;
+    final validExactA = exactA && (effectivePopA > 0 || effectiveIsMajorA);
+    final validExactB = exactB && (effectivePopB > 0 || effectiveIsMajorB);
 
     if (validExactA && !validExactB) return -1;
     if (!validExactA && validExactB) return 1;
@@ -397,6 +447,80 @@ class SearchLogic {
 
     // Popularity Descending
     return effectivePopB.compareTo(effectivePopA);
+  }
+
+  /// Returns enriched franchise pseudo-results for injection into movie or TV
+  /// search results. Filters to hardcoded franchises whose name contains any
+  /// word from [query] (case-insensitive), respecting [forMovie]/showInTv flags.
+  ///
+  /// Each result is a Map with:
+  ///   id, name, media_type:'franchise', poster_path, max_popularity, top_work_titles
+  Future<List<Map<String, dynamic>>> _enrichFranchisesForTab(
+    String query, {
+    required bool forMovie,
+  }) async {
+    final q = query.toLowerCase();
+    final candidates = forMovie ? franchisesForMovieTab : franchisesForTvTab;
+
+    // Filter to franchises whose display name contains any query word (min 3 chars)
+    final queryWords = q.split(RegExp(r'\s+')).where((w) => w.length >= 3).toList();
+    if (queryWords.isEmpty) return [];
+
+    final matched = candidates.where((f) {
+      final name = f.displayName.toLowerCase();
+      return queryWords.any((w) => name.contains(w));
+    }).toList();
+
+    if (matched.isEmpty) return [];
+
+    final List<Map<String, dynamic>> enriched = [];
+    for (final franchise in matched) {
+      try {
+        // Return from cache if this entry's individual timestamp is still fresh
+        final cached = _franchiseEnrichmentCache[franchise.keywordId];
+        if (cached != null &&
+            DateTime.now().difference(cached.cachedAt) < _franchiseCacheTtl) {
+          enriched.add(cached.data);
+          continue;
+        }
+
+        final topWorksData = await _tmdbService.getKeywordTopWorks(franchise.keywordId);
+        final results = topWorksData['results'] as List? ?? [];
+
+        double maxPop = 0;
+        String? posterPath;
+        for (final r in results) {
+          final p = (r['popularity'] as num?)?.toDouble() ?? 0.0;
+          if (p > maxPop) {
+            maxPop = p;
+            posterPath = r['poster_path'] as String?;
+          }
+        }
+
+        final topTitles = results
+            .take(2)
+            .map((r) => (r['title'] ?? r['name'] ?? '') as String)
+            .where((t) => t.isNotEmpty)
+            .join(', ');
+
+        final entry = {
+          'id': franchise.keywordId,
+          'name': franchise.displayName,
+          'media_type': 'franchise',
+          'poster_path': posterPath,
+          'max_popularity': maxPop,
+          'top_work_titles': topTitles.isNotEmpty ? topTitles : 'Franchise',
+        };
+
+        // Store with its own timestamp so each entry expires independently
+        _franchiseEnrichmentCache[franchise.keywordId] = (data: entry, cachedAt: DateTime.now());
+
+        enriched.add(entry);
+      } catch (_) {
+        // Skip franchises that fail to enrich
+      }
+    }
+    return enriched;
   }
 
   Future<List<dynamic>> _enrichCollectionsWithMaxPopularity(List<dynamic> collections) async {

@@ -1,3 +1,6 @@
+import 'dart:async';
+import 'dart:io';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:reorderable_grid_view/reorderable_grid_view.dart';
@@ -51,6 +54,9 @@ class _WatchlistScreenState extends ConsumerState<WatchlistScreen>
     with TickerProviderStateMixin {
   late TabController _tabController;
   late ScrollController _scrollController;
+  // Dedicated scroll controller for the User Rank list + auto-scroll during drag.
+  late ScrollController _rankScrollController;
+  Timer? _rankScrollTimer;
   bool _hasHiddenItems = false;
   int? _lastScrolledTmdbId; // Track which item we've already scrolled to
   
@@ -172,12 +178,15 @@ class _WatchlistScreenState extends ConsumerState<WatchlistScreen>
     super.initState();
     _tabController = TabController(length: 1, vsync: this);
     _scrollController = ScrollController();
+    _rankScrollController = ScrollController();
   }
 
   @override
   void dispose() {
     _tabController.dispose();
     _scrollController.dispose();
+    _rankScrollController.dispose();
+    _rankScrollTimer?.cancel();
     super.dispose();
   }
 
@@ -760,6 +769,13 @@ class _WatchlistScreenState extends ConsumerState<WatchlistScreen>
                                     _localRankEntries ??= List<WatchlistEntry>.from(sortedEntries);
                                     return _buildUserRankList(_localRankEntries!);
                                   })
+                                : (_sortOption == WatchlistSortOption.userRank && !_useListView)
+                                ? Builder(builder: (context) {
+                                    // Initialize local rank entries for grid view too —
+                                    // same reason: provider invalidation after reorder causes flicker.
+                                    _localRankEntries ??= List<WatchlistEntry>.from(sortedEntries);
+                                    return _buildUserRankGrid(_localRankEntries!, sortedHiddenEntries);
+                                  })
                                 : Builder(builder: (context) {
                                     // Clear local rank entries when switching to grid view
                                     if (_localRankEntries != null) {
@@ -1061,8 +1077,14 @@ class _WatchlistScreenState extends ConsumerState<WatchlistScreen>
         // internally, which causes _RenderLayoutBuilder mutation crashes when items
         // change positions. ReorderableGridView uses a different drag implementation
         // that doesn't have this issue.
+        //
+        // Auto-scroll during drag: Listener monitors pointer position and drives
+        // _rankScrollController when the finger is within 120px of the top/bottom
+        // edge. NeverScrollableScrollPhysics keeps the inner grid static; the outer
+        // SingleChildScrollView does all the actual scrolling.
         Expanded(
           child: SingleChildScrollView(
+            controller: _rankScrollController,
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
             child: ReorderableGridView.count(
               crossAxisCount: 1,
@@ -1071,13 +1093,68 @@ class _WatchlistScreenState extends ConsumerState<WatchlistScreen>
               childAspectRatio: MediaQuery.sizeOf(context).width / 52,
               shrinkWrap: true,
               physics: const NeverScrollableScrollPhysics(),
-              dragStartDelay: Duration.zero,
+              dragWidgetBuilderV2: DragWidgetBuilderV2(
+                builder: (index, child, screenshot) => Transform.scale(
+                  scale: 1.04,
+                  child: Material(
+                    elevation: 12,
+                    borderRadius: BorderRadius.circular(12),
+                    shadowColor: Colors.black54,
+                    child: child,
+                  ),
+                ),
+              ),
+              dragStartDelay: (!kIsWeb && (Platform.isAndroid || Platform.isIOS))
+                  ? const Duration(milliseconds: 500)
+                  : Duration.zero,
+              // onDragUpdate provides the global pointer position during a drag.
+              // The Listener widget doesn't work here because ReorderableGridView
+              // consumes all pointer events once a drag starts.
+              onDragUpdate: (!kIsWeb && (Platform.isAndroid || Platform.isIOS))
+                  ? (_, position, __) {
+                      final screenHeight = MediaQuery.of(context).size.height;
+                      final topInset = MediaQuery.of(context).padding.top + kToolbarHeight;
+                      const threshold = 120.0;
+                      const step = 12.0;
+                      const interval = Duration(milliseconds: 16);
+
+                      if (position.dy > screenHeight - threshold) {
+                        if (_rankScrollTimer == null) {
+                          _rankScrollTimer = Timer.periodic(interval, (_) {
+                            if (!_rankScrollController.hasClients) return;
+                            final pos = _rankScrollController.position;
+                            if (pos.pixels < pos.maxScrollExtent) {
+                              _rankScrollController.jumpTo(
+                                (pos.pixels + step).clamp(0.0, pos.maxScrollExtent),
+                              );
+                            }
+                          });
+                        }
+                      } else if (position.dy < topInset + threshold * 1.5) {
+                        if (_rankScrollTimer == null) {
+                          _rankScrollTimer = Timer.periodic(interval, (_) {
+                            if (!_rankScrollController.hasClients) return;
+                            final pos = _rankScrollController.position;
+                            if (pos.pixels > pos.minScrollExtent) {
+                              _rankScrollController.jumpTo(
+                                (pos.pixels - step).clamp(pos.minScrollExtent, pos.maxScrollExtent),
+                              );
+                            }
+                          });
+                        }
+                      } else {
+                        _rankScrollTimer?.cancel();
+                        _rankScrollTimer = null;
+                      }
+                    }
+                  : null,
               onReorder: (oldIndex, newIndex) {
+                _rankScrollTimer?.cancel();
+                _rankScrollTimer = null;
                 if (oldIndex == newIndex) return;
                 _saveRankToUndoStack(List<WatchlistEntry>.from(entries));
                 final entry = entries.removeAt(oldIndex);
                 entries.insert(newIndex, entry);
-                // Persist in background
                 final logic = ref.read(watchlistLogicProvider);
                 () async {
                   for (int i = 0; i < entries.length; i++) {
@@ -1137,20 +1214,79 @@ class _WatchlistScreenState extends ConsumerState<WatchlistScreen>
                 mainAxisSpacing: 6,
                 childAspectRatio: aspectRatio,
                 shrinkWrap: true,
+                dragWidgetBuilderV2: DragWidgetBuilderV2(
+                  builder: (index, child, screenshot) => Transform.scale(
+                    scale: 1.04,
+                    child: Material(
+                      elevation: 12,
+                      borderRadius: BorderRadius.circular(12),
+                      shadowColor: Colors.black54,
+                      child: child,
+                    ),
+                  ),
+                ),
                 physics: const NeverScrollableScrollPhysics(),
-                dragStartDelay: Duration.zero,
-                onReorder: (oldIndex, newIndex) => _handleGridReorder(oldIndex, newIndex, sortedEntries),
+                dragStartDelay: (!kIsWeb && (Platform.isAndroid || Platform.isIOS)) ? const Duration(milliseconds: 500) : Duration.zero,
+                onDragUpdate: (!kIsWeb && (Platform.isAndroid || Platform.isIOS))
+                    ? (_, position, __) {
+                        final screenHeight = MediaQuery.of(context).size.height;
+                        final topInset = MediaQuery.of(context).padding.top + kToolbarHeight;
+                        const threshold = 120.0;
+                        const step = 12.0;
+                        const interval = Duration(milliseconds: 16);
+                        if (position.dy > screenHeight - threshold) {
+                          if (_rankScrollTimer == null) {
+                            _rankScrollTimer = Timer.periodic(interval, (t) {
+                              if (!_scrollController.hasClients) return;
+                              final pos = _scrollController.position;
+                              if (pos.pixels < pos.maxScrollExtent) {
+                                _scrollController.jumpTo(
+                                  (pos.pixels + step).clamp(0.0, pos.maxScrollExtent),
+                                );
+                              }
+                            });
+                          }
+                        } else if (position.dy < topInset + threshold * 1.5) {
+                          if (_rankScrollTimer == null) {
+                            _rankScrollTimer = Timer.periodic(interval, (t) {
+                              if (!_scrollController.hasClients) return;
+                              final pos = _scrollController.position;
+                              if (pos.pixels > pos.minScrollExtent) {
+                                _scrollController.jumpTo(
+                                  (pos.pixels - step).clamp(pos.minScrollExtent, pos.maxScrollExtent),
+                                );
+                              }
+                            });
+                          }
+                        } else {
+                          _rankScrollTimer?.cancel();
+                          _rankScrollTimer = null;
+                        }
+                      }
+                    : null,
+                onReorder: (oldIndex, newIndex) {
+                  _rankScrollTimer?.cancel();
+                  _rankScrollTimer = null;
+                  // Mutate local list and setState immediately for instant visual update,
+                  // then persist async via _handleGridReorder.
+                  if (oldIndex == newIndex) return;
+                  setState(() {
+                    final entry = _localRankEntries!.removeAt(oldIndex);
+                    _localRankEntries!.insert(newIndex, entry);
+                  });
+                  _handleGridReorder(oldIndex, newIndex, _localRankEntries!);
+                },
                 children: [
-                  for (int i = 0; i < sortedEntries.length; i++)
+                  for (int i = 0; i < _localRankEntries!.length; i++)
                     WatchlistCard(
-                      key: ValueKey(sortedEntries[i].uniqueKey),
-                      entry: sortedEntries[i],
+                      key: ValueKey(_localRankEntries![i].uniqueKey),
+                      entry: _localRankEntries![i],
                       showDateAlways: false,
                       displayRank: i + 1,
-                      onTap: () => _navigateToDetailFromRank(sortedEntries[i]),
-                      onDelete: () => _handleDelete(sortedEntries[i]),
-                      onSnooze: () => _handleHide(sortedEntries[i]),
-                      onStatusChanged: (status) => _handleStatusChanged(sortedEntries[i], status),
+                      onTap: () => _navigateToDetailFromRank(_localRankEntries![i]),
+                      onDelete: () => _handleDelete(_localRankEntries![i]),
+                      onSnooze: () => _handleHide(_localRankEntries![i]),
+                      onStatusChanged: (status) => _handleStatusChanged(_localRankEntries![i], status),
                     ),
                 ],
               ),
@@ -1709,18 +1845,14 @@ class _WatchlistScreenState extends ConsumerState<WatchlistScreen>
 
     if (oldIndex == newIndex) return; // No change
 
-    // Save to undo stack before changing
+    // Save to undo stack before persisting (mutation already done in onReorder).
     _saveRankToUndoStack(entries);
-
-    // Reorder the list (grid gives final target index directly)
-    final entry = entries.removeAt(oldIndex);
-    entries.insert(newIndex, entry);
 
     final logic = ref.read(watchlistLogicProvider);
     for (int i = 0; i < entries.length; i++) {
       await logic.updateUserRank(entries[i].tmdbId, entries[i].type, i + 1);
     }
-    ref.invalidate(watchlistEntriesProvider);
+    // No ref.invalidate — _localRankEntries is authoritative while in rank mode.
   }
 
   /// Sends an entry to the top of the rank list.
@@ -1980,3 +2112,5 @@ class _WatchlistScreenState extends ConsumerState<WatchlistScreen>
     ref.invalidate(watchlistEntriesProvider);
   }
 }
+
+

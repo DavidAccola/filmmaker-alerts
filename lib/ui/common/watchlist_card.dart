@@ -1285,18 +1285,20 @@ class _StatusButtonState extends State<_StatusButton>
                       ),
                     ),
                     if (widget.label != null)
-                      Padding(
-                        padding: const EdgeInsets.only(left: 4),
-                        child: AnimatedDefaultTextStyle(
-                          duration: const Duration(milliseconds: 200),
-                          style: theme.textTheme.labelSmall?.copyWith(
-                            fontSize: 9,
-                            fontWeight: FontWeight.w600,
-                            color: widget.isActive
-                                ? statusColor
-                                : theme.colorScheme.onSurfaceVariant,
-                          ) ?? const TextStyle(),
-                          child: Text(widget.label!),
+                      Flexible(
+                        child: Padding(
+                          padding: const EdgeInsets.only(left: 4),
+                          child: AnimatedDefaultTextStyle(
+                            duration: const Duration(milliseconds: 200),
+                            style: theme.textTheme.labelSmall?.copyWith(
+                              fontSize: 9,
+                              fontWeight: FontWeight.w600,
+                              color: widget.isActive
+                                  ? statusColor
+                                  : theme.colorScheme.onSurfaceVariant,
+                            ) ?? const TextStyle(),
+                            child: Text(widget.label!, overflow: TextOverflow.ellipsis),
+                          ),
                         ),
                       ),
                   ],

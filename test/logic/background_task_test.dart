@@ -41,6 +41,7 @@ void main() {
     // Default stubs
     when(mockPrefsRepo.getPreferences()).thenReturn(Preferences(pretendToday: '2023-01-01'));
     when(mockHistoryRepo.getHistory()).thenReturn([]);
+    when(mockWatchlistRepo.getWorks()).thenReturn([]);
   });
 
   group('BackgroundTaskProcessor', () {

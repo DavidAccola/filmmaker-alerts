@@ -48,6 +48,7 @@ void main() {
     
     // Default history
     when(mockHistoryRepo.getHistory()).thenReturn([]);
+    when(mockWatchlistRepo.getWorks()).thenReturn([]);
   });
 
   group('ReleaseChecker Logic', () {

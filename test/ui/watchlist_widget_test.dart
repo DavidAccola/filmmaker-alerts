@@ -1,15 +1,47 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:filmmaker_alerts/data/models/watchlist_entry.dart';
+import 'package:filmmaker_alerts/core/constants.dart';
+import 'package:filmmaker_alerts/data/models/contributor.dart';
 import 'package:filmmaker_alerts/data/models/contributor_detail.dart';
+import 'package:filmmaker_alerts/data/models/episode_status_entry.dart';
+import 'package:filmmaker_alerts/data/models/movie_status_entry.dart';
+import 'package:filmmaker_alerts/data/models/season_status_entry.dart';
 import 'package:filmmaker_alerts/data/models/status_record.dart';
+import 'package:filmmaker_alerts/data/models/watchlist_entry.dart';
 import 'package:filmmaker_alerts/ui/common/watchlist_card.dart';
 import 'package:filmmaker_alerts/ui/common/rewatch_dialog.dart';
+import 'package:hive/hive.dart';
+import 'package:hive_test/hive_test.dart';
 
 void main() {
   group('WatchlistCard Widget Tests', () {
     late WatchlistEntry testEntry;
+
+    setUpAll(() async {
+      await setUpTestHive();
+      void reg<T>(int id, TypeAdapter<T> a) {
+        if (!Hive.isAdapterRegistered(id)) Hive.registerAdapter(a);
+      }
+      reg(7, ContributorTypeAdapter());
+      reg(8, TvNotificationPreferencesAdapter());
+      reg(20, WorkTypeAdapter());
+      reg(21, ReleaseTypeAdapter());
+      reg(41, WatchlistEntryAdapter());
+      reg(42, ContributorSnapshotAdapter());
+      reg(43, StatusRecordAdapter());
+      reg(44, WatchStatusAdapter());
+      reg(45, EpisodeStatusEntryAdapter());
+      reg(46, SeasonStatusEntryAdapter());
+      reg(47, MovieStatusEntryAdapter());
+      reg(48, ReleaseNotificationPreferencesAdapter());
+      await Hive.openBox<EpisodeStatusEntry>(AppConstants.episodeStatusesBox);
+      await Hive.openBox<SeasonStatusEntry>(AppConstants.seasonStatusesBox);
+      await Hive.openBox<MovieStatusEntry>(AppConstants.movieStatusesBox);
+      await Hive.openBox<WatchlistEntry>(AppConstants.watchlistEntriesBox);
+    });
+
+    tearDownAll(() async => tearDownTestHive());
 
     setUp(() {
       testEntry = WatchlistEntry(

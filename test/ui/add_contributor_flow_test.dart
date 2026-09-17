@@ -74,7 +74,7 @@ void main() {
     await tester.pumpAndSettle();
 
     // Verify Add Screen
-    expect(find.text('Add an Alert'), findsOneWidget);
+    expect(find.text('Find something to follow'), findsOneWidget);
 
     // 3. Search for Greta
     await tester.enterText(find.byType(TextField), 'Greta');

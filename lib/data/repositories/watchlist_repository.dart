@@ -228,18 +228,15 @@ class WatchlistRepository {
             .removeWhere((r) => r.status == WatchStatus.wantToWatch);
         break;
       case WatchStatus.wantToWatch:
-        // Want to watch only clears DNF
+        // Want to watch clears In progress (and DNF — "I want to try again")
+        entry.statusRecords
+            .removeWhere((r) => r.status == WatchStatus.inProgress);
         entry.statusRecords
             .removeWhere((r) => r.status == WatchStatus.dnf);
         break;
       case WatchStatus.dnf:
-        // DNF clears everything
-        entry.statusRecords
-            .removeWhere((r) => r.status == WatchStatus.wantToWatch);
-        entry.statusRecords
-            .removeWhere((r) => r.status == WatchStatus.inProgress);
-        entry.statusRecords
-            .removeWhere((r) => r.status == WatchStatus.watched);
+        // DNF coexists with other statuses — it's a soft "gave up" flag
+        // that doesn't reset progress or watchlist intent.
         break;
     }
   }

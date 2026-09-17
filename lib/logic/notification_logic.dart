@@ -357,46 +357,51 @@ class NotificationLogic {
     if (showTitles.length == 1) {
       final entry = entries.first;
       final showTitle = showTitles.first;
-      
-      // Count total episodes across all notification events
+      final type = entry.tvNotificationType;
+
+      // Specific notification type titles
+      if (type == 'series_premiere') {
+        return '📺 Series Premiere: $showTitle';
+      } else if (type == 'season_premiere' && entry.seasonNumber != null) {
+        return '📺 Season ${entry.seasonNumber} Premiere: $showTitle';
+      } else if (type == 'season_finale' && entry.seasonNumber != null) {
+        return '📺 Season ${entry.seasonNumber} Finale: $showTitle';
+      } else if (type == 'special') {
+        return '📺 Special: $showTitle';
+      }
+
+      // Count total episodes for grouped/generic episode notifications
       int totalEpisodes = 0;
-      if (entry.tvNotificationType == 'grouped_episodes' && entry.notificationEvents.length > 1) {
-        // Multiple events = multiple episodes
+      if (entry.notificationEvents.length > 1) {
         totalEpisodes = entry.notificationEvents.length;
-      } else if (entry.tvNotificationType == 'grouped_episodes' && entry.episodeNumber != null && entry.episodeNumber! > 1) {
-        // Grouped episodes where episodeNumber represents the count
+      } else if (type == 'grouped_episodes' && entry.episodeNumber != null && entry.episodeNumber! > 1) {
         totalEpisodes = entry.episodeNumber!;
       } else {
-        // Single episode (episodeNumber here is the actual episode number, not count)
         totalEpisodes = 1;
       }
-      
-      // Format: "New Release/Releases" + show name + episode count
+
       if (totalEpisodes == 1) {
-        return '🎬 New Release: $showTitle (1 episode)';
+        return '📺 New Episode: $showTitle';
       } else {
-        return '🎬 New Releases: $showTitle ($totalEpisodes episodes)';
+        return '📺 $totalEpisodes new episodes of $showTitle';
       }
     }
     
-    // Multiple shows - count total episodes
+    // Multiple shows — count total episodes
     int totalEpisodes = 0;
     for (final entry in entries) {
       int entryEpisodes = 0;
-      if (entry.tvNotificationType == 'grouped_episodes' && entry.notificationEvents.length > 1) {
-        // For grouped episodes, use the number of notification events (each represents one episode)
+      if (entry.notificationEvents.length > 1) {
         entryEpisodes = entry.notificationEvents.length;
       } else if (entry.tvNotificationType == 'grouped_episodes' && entry.episodeNumber != null && entry.episodeNumber! > 1) {
-        // For grouped episodes where episodeNumber represents the count
         entryEpisodes = entry.episodeNumber!;
       } else {
-        // Single episode (episodeNumber here is the actual episode number, not count)
         entryEpisodes = 1;
       }
       totalEpisodes += entryEpisodes;
     }
     
-    return '🎬 $totalEpisodes New TV Episodes';
+    return '📺 $totalEpisodes New TV Episodes';
   }
 
   /// Format TV show notification body
@@ -436,6 +441,14 @@ class NotificationLogic {
       final entry = uniqueEntries.first;
       final showEntries = entriesByShow[entry.tmdbId]!;
       final List<String> lines = [];
+
+      // Include episode title and S#E## for single-episode notifications
+      if (entry.episodeTitle != null && entry.episodeTitle!.isNotEmpty &&
+          entry.seasonNumber != null && entry.episodeNumber != null) {
+        final s = entry.seasonNumber!;
+        final e = entry.episodeNumber!;
+        lines.add('${entry.episodeTitle} - S${s}E${e.toString().padLeft(2, '0')}');
+      }
       
       // Get all unique air dates from all episodes of this show
       final Set<String> uniqueDates = {};

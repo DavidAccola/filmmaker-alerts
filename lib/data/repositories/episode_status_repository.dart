@@ -110,8 +110,8 @@ class EpisodeStatusRepository {
   /// Rules:
   /// - In Progress → unmarks Want to Watch
   /// - Watched → unmarks Want to Watch and In Progress
-  /// - Want to Watch → only unmarks Did Not Finish
-  /// - Did Not Finish → unmarks everything
+  /// - Want to Watch → unmarks In Progress and Did Not Finish
+  /// - Did Not Finish → coexists with other statuses (soft "gave up" flag)
   void _clearConflictingStatuses(
       EpisodeStatusEntry entry, WatchStatus newStatus) {
     switch (newStatus) {
@@ -128,18 +128,15 @@ class EpisodeStatusRepository {
             .removeWhere((r) => r.status == WatchStatus.wantToWatch);
         break;
       case WatchStatus.wantToWatch:
-        // Want to watch only clears DNF
+        // Want to watch clears In progress (and DNF — "I want to try again")
+        entry.statusRecords
+            .removeWhere((r) => r.status == WatchStatus.inProgress);
         entry.statusRecords
             .removeWhere((r) => r.status == WatchStatus.dnf);
         break;
       case WatchStatus.dnf:
-        // DNF clears everything
-        entry.statusRecords
-            .removeWhere((r) => r.status == WatchStatus.wantToWatch);
-        entry.statusRecords
-            .removeWhere((r) => r.status == WatchStatus.inProgress);
-        entry.statusRecords
-            .removeWhere((r) => r.status == WatchStatus.watched);
+        // DNF coexists with other statuses — it's a soft "gave up" flag
+        // that doesn't reset progress or watchlist intent.
         break;
     }
   }

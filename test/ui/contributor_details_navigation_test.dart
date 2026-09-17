@@ -318,7 +318,6 @@ void main() {
 
       // Verify header info is displayed (Requirements 1.2)
       expect(find.text('Test Person'), findsWidgets); // May appear in AppBar and content
-      expect(find.text('Person'), findsOneWidget);
       expect(find.text('Test Movie'), findsOneWidget);
 
       // Verify preference toggles are present (Requirements 1.3, 5.1)

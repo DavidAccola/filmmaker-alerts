@@ -209,21 +209,13 @@ class TvShowDisplayLogic {
       grouped[showTitle]!.add(episode);
     }
     
-    // Sort episodes within each show by release date (most recent first)
-    // This ensures that when we pick the first episode, it's the most recent one
+    // Sort episodes within each show by season and episode number (ascending)
     for (final episodes in grouped.values) {
       episodes.sort((a, b) {
-        // Sort by release date descending (most recent first)
-        if (a.releaseDate == null && b.releaseDate == null) {
-          // If both have no date, fall back to season/episode order
-          if (a.seasonNumber != b.seasonNumber) {
-            return (b.seasonNumber ?? 0).compareTo(a.seasonNumber ?? 0);
-          }
-          return (b.episodeNumber ?? 0).compareTo(a.episodeNumber ?? 0);
+        if (a.seasonNumber != b.seasonNumber) {
+          return (a.seasonNumber ?? 0).compareTo(b.seasonNumber ?? 0);
         }
-        if (a.releaseDate == null) return 1; // No date goes last
-        if (b.releaseDate == null) return -1;
-        return b.releaseDate!.compareTo(a.releaseDate!); // Most recent first
+        return (a.episodeNumber ?? 0).compareTo(b.episodeNumber ?? 0);
       });
     }
     

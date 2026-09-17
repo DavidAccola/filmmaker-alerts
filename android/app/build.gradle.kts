@@ -23,8 +23,6 @@ android {
     defaultConfig {
         applicationId = "app.filmmaker_alerts"
         // flutter_secure_storage v11+ requires minSdk 23 (Android 6.0+).
-        // flutter.minSdkVersion defaults to 16 or 21 depending on Flutter version,
-        // so we override explicitly here.
         minSdk = flutter.minSdkVersion
         targetSdk = flutter.targetSdkVersion
         versionCode = flutter.versionCode

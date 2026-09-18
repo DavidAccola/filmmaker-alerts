@@ -1,15 +1,14 @@
 flutter_launcher_icons:
-  # Generate for Android only (iOS/Windows/macOS handled separately)
   android: true
   ios: false
 
-  # Source image — used for legacy (non-adaptive) icons on older Android
+  # Source image for legacy (non-adaptive) icons on older Android
   image_path: "assets/images/icon_256.png"
 
   # Adaptive icon (Android 8.0+, API 26+)
-  # Foreground is the icon itself; background is a solid colour.
-  adaptive_icon_background: "#1a1a1a"   # near-black matching the icon background
+  # The safe zone visible after circular crop is the inner 66% of the canvas.
+  # adaptive_icon_foreground_inset adds padding (%) so content doesn't get clipped.
+  # Default is 16%; increasing to 20% keeps the notification bell inside the circle.
+  adaptive_icon_background: "#1a1a1a"
   adaptive_icon_foreground: "assets/images/icon_256.png"
-
-  # Remove alpha padding so the icon fills the space
-  remove_alpha_ios: false
+  adaptive_icon_foreground_inset: 20

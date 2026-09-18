@@ -3,10 +3,12 @@ import 'package:flutter/foundation.dart' show visibleForTesting;
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:googleapis/drive/v3.dart' as drive;
 import 'package:hive/hive.dart';
+import '../models/collection_order.dart';
 import '../models/contributor.dart';
 import '../models/contributor_detail.dart'; // for WorkType, ReleaseType
 import '../models/episode_status_entry.dart';
 import '../models/movie_status_entry.dart';
+import '../models/notification_history.dart';
 import '../models/preferences.dart';
 import '../models/season_status_entry.dart';
 import '../models/status_record.dart';
@@ -22,7 +24,7 @@ const _kDriveFileName = 'filmmaker_alerts_sync.json';
 
 /// Syncs app data between devices via Google Drive appDataFolder.
 ///
-/// Serializes six Hive boxes to JSON, uploads on write triggers,
+/// Serializes eight Hive boxes to JSON, uploads on write triggers,
 /// and downloads + replaces local data on app launch / resume.
 /// Conflict resolution: last-write-wins by [lastModified] timestamp.
 class SyncService {
@@ -272,10 +274,17 @@ class SyncService {
           AppConstants.seasonStatusesBox, _serializeSeasonStatus),
       'movieStatuses': _serializeBox<MovieStatusEntry>(
           AppConstants.movieStatusesBox, _serializeMovieStatus),
+      'collectionOrders': _serializeBox<CollectionOrder>(
+          AppConstants.collectionOrdersBox, _serializeCollectionOrder),
+      'history': _serializeBox<NotificationHistoryEntry>(
+          AppConstants.historyBox, _serializeHistoryEntry),
     };
   }
 
   Future<void> _applyPayload(Map<String, dynamic> payload) async {
+    // TODO: when a breaking schema change requires a version bump, read
+    // payload['version'] here and branch on migration logic before applying.
+    // Currently version is always 1 and is written but not read.
     if (payload['watchlistEntries'] != null) {
       await _replaceBox<WatchlistEntry>(
         AppConstants.watchlistEntriesBox,
@@ -319,6 +328,17 @@ class SyncService {
         _deserializeMovieStatus,
         (e) => e.uniqueKey,
       );
+    }
+    if (payload['collectionOrders'] != null) {
+      await _replaceBox<CollectionOrder>(
+        AppConstants.collectionOrdersBox,
+        payload['collectionOrders'] as List,
+        _deserializeCollectionOrder,
+        (o) => o.collectionId.toString(),
+      );
+    }
+    if (payload['history'] != null) {
+      await _mergeHistoryBox(payload['history'] as List);
     }
   }
 
@@ -605,6 +625,26 @@ class SyncService {
       'streamingCountry': p.streamingCountry,
       'defaultDepartments': p.defaultDepartments,
       'hideRatingsInDetails': p.hideRatingsInDetails,
+      // Fields added in sync expansion
+      'includeCollectionsInMovieSearch': p.includeCollectionsInMovieSearch,
+      'useGridView': p.useGridView,
+      'homeSortOrder': p.homeSortOrder,
+      'groupByType': p.groupByType,
+      'allRolesSelected': p.allRolesSelected,
+      'allReleaseTypesSelected': p.allReleaseTypesSelected,
+      'autoFollowNewRoles': p.autoFollowNewRoles,
+      'movieDetailsPreference': p.movieDetailsPreference,
+      'notifyPersonTvEpisodes': p.notifyPersonTvEpisodes,
+      'hidePopularityInDetails': p.hidePopularityInDetails,
+      'defaultTvNotificationPrefs': p.defaultTvNotificationPrefs == null
+          ? null
+          : {
+              'seriesPremiere': p.defaultTvNotificationPrefs!.seriesPremiere,
+              'seasonPremieres': p.defaultTvNotificationPrefs!.seasonPremieres,
+              'seasonFinales': p.defaultTvNotificationPrefs!.seasonFinales,
+              'newEpisodes': p.defaultTvNotificationPrefs!.newEpisodes,
+              'specials': p.defaultTvNotificationPrefs!.specials,
+            },
     };
   }
 
@@ -630,13 +670,44 @@ class SyncService {
         m['connectionsShowHiddenContributors'] as bool? ?? p.connectionsShowHiddenContributors;
     p.connectionsShowHiddenWatchlist =
         m['connectionsShowHiddenWatchlist'] as bool? ?? p.connectionsShowHiddenWatchlist;
-    p.dismissedConnectionIds =
-        List<String>.from(m['dismissedConnectionIds'] as List? ?? []);
+    // dismissedConnectionIds: only overwrite when remote has entries.
+    // An absent key (old app version) and an empty list (ambiguous) both
+    // leave the local value untouched.
+    final remoteIds = m['dismissedConnectionIds'] as List?;
+    if (remoteIds != null && remoteIds.isNotEmpty) {
+      p.dismissedConnectionIds = List<String>.from(remoteIds);
+    }
     p.streamingCountry = m['streamingCountry'] as String? ?? p.streamingCountry;
     if (m['defaultDepartments'] != null) {
       p.defaultDepartments = List<String>.from(m['defaultDepartments'] as List);
     }
     p.hideRatingsInDetails = m['hideRatingsInDetails'] as bool? ?? p.hideRatingsInDetails;
+    // Fields added in sync expansion
+    p.includeCollectionsInMovieSearch =
+        m['includeCollectionsInMovieSearch'] as bool? ?? p.includeCollectionsInMovieSearch;
+    p.useGridView = m['useGridView'] as bool? ?? p.useGridView;
+    p.homeSortOrder = m['homeSortOrder'] as String? ?? p.homeSortOrder;
+    p.groupByType = m['groupByType'] as bool? ?? p.groupByType;
+    p.allRolesSelected = m['allRolesSelected'] as bool? ?? p.allRolesSelected;
+    p.allReleaseTypesSelected =
+        m['allReleaseTypesSelected'] as bool? ?? p.allReleaseTypesSelected;
+    p.autoFollowNewRoles = m['autoFollowNewRoles'] as bool? ?? p.autoFollowNewRoles;
+    p.movieDetailsPreference =
+        m['movieDetailsPreference'] as String? ?? p.movieDetailsPreference;
+    p.notifyPersonTvEpisodes =
+        m['notifyPersonTvEpisodes'] as bool? ?? p.notifyPersonTvEpisodes;
+    p.hidePopularityInDetails =
+        m['hidePopularityInDetails'] as bool? ?? p.hidePopularityInDetails;
+    if (m['defaultTvNotificationPrefs'] != null) {
+      final tvPrefsMap = m['defaultTvNotificationPrefs'] as Map<String, dynamic>;
+      p.defaultTvNotificationPrefs = TvNotificationPreferences(
+        seriesPremiere: tvPrefsMap['seriesPremiere'] as bool? ?? true,
+        seasonPremieres: tvPrefsMap['seasonPremieres'] as bool? ?? true,
+        seasonFinales: tvPrefsMap['seasonFinales'] as bool? ?? false,
+        newEpisodes: tvPrefsMap['newEpisodes'] as bool? ?? false,
+        specials: tvPrefsMap['specials'] as bool? ?? false,
+      );
+    }
     if (box.isEmpty) {
       await box.add(p);
     } else {
@@ -729,4 +800,137 @@ class SyncService {
                 .toList() ??
             [],
       );
+
+
+  // ---------------------------------------------------------------------------
+  // CollectionOrder serialization
+  // ---------------------------------------------------------------------------
+
+  Map<String, dynamic> _serializeCollectionOrder(CollectionOrder o) => {
+        'collectionId': o.collectionId,
+        'movieIds': o.movieIds,
+      };
+
+  CollectionOrder _deserializeCollectionOrder(Map<String, dynamic> m) =>
+      CollectionOrder(
+        collectionId: m['collectionId'] as int,
+        movieIds: List<int>.from(m['movieIds'] as List? ?? []),
+      );
+
+  // ---------------------------------------------------------------------------
+  // NotificationHistory serialization and merge
+  // ---------------------------------------------------------------------------
+
+  Map<String, dynamic> _serializeHistoryEntry(NotificationHistoryEntry e) => {
+        'tmdbId': e.tmdbId,
+        'mediaType': e.mediaType,
+        'seasonNumber': e.seasonNumber,
+        'episodeNumber': e.episodeNumber,
+        'episodeTitle': e.episodeTitle,
+        'tvNotificationType': e.tvNotificationType,
+        'reasons': e.reasons
+            .map((r) => {
+                  'contributorId': r.contributorId,
+                  'contributorName': r.contributorName,
+                  'department': r.department,
+                  'job': r.job,
+                })
+            .toList(),
+        'notificationEvents': e.notificationEvents
+            .map((ev) => {
+                  'releaseType': ev.releaseType,
+                  'releaseDate': ev.releaseDate,
+                  'notifiedAt': ev.notifiedAt,
+                })
+            .toList(),
+      };
+
+  /// Merges remote history entries into the local history box.
+  ///
+  /// Unlike other boxes, history is never replaced outright — each device
+  /// independently accumulates history and both are valid. The merge strategy:
+  /// - Remote entry exists locally (same tmdbId): merge reasons and events,
+  ///   deduplicating by (contributorId, department) and (releaseType, releaseDate).
+  /// - Remote entry not found locally: insert it.
+  /// - Local entries absent from remote: preserved (never deleted).
+  Future<void> _mergeHistoryBox(List remoteItems) async {
+    final box = Hive.box<NotificationHistoryEntry>(AppConstants.historyBox);
+
+    // Build a tmdbId → box key index once so the per-entry lookup is O(1)
+    // instead of scanning the entire box for every remote entry.
+    final localIndex = <int, dynamic>{};
+    for (final k in box.keys) {
+      final entry = box.get(k);
+      if (entry != null) localIndex[entry.tmdbId] = k;
+    }
+
+    for (final item in remoteItems) {
+      final m = item as Map<String, dynamic>;
+      final tmdbId = m['tmdbId'] as int;
+
+      // Deserialize remote reasons and events
+      final remoteReasons = (m['reasons'] as List?)
+              ?.map((r) => NotificationReason(
+                    contributorId: r['contributorId'] as int,
+                    contributorName: r['contributorName'] as String,
+                    department: r['department'] as String,
+                    job: r['job'] as String?,
+                  ))
+              .toList() ??
+          [];
+      final remoteEvents = (m['notificationEvents'] as List?)
+              ?.map((ev) => NotificationEvent(
+                    releaseType: ev['releaseType'] as String,
+                    releaseDate: ev['releaseDate'] as String,
+                    notifiedAt: ev['notifiedAt'] as String,
+                  ))
+              .toList() ??
+          [];
+
+      // Find existing local entry for this tmdbId using the pre-built index
+      final existingKey = localIndex[tmdbId];
+
+      if (existingKey != null) {
+        // Merge into existing entry.
+        // Note: metadata fields (mediaType, seasonNumber, episodeNumber,
+        // episodeTitle, tvNotificationType) are intentionally not updated here.
+        // These are set once when the entry is first created and never change,
+        // so the local value is always correct. Overwriting would risk replacing
+        // valid local data with stale remote data from an older app version.
+        final existing = box.get(existingKey)!;
+
+        for (final reason in remoteReasons) {
+          final alreadyPresent = existing.reasons.any((r) =>
+              r.contributorId == reason.contributorId &&
+              r.department == reason.department);
+          if (!alreadyPresent) {
+            existing.reasons.add(reason);
+          }
+        }
+
+        for (final event in remoteEvents) {
+          final alreadyPresent = existing.notificationEvents.any((e) =>
+              e.releaseType == event.releaseType &&
+              e.releaseDate == event.releaseDate);
+          if (!alreadyPresent) {
+            existing.notificationEvents.add(event);
+          }
+        }
+
+        await existing.save();
+      } else {
+        // Insert as new entry
+        await box.add(NotificationHistoryEntry(
+          tmdbId: tmdbId,
+          mediaType: m['mediaType'] as String?,
+          seasonNumber: m['seasonNumber'] as int?,
+          episodeNumber: m['episodeNumber'] as int?,
+          episodeTitle: m['episodeTitle'] as String?,
+          tvNotificationType: m['tvNotificationType'] as String?,
+          reasons: remoteReasons,
+          notificationEvents: remoteEvents,
+        ));
+      }
+    }
+  }
 }

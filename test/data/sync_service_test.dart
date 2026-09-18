@@ -5,10 +5,12 @@ import 'package:mockito/mockito.dart';
 import 'package:mockito/annotations.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
+import 'package:filmmaker_alerts/data/models/collection_order.dart';
 import 'package:filmmaker_alerts/data/models/contributor.dart';
 import 'package:filmmaker_alerts/data/models/contributor_detail.dart';
 import 'package:filmmaker_alerts/data/models/episode_status_entry.dart';
 import 'package:filmmaker_alerts/data/models/movie_status_entry.dart';
+import 'package:filmmaker_alerts/data/models/notification_history.dart';
 import 'package:filmmaker_alerts/data/models/preferences.dart';
 import 'package:filmmaker_alerts/data/models/season_status_entry.dart';
 import 'package:filmmaker_alerts/data/models/status_record.dart';
@@ -38,6 +40,10 @@ void main() {
     Hive.registerAdapter(EpisodeStatusEntryAdapter());
     Hive.registerAdapter(SeasonStatusEntryAdapter());
     Hive.registerAdapter(MovieStatusEntryAdapter());
+    Hive.registerAdapter(NotificationReasonAdapter());
+    Hive.registerAdapter(NotificationEventAdapter());
+    Hive.registerAdapter(NotificationHistoryEntryAdapter());
+    Hive.registerAdapter(CollectionOrderAdapter());
   });
 
   group('SyncService serialization roundtrips', () {
@@ -55,6 +61,8 @@ void main() {
       await Hive.openBox<EpisodeStatusEntry>(AppConstants.episodeStatusesBox);
       await Hive.openBox<SeasonStatusEntry>(AppConstants.seasonStatusesBox);
       await Hive.openBox<MovieStatusEntry>(AppConstants.movieStatusesBox);
+      await Hive.openBox<CollectionOrder>(AppConstants.collectionOrdersBox);
+      await Hive.openBox<NotificationHistoryEntry>(AppConstants.historyBox);
 
       mockAuth = MockGoogleAuthService();
       mockStorage = MockFlutterSecureStorage();
@@ -370,7 +378,10 @@ void main() {
     // Preferences roundtrip
     // -------------------------------------------------------------------------
 
-    test('Preferences: all sync fields survive roundtrip', () async {
+    test('Preferences: legacy fields (pre-expansion) survive roundtrip', () async {
+      // NOTE: This test covers only the fields that existed before the sync
+      // expansion. The full set of new fields is covered by
+      // 'new sync expansion fields survive roundtrip' below.
       final box = Hive.box<Preferences>(AppConstants.preferencesBox);
       final original = Preferences(
         notifyTheatre: false,
@@ -551,6 +562,343 @@ void main() {
           .thenAnswer((_) async => ts);
       final t = await sync.lastSyncTime();
       expect(t, DateTime.utc(2024, 6, 1, 12, 0, 0));
+    });
+
+    // -------------------------------------------------------------------------
+    // Preferences: new fields roundtrip
+    // -------------------------------------------------------------------------
+
+    test('Preferences: new sync expansion fields survive roundtrip', () async {
+      final box = Hive.box<Preferences>(AppConstants.preferencesBox);
+      final tvPrefs = TvNotificationPreferences(
+        seriesPremiere: true,
+        seasonPremieres: false,
+        seasonFinales: true,
+        newEpisodes: true,
+        specials: false,
+      );
+      final original = Preferences(
+        includeCollectionsInMovieSearch: false,
+        useGridView: false,
+        homeSortOrder: 'myRating',
+        groupByType: false,
+        allRolesSelected: true,
+        allReleaseTypesSelected: true,
+        autoFollowNewRoles: false,
+        movieDetailsPreference: 'imdb',
+        notifyPersonTvEpisodes: false,
+        hidePopularityInDetails: true,
+        defaultTvNotificationPrefs: tvPrefs,
+      );
+      await box.add(original);
+
+      final payload = sync.buildPayloadForTest();
+      await box.clear();
+      await sync.applyPayloadForTest(payload);
+
+      final restored = box.getAt(0)!;
+      expect(restored.includeCollectionsInMovieSearch, false);
+      expect(restored.useGridView, false);
+      expect(restored.homeSortOrder, 'myRating');
+      expect(restored.groupByType, false);
+      expect(restored.allRolesSelected, true);
+      expect(restored.allReleaseTypesSelected, true);
+      expect(restored.autoFollowNewRoles, false);
+      expect(restored.movieDetailsPreference, 'imdb');
+      expect(restored.notifyPersonTvEpisodes, false);
+      expect(restored.hidePopularityInDetails, true);
+      expect(restored.defaultTvNotificationPrefs?.seriesPremiere, true);
+      expect(restored.defaultTvNotificationPrefs?.seasonPremieres, false);
+      expect(restored.defaultTvNotificationPrefs?.seasonFinales, true);
+      expect(restored.defaultTvNotificationPrefs?.newEpisodes, true);
+      expect(restored.defaultTvNotificationPrefs?.specials, false);
+    });
+
+    test('Preferences: remote null for new fields preserves local value', () async {
+      final box = Hive.box<Preferences>(AppConstants.preferencesBox);
+      final local = Preferences(
+        useGridView: false,
+        homeSortOrder: 'myRating',
+        movieDetailsPreference: 'imdb',
+        notifyPersonTvEpisodes: false,
+        hidePopularityInDetails: true,
+        includeCollectionsInMovieSearch: false,
+      );
+      await box.add(local);
+
+      final payload = sync.buildPayloadForTest();
+      final prefs = payload['preferences'] as Map<String, dynamic>;
+      prefs['useGridView'] = null;
+      prefs['homeSortOrder'] = null;
+      prefs['movieDetailsPreference'] = null;
+      prefs['notifyPersonTvEpisodes'] = null;
+      prefs['hidePopularityInDetails'] = null;
+      prefs['includeCollectionsInMovieSearch'] = null;
+
+      await sync.applyPayloadForTest(payload);
+
+      final restored = box.getAt(0)!;
+      expect(restored.useGridView, false);
+      expect(restored.homeSortOrder, 'myRating');
+      expect(restored.movieDetailsPreference, 'imdb');
+      expect(restored.notifyPersonTvEpisodes, false);
+      expect(restored.hidePopularityInDetails, true);
+      expect(restored.includeCollectionsInMovieSearch, false);
+    });
+
+    // -------------------------------------------------------------------------
+    // CollectionOrder roundtrip
+    // -------------------------------------------------------------------------
+
+    test('CollectionOrder: all fields survive roundtrip', () async {
+      final box = Hive.box<CollectionOrder>(AppConstants.collectionOrdersBox);
+      final original = CollectionOrder(
+        collectionId: 131292,
+        movieIds: [299536, 299534, 271110],
+      );
+      await box.put(original.collectionId.toString(), original);
+
+      final payload = sync.buildPayloadForTest();
+      await box.clear();
+      await sync.applyPayloadForTest(payload);
+
+      final restored = box.get('131292');
+      expect(restored, isNotNull);
+      expect(restored!.collectionId, 131292);
+      expect(restored.movieIds, [299536, 299534, 271110]);
+    });
+
+    test('CollectionOrder: payload includes collectionOrders key', () async {
+      final payload = sync.buildPayloadForTest();
+      expect(payload.containsKey('collectionOrders'), true);
+      expect(payload['collectionOrders'], isA<List>());
+    });
+
+    // -------------------------------------------------------------------------
+    // _mergeHistoryBox
+    // -------------------------------------------------------------------------
+
+    test('history: payload includes history key', () async {
+      final payload = sync.buildPayloadForTest();
+      expect(payload.containsKey('history'), true);
+      expect(payload['history'], isA<List>());
+    });
+
+    test('history: remote-only entry is inserted locally', () async {
+      final box = Hive.box<NotificationHistoryEntry>(AppConstants.historyBox);
+      expect(box.isEmpty, true);
+
+      final payload = {
+        'history': [
+          {
+            'tmdbId': 123,
+            'mediaType': 'movie',
+            'seasonNumber': null,
+            'episodeNumber': null,
+            'episodeTitle': null,
+            'tvNotificationType': null,
+            'reasons': [
+              {
+                'contributorId': 1,
+                'contributorName': 'Nolan',
+                'department': 'Directing',
+                'job': 'Director',
+              }
+            ],
+            'notificationEvents': [
+              {
+                'releaseType': 'theatrical',
+                'releaseDate': '2024-07-19',
+                'notifiedAt': '2024-07-18T09:00:00.000Z',
+              }
+            ],
+          }
+        ],
+      };
+
+      await sync.applyPayloadForTest(payload);
+
+      expect(box.length, 1);
+      final entry = box.values.first;
+      expect(entry.tmdbId, 123);
+      expect(entry.mediaType, 'movie');
+      expect(entry.reasons.length, 1);
+      expect(entry.reasons.first.contributorName, 'Nolan');
+      expect(entry.notificationEvents.length, 1);
+      expect(entry.notificationEvents.first.releaseType, 'theatrical');
+    });
+
+    test('history: local-only entry is preserved (not deleted)', () async {
+      final box = Hive.box<NotificationHistoryEntry>(AppConstants.historyBox);
+      await box.add(NotificationHistoryEntry(
+        tmdbId: 999,
+        mediaType: 'movie',
+        reasons: [],
+        notificationEvents: [
+          NotificationEvent(
+            releaseType: 'streaming',
+            releaseDate: '2024-01-01',
+            notifiedAt: '2024-01-01T09:00:00.000Z',
+          ),
+        ],
+      ));
+
+      // Apply a payload that doesn't mention tmdbId 999
+      await sync.applyPayloadForTest({'history': []});
+
+      expect(box.length, 1);
+      expect(box.values.first.tmdbId, 999);
+    });
+
+    test('history: existing entry has remote reasons and events merged in', () async {
+      final box = Hive.box<NotificationHistoryEntry>(AppConstants.historyBox);
+      await box.add(NotificationHistoryEntry(
+        tmdbId: 42,
+        mediaType: 'movie',
+        reasons: [
+          NotificationReason(
+            contributorId: 1,
+            contributorName: 'Nolan',
+            department: 'Directing',
+          ),
+        ],
+        notificationEvents: [
+          NotificationEvent(
+            releaseType: 'theatrical',
+            releaseDate: '2024-07-19',
+            notifiedAt: '2024-07-18T09:00:00.000Z',
+          ),
+        ],
+      ));
+
+      final payload = {
+        'history': [
+          {
+            'tmdbId': 42,
+            'mediaType': 'movie',
+            'seasonNumber': null,
+            'episodeNumber': null,
+            'episodeTitle': null,
+            'tvNotificationType': null,
+            'reasons': [
+              // existing reason — should not be duplicated
+              {
+                'contributorId': 1,
+                'contributorName': 'Nolan',
+                'department': 'Directing',
+                'job': null,
+              },
+              // new reason — should be added
+              {
+                'contributorId': 2,
+                'contributorName': 'Zimmer',
+                'department': 'Sound',
+                'job': 'Composer',
+              },
+            ],
+            'notificationEvents': [
+              // existing event — should not be duplicated
+              {
+                'releaseType': 'theatrical',
+                'releaseDate': '2024-07-19',
+                'notifiedAt': '2024-07-18T09:00:00.000Z',
+              },
+              // new event — should be added
+              {
+                'releaseType': 'streaming',
+                'releaseDate': '2024-10-15',
+                'notifiedAt': '2024-10-14T09:00:00.000Z',
+              },
+            ],
+          }
+        ],
+      };
+
+      await sync.applyPayloadForTest(payload);
+
+      final entry = box.values.first;
+      expect(entry.reasons.length, 2);
+      expect(entry.reasons.map((r) => r.contributorId).toSet(), {1, 2});
+      expect(entry.notificationEvents.length, 2);
+      expect(
+        entry.notificationEvents.map((e) => e.releaseType).toSet(),
+        {'theatrical', 'streaming'},
+      );
+    });
+
+    test('history: duplicate event on both sides is not duplicated', () async {
+      final box = Hive.box<NotificationHistoryEntry>(AppConstants.historyBox);
+      await box.add(NotificationHistoryEntry(
+        tmdbId: 77,
+        mediaType: 'movie',
+        reasons: [],
+        notificationEvents: [
+          NotificationEvent(
+            releaseType: 'streaming',
+            releaseDate: '2024-03-01',
+            notifiedAt: '2024-02-28T09:00:00.000Z',
+          ),
+        ],
+      ));
+
+      final payload = {
+        'history': [
+          {
+            'tmdbId': 77,
+            'mediaType': 'movie',
+            'seasonNumber': null,
+            'episodeNumber': null,
+            'episodeTitle': null,
+            'tvNotificationType': null,
+            'reasons': [],
+            'notificationEvents': [
+              {
+                'releaseType': 'streaming',
+                'releaseDate': '2024-03-01',
+                'notifiedAt': '2024-02-28T09:00:00.000Z',
+              },
+            ],
+          }
+        ],
+      };
+
+      await sync.applyPayloadForTest(payload);
+
+      expect(box.values.first.notificationEvents.length, 1);
+    });
+
+    test('history: TV entry with seasonNumber and tvNotificationType survives roundtrip', () async {
+      final box = Hive.box<NotificationHistoryEntry>(AppConstants.historyBox);
+      await box.add(NotificationHistoryEntry(
+        tmdbId: 1399, // Game of Thrones
+        mediaType: 'tv',
+        seasonNumber: 8,
+        episodeNumber: 6,
+        episodeTitle: 'The Iron Throne',
+        tvNotificationType: 'season_premiere',
+        reasons: [],
+        notificationEvents: [
+          NotificationEvent(
+            releaseType: 'Series Premiere',
+            releaseDate: '2019-05-19',
+            notifiedAt: '2019-05-19T09:00:00.000Z',
+          ),
+        ],
+      ));
+
+      final payload = sync.buildPayloadForTest();
+      await box.clear();
+      await sync.applyPayloadForTest(payload);
+
+      expect(box.length, 1);
+      final entry = box.values.first;
+      expect(entry.tmdbId, 1399);
+      expect(entry.mediaType, 'tv');
+      expect(entry.seasonNumber, 8);
+      expect(entry.episodeNumber, 6);
+      expect(entry.episodeTitle, 'The Iron Throne');
+      expect(entry.tvNotificationType, 'season_premiere');
+      expect(entry.notificationEvents.first.releaseType, 'Series Premiere');
     });
   });
 }

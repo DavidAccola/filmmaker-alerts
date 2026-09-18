@@ -56,7 +56,7 @@ class NotificationService {
         
         // Android Initialization
         const AndroidInitializationSettings initializationSettingsAndroid =
-            AndroidInitializationSettings('@mipmap/ic_launcher');
+            AndroidInitializationSettings('@drawable/ic_notification');
 
         // Linux Initialization
         const LinuxInitializationSettings initializationSettingsLinux =
